@@ -3,8 +3,9 @@ name: Continuous Integration
 on:
   push:
     branches: [main]
+  # No branch filter on purpose: a pull request targeting a stacked branch
+  # rather than main would otherwise get no CI at all, and silently so.
   pull_request:
-    branches: [main]
 
 # Least privilege. Nothing here writes to the repository, so the default token
 # permissions (potentially write-all) are narrowed to read.
