@@ -43,8 +43,9 @@ Le projet est structuré sous la forme d'un Monorepo.
 
 ```text
 openview/
-├── .agents/                  # Directives et règles de codage pour les agents IA
+├── AGENTS.md                 # Règles de codage imposées aux agents IA
 ├── .github/                  # Workflows CI/CD (GitHub Actions & Sécurité)
+├── tools/                    # Outillage partagé (Biome, Vitest, scripts)
 ├── packages/
 │   ├── core/                 # @openview/core (AST, schémas Zod et contrats)
 │   ├── designer/             # @openview/designer (Interface graphique d'édition)

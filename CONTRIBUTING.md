@@ -27,7 +27,7 @@ pnpm run lint && pnpm run build && pnpm run type-check && pnpm run test:coverage
 
 | Commande | Ce qu'elle vérifie |
 | :--- | :--- |
-| `pnpm run lint` | Biome : formatage, ordre des imports, et les règles d'[AGENTS.md](.agents/AGENTS.md) que le compilateur ne peut pas exprimer |
+| `pnpm run lint` | Biome : formatage, ordre des imports, et les règles d'[AGENTS.md](AGENTS.md) que le compilateur ne peut pas exprimer |
 | `pnpm run build` | Compilation TypeScript de tous les paquets |
 | `pnpm run type-check` | Typage strict, **fichiers de test inclus** |
 | `pnpm run test:coverage` | Vitest avec un seuil de couverture à 90 % |
@@ -40,7 +40,7 @@ pnpm run lint:fix
 
 ## 📐 Règles de code non négociables
 
-Elles sont détaillées dans [.agents/AGENTS.md](.agents/AGENTS.md) et **appliquées
+Elles sont détaillées dans [AGENTS.md](AGENTS.md) et **appliquées
 mécaniquement** — inutile de discuter avec le linter, il gagnera :
 
 - Pas de `any`, pas de `as unknown as X`, pas de `@ts-ignore`.
