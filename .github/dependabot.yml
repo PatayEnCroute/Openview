@@ -1,0 +1,48 @@
+version: 2
+
+updates:
+  # Keeps the SHA pins in .github/workflows/* current. Without this, pinning to a
+  # commit means the actions silently rot: the repository was several majors
+  # behind (checkout v4 against v7, a deprecated Sonar action) before this landed.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'ci'
+    labels:
+      - dependencies
+      - github-actions
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: 'chore'
+    labels:
+      - dependencies
+    groups:
+      # Dev tooling never ships to consumers, so batching its minor/patch bumps
+      # into one pull request costs nothing and keeps review volume sane.
+      dev-tooling:
+        patterns:
+          - '@biomejs/*'
+          - '@types/*'
+          - '@vitest/*'
+          - turbo
+          - typescript
+          - vitest
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Majors of the runtime-facing stack are reviewed by hand: React 20 or a Zod
+      # major changes the public contract of @openview/designer and /core.
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+      - dependency-name: zod
+        update-types: [version-update:semver-major]

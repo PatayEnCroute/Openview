@@ -1,0 +1,9 @@
+{
+  // Own build config first, shared type-check overrides second: later entries win.
+  // `exclude` is restated rather than dropped: inheriting the parent's test
+  // exclusion would defeat the purpose, and `[]` would discard TypeScript's
+  // implicit node_modules exclusion.
+  "extends": ["./tsconfig.json", "../../tools/tsconfig.typecheck.json"],
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

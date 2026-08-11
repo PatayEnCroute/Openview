@@ -3,15 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "description": "Monorepo Openview - Moteur d'édition, de rendu et de visualisation de documents dynamiques",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11"
+  },
   "scripts": {
     "build": "turbo run build",
+    "clean": "turbo run clean",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "prepare": "node tools/setup-hooks.mjs",
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
-    "type-check": "turbo run type-check"
+    "type-check": "turbo run type-check && tsc -p tools/tsconfig.json"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.8",
     "turbo": "^2.10.9",
     "typescript": "^7.0.2"
   },

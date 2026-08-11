@@ -2,19 +2,45 @@
   "name": "@openview/core",
   "version": "0.1.0",
   "description": "Schémas de données, types partagés et parsing des templates pour Openview",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PatayEnCroute/Openview.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/PatayEnCroute/Openview#readme",
+  "bugs": {
+    "url": "https://github.com/PatayEnCroute/Openview/issues"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
+    "clean": "node ../../tools/clean.mjs",
     "dev": "tsc --watch",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",

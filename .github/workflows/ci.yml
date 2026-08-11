@@ -2,26 +2,77 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  # No branch filter on purpose: a pull request targeting a stacked branch
+  # rather than main would otherwise get no CI at all, and silently so.
   pull_request:
-    branches: [ main ]
 
+# Least privilege. Nothing here writes to the repository, so the default token
+# permissions (potentially write-all) are narrowed to read.
+permissions:
+  contents: read
+
+# A newer push to the same ref makes the running job obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded runs are cancelled, except on main: a cancelled status is not a
+  # passing one, and branch protection reads it per-commit.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Actions are pinned to a full commit SHA, not a tag. A tag is mutable: whoever
+# controls the action repository can repoint it at new code that would run with
+# this workflow's token. Dependabot (see .github/dependabot.yml) keeps the pins
+# current and rewrites the trailing version comment.
 jobs:
-  build-and-test:
-    name: Build, Type Check & Test
+  quality:
+    name: Lint & Format
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cheapest gate in the pipeline, and the only one that enforces the
+      # AGENTS.md rules the compiler cannot express. Runs once, not per matrix leg.
+      - name: Lint & Format Check
+        run: pnpm run lint
+
+  build-and-test:
+    name: Build, Type Check & Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24: active LTS (Krypton), and the floor declared by @openview/engine.
+        # 26: current release, so forward-compatibility breaks surface here first.
+        node: [24, 26]
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Must precede setup-node: resolving the pnpm cache shells out to
+      # `pnpm store path`, which needs pnpm already on PATH. Getting this order
+      # wrong is what broke caching in 85a9d7b, where it was removed instead.
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
+          cache: pnpm
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -32,5 +83,5 @@ jobs:
       - name: Type Check
         run: pnpm run type-check
 
-      - name: Run Unit Tests
-        run: pnpm run test
+      - name: Run Unit Tests with Coverage
+        run: pnpm run test:coverage

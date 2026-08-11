@@ -24,6 +24,8 @@ La solution s'articule autour de quatre briques fondamentales :
 
 👉 Pour plus de détails techniques et les design patterns appliqués, consultez le document [ARCHITECTURE.md](ARCHITECTURE.md).
 
+Les décisions d'architecture tranchées sont consignées dans [`docs/adr/`](docs/adr/), et les chartes visuelles des deux composants React dans [`packages/designer/DESIGN.md`](packages/designer/DESIGN.md) et [`packages/viewer/DESIGN.md`](packages/viewer/DESIGN.md).
+
 ## 🛠️ Stack Technique & Structure du Monorepo
 
 Le projet est structuré sous la forme d'un Monorepo.
@@ -43,8 +45,9 @@ Le projet est structuré sous la forme d'un Monorepo.
 
 ```text
 openview/
-├── .agents/                  # Directives et règles de codage pour les agents IA
+├── AGENTS.md                 # Règles de codage imposées aux agents IA
 ├── .github/                  # Workflows CI/CD (GitHub Actions & Sécurité)
+├── tools/                    # Outillage partagé (Biome, Vitest, scripts)
 ├── packages/
 │   ├── core/                 # @openview/core (AST, schémas Zod et contrats)
 │   ├── designer/             # @openview/designer (Interface graphique d'édition)
@@ -65,6 +68,16 @@ openview/
 - [ ] Étape 4 : Conception de l'éditeur visuel de templates (`@openview/designer`)
 - [ ] Étape 5 : Mise en place du Playground pour les tests d'intégration locaux
 
+## 🤝 Contribuer
+
+Les contributions sont bienvenues. Le guide [CONTRIBUTING.md](CONTRIBUTING.md)
+décrit la mise en route, les quatre portes de validation exécutées par la CI et
+les règles de code appliquées automatiquement par le linter.
+
+Les échanges se tiennent selon notre [Code de Conduite](CODE_OF_CONDUCT.md).
+Pour signaler une faille de sécurité, suivez [SECURITY.md](SECURITY.md) — jamais
+via une issue publique.
+
 ## 📄 Licence
 
-Ce projet est OpenSource.
+Ce projet est distribué sous licence **[Apache 2.0](LICENSE)**.

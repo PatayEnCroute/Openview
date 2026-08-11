@@ -1,6 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    /* Isomorphic pure-TS package: no DOM, no Node globals, no ambient types.
+       NodeNext resolution forces explicit .js extensions on relative imports,
+       so the emitted ESM stays loadable by Node without a bundler. */
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": [],
     "outDir": "./dist",
     "rootDir": "./src"
   },

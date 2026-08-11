@@ -1,0 +1,110 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!**/dist", "!**/coverage", "!**/.turbo", "!pnpm-lock.yaml"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noTsIgnore": "error",
+        "noEmptyBlockStatements": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error"
+      },
+      "correctness": {
+        "noUnusedFunctionParameters": "error",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      }
+    }
+  },
+  "plugins": ["./tools/biome/no-double-cast.grit", "./tools/biome/no-silent-catch.grit"],
+  "overrides": [
+    {
+      "includes": ["packages/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "react": "@openview/core must stay isomorphic (AGENTS.md 2): no UI dependency.",
+                  "react-dom": "@openview/core must stay isomorphic (AGENTS.md 2): no UI dependency.",
+                  "puppeteer": "@openview/core must stay isomorphic (AGENTS.md 2): no server dependency.",
+                  "playwright": "@openview/core must stay isomorphic (AGENTS.md 2): no server dependency.",
+                  "@openview/designer": "core is the root of the dependency graph and must never import a sibling package.",
+                  "@openview/engine": "core is the root of the dependency graph and must never import a sibling package.",
+                  "@openview/viewer": "core is the root of the dependency graph and must never import a sibling package."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/engine/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "react": "@openview/engine is a Node service (AGENTS.md 2): no UI dependency.",
+                  "react-dom": "@openview/engine is a Node service (AGENTS.md 2): no UI dependency.",
+                  "puppeteer": "Puppeteer bundles Chromium (~150-300 MB). It belongs in its own adapter package behind the RenderPort, so integrators who only need HTML never download it.",
+                  "playwright": "Playwright bundles browsers. It belongs in its own adapter package behind the RenderPort, so integrators who only need HTML never download it.",
+                  "@openview/designer": "the engine must not depend on the UI layer.",
+                  "@openview/viewer": "the engine must not depend on the UI layer."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/designer/**", "packages/viewer/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "puppeteer": "browser packages must not pull the render backend into the bundle.",
+                  "playwright": "browser packages must not pull the render backend into the bundle.",
+                  "@openview/engine": "the UI must reach the engine through a port, never by importing it (Hexagonal). Importing it ships Chromium to the browser bundle."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

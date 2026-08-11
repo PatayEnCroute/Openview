@@ -1,0 +1,21 @@
+{
+  /**
+   * Shared compilerOptions for every package's `tsconfig.typecheck.json`.
+   *
+   * Packages list this AFTER their own tsconfig.json in an `extends` array, so
+   * these win: they turn off emit, since the build config owns emitting and
+   * Vitest only transpiles -- without a dedicated pass a test file would never
+   * be type-checked at all.
+   *
+   * `include` and `exclude` deliberately stay in each package: TypeScript
+   * resolves those paths relative to the file that declares them, so `src/**\/*`
+   * written here would resolve to `tools/src`.
+   */
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "noEmit": true
+  }
+}

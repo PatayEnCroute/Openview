@@ -1,0 +1,19 @@
+# Normalise line endings: LF in the repository and in every working copy.
+# Without this, Windows contributors emit CRLF and every touched file shows up as
+# fully rewritten in review. Biome formats to LF, so the two must agree.
+* text=auto eol=lf
+
+# Binary assets must never be normalised.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# pnpm-lock.yaml is deliberately left as a normal diffable file: on a public
+# repository the lockfile diff is the main review surface for supply-chain changes.

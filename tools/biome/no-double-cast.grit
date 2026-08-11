@@ -1,0 +1,14 @@
+// Enforces AGENTS.md 1.1: no type cheats.
+// Biome has no built-in rule for the `as unknown as X` double cast, which is the
+// standard way to defeat a strict compiler without writing the word `any`.
+//
+// KNOWN GAP: the angle-bracket spelling `<X>(<unknown>v)` is the same unchecked
+// assertion and is NOT covered. GritQL parses this dialect as TSX, where `<X>v`
+// is a JSX element, so no snippet pattern matches it (`<$target>$expr` compiles
+// but never fires; `type_assertion($expression)` does not compile). Until an
+// upstream fix lands, that spelling is barred by review, not by the linter.
+language js(typescript)
+
+`$expr as unknown as $target` where {
+  register_diagnostic(span=$expr, message="Double cast `as unknown as` is forbidden (AGENTS.md 1.1). Validate the value with a Zod schema from @openview/core instead of asserting its shape.", severity="error")
+}

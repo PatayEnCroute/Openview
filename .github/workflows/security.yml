@@ -2,9 +2,19 @@ name: Security & Audit Scan
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  # No branch filter on purpose: a pull request targeting a stacked branch
+  # rather than main would otherwise get no CI at all, and silently so.
   pull_request:
-    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  # Superseded runs are cancelled, except on main: a cancelled status is not a
+  # passing one, and branch protection reads it per-commit.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   secret-scan:
@@ -12,30 +22,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history: a secret committed and later removed is still in the
+          # objects, and a shallow clone would not see it.
           fetch-depth: 0
 
       - name: Gitleaks Secret Detection
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is required only for organization-owned repositories.
+          # Openview sits under a personal account, so it is omitted. If the
+          # repository is ever transferred to an organization, obtain a licence
+          # and add it here, otherwise this job starts failing.
 
   dependency-audit:
     name: Audit Node Dependencies
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
 
+      # Blocking on purpose. This step previously carried `continue-on-error: true`,
+      # which made it decorative: it could report a critical CVE and still pass.
+      # `pnpm audit` reads the lockfile and needs no install.
       - name: Audit Dependencies
         run: pnpm audit --audit-level=high
-        continue-on-error: true

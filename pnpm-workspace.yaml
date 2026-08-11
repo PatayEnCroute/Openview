@@ -1,3 +1,23 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+
+# pnpm 11 refuses, by default, to install a package published more recently than
+# its supply-chain cooldown window. `pnpm add` writes an exemption for whatever
+# you just installed, which silently defeats the protection unless someone reads
+# these lines. Every entry below is a deliberate decision, not boilerplate.
+#
+# REVIEW RULE: no entry may be added without naming, in the pull request, why the
+# package is trusted. Prune an entry once its version has aged past the cooldown.
+#
+# @biomejs/* 2.5.8 -- lint/format toolchain, dev-only, never shipped to consumers.
+minimumReleaseAgeExclude:
+  - '@biomejs/biome@2.5.8'
+  - '@biomejs/cli-darwin-arm64@2.5.8'
+  - '@biomejs/cli-darwin-x64@2.5.8'
+  - '@biomejs/cli-linux-arm64-musl@2.5.8'
+  - '@biomejs/cli-linux-arm64@2.5.8'
+  - '@biomejs/cli-linux-x64-musl@2.5.8'
+  - '@biomejs/cli-linux-x64@2.5.8'
+  - '@biomejs/cli-win32-arm64@2.5.8'
+  - '@biomejs/cli-win32-x64@2.5.8'

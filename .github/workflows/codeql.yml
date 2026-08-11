@@ -1,0 +1,46 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  # No branch filter on purpose: a pull request targeting a stacked branch
+  # rather than main would otherwise get no CI at all, and silently so.
+  pull_request:
+  schedule:
+    # Weekly, so newly published queries reach existing code without a push.
+    - cron: '19 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  # Superseded runs are cancelled, except on main: a cancelled status is not a
+  # passing one, and branch protection reads it per-commit.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: Analyze TypeScript
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Only this job needs to publish SARIF results; the escalation stays local.
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # No build step: CodeQL extracts TypeScript directly from source.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          languages: javascript-typescript
+          # `security-extended` adds the taint-tracking queries that matter for a
+          # document engine: XSS sinks, path traversal, SSRF, unsafe deserialisation.
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6

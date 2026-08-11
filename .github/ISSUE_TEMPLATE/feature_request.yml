@@ -1,0 +1,48 @@
+name: ✨ Proposition de fonctionnalité
+description: Suggérer une évolution d'Openview
+labels: ['enhancement', 'triage']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Quel problème cette fonctionnalité résout-elle ?
+      description: |
+        Décrivez le besoin réel, pas la solution. Les meilleures propositions
+        commencent par un cas d'usage concret rencontré en production.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solution envisagée
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Paquet concerné
+      options:
+        - '@openview/core'
+        - '@openview/designer'
+        - '@openview/engine'
+        - '@openview/viewer'
+        - Transverse
+        - Je ne sais pas
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considérées
+      description: Y compris « ne rien faire » et les contournements existants.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Cohérence architecturale
+      options:
+        - label: Cette proposition ne conduit pas `@openview/core` à dépendre de React ou de Node.
+        - label: J'ai lu [ARCHITECTURE.md](../blob/main/ARCHITECTURE.md).
