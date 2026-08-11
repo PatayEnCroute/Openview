@@ -17,14 +17,16 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "prepare": "node tools/setup-hooks.mjs",
-    "test": "turbo run test",
-    "test:coverage": "turbo run test:coverage",
-    "type-check": "turbo run type-check && tsc -p tools/tsconfig.json"
+    "test": "turbo run build && vitest run",
+    "test:coverage": "turbo run build && vitest run --coverage",
+    "type-check": "turbo run type-check && tsc -p tsconfig.tooling.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
+    "@vitest/coverage-v8": "^4.1.10",
     "turbo": "^2.10.9",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   },
   "packageManager": "pnpm@11.21.0"
 }

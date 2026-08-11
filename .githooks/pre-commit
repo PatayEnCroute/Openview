@@ -9,20 +9,63 @@
 # `git commit --no-verify` -- but the same checks run in CI, so it only defers.
 set -e
 
-if [ -z "$(git diff --cached --name-only --diff-filter=ACMR)" ]; then
-  exit 0
+repo_root=$(git rev-parse --show-toplevel)
+biome="$repo_root/node_modules/.bin/biome"
+
+if [ ! -x "$biome" ]; then
+  echo "pre-commit: biome not found at $biome -- run 'pnpm install'." >&2
+  exit 1
 fi
 
-echo "pre-commit: biome check on staged files"
+work="$(git rev-parse --absolute-git-dir)/openview-precommit.$$"
+trap 'rm -rf "$work"' EXIT INT TERM HUP
+mkdir -p "$work/index"
 
+# The staged list is written to a file, not piped. A pipeline hides its left-hand
+# exit status (POSIX sh has no `pipefail`), so a failing `git diff` used to reach
+# `xargs` as empty input; xargs then ran `biome check` with no path argument, which
+# lints the ENTIRE repository and exits 0 -- the hook printed "ok" having verified
+# none of the staged files. Writing to a file lets `set -e` see git fail, and
+# guarantees xargs always receives at least one path.
+#
 # -z emits NUL-delimited paths and `xargs -0` consumes them unsplit. Plain xargs
 # word-splits on spaces, so `my file.ts` arrived as two broken arguments: biome
 # reported "Checked 0 files" and the path never got linted at all.
+git diff --cached --name-only --diff-filter=ACMR -z >"$work/staged"
+
+if [ ! -s "$work/staged" ]; then
+  exit 0
+fi
+
+echo "pre-commit: biome check on staged content"
+
+# Biome reads files from the WORKING TREE, so passing staged paths straight to it
+# checked content that is not the content being committed. Three ways that bit:
+# a violation staged and then fixed unstaged PASSED and shipped; a violation left
+# out of `git add -p` FAILED a commit that did not contain it; and a staged path
+# deleted from the working tree made biome report an io error and still exit 0.
 #
-# Read-only on purpose. Passing --write and re-staging with `git add` promoted the
-# whole working-tree file into the index, silently committing hunks a developer
-# had deliberately left out of `git add -p`. Run `pnpm run lint:fix` to apply fixes.
-git diff --cached --name-only --diff-filter=ACMR -z |
-  xargs -0 ./node_modules/.bin/biome check --files-ignore-unknown=true --no-errors-on-unmatched
+# So the index is materialised and linted instead. `checkout-index -a` writes the
+# whole index rather than just the staged paths, on purpose: the snapshot then
+# carries biome.jsonc, tools/biome/*.grit and .gitignore as they will exist in the
+# commit, so the config that judges the code is the config being committed. That
+# costs one write of every tracked file per commit -- fine at this repository's
+# size, and worth revisiting only if it ever becomes slow.
+#
+# Read-only by design. Passing --write and re-staging with `git add` promoted the
+# whole working-tree file into the index, silently committing hunks a developer had
+# deliberately left out of `git add -p`. Run `pnpm run lint:fix` to apply fixes.
+git checkout-index -a --prefix="$work/index/"
+
+cd "$work/index"
+
+# Checked explicitly rather than left to `set -e`: xargs reports a failing command
+# as 123, which reaches the developer as an unexplained exit code.
+if ! xargs -0 -- "$biome" check --files-ignore-unknown=true --no-errors-on-unmatched \
+  <"$work/staged"; then
+  echo "pre-commit: staged content failed biome check." >&2
+  echo "pre-commit: run 'pnpm run lint:fix', re-stage, and commit again." >&2
+  exit 1
+fi
 
 echo "pre-commit: ok"

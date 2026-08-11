@@ -37,16 +37,12 @@
   "scripts": {
     "build": "tsc",
     "clean": "node ../../tools/clean.mjs",
-    "type-check": "tsc -p tsconfig.typecheck.json",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "type-check": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "@openview/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@vitest/coverage-v8": "^4.1.10",
-    "vitest": "^4.1.10"
+    "@types/node": "^24.13.3"
   }
 }

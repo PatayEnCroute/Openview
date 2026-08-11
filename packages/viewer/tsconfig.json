@@ -1,9 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    /* Browser React package: DOM allowed, Node globals are not. */
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    /* Browser React package: DOM allowed, Node globals are not.
+       NodeNext, not Bundler, even though the consumer is a bundler: this package
+       publishes `"type": "module"` with `exports.import` pointing at dist/index.js,
+       so its emitted ESM must be loadable by Node. Bundler resolution neither
+       enforces the `.js` suffix on relative imports nor rewrites it, so
+       `from './types'` compiled clean and emitted a specifier Node rejects with
+       ERR_MODULE_NOT_FOUND -- only ever visible in a consumer, after publish. */
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": [],
@@ -11,5 +17,9 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+  /* TypeScript globs have no brace expansion, so all four spellings the Vitest
+     glob runs are listed. Missing one is not cosmetic: `*.spec.ts` was absent, so
+     a spec file was compiled into dist/ and published in the tarball with a
+     top-level `vitest` import that consumers do not install. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.spec.ts", "src/**/*.spec.tsx"]
 }

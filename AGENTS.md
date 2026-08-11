@@ -257,7 +257,7 @@ problème. Les fichiers suivants ne se touchent que si la demande porte
 explicitement sur eux :
 
 - `tsconfig.base.json`, `tsconfig*.json` — desserrer un flag strict n'est pas un correctif.
-- `biome.json`, `tools/biome/*.grit` — la règle qui vous bloque fait son travail.
+- `biome.jsonc`, `tools/biome/*.grit` — la règle qui vous bloque fait son travail.
 - `.github/workflows/*`, `sonar-project.properties`, `turbo.json`.
 - `package.json` — et **jamais** de nouvelle dépendance sans justification dans la PR.
 

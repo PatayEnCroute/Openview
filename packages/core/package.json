@@ -35,16 +35,10 @@
     "build": "tsc",
     "clean": "node ../../tools/clean.mjs",
     "dev": "tsc --watch",
-    "type-check": "tsc -p tsconfig.typecheck.json",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "type-check": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10",
-    "vitest": "^4.1.10"
   },
   "keywords": [
     "openview",
