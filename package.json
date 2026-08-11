@@ -4,12 +4,12 @@
   "private": true,
   "description": "Monorepo Openview - Moteur d'édition, de rendu et de visualisation de documents dynamiques",
   "scripts": {
-    "build": "pnpm --recursive run build",
-    "dev": "pnpm --recursive run dev",
-    "lint": "pnpm --recursive run lint",
-    "test": "pnpm --recursive run test",
-    "test:coverage": "pnpm --recursive run test:coverage",
-    "type-check": "pnpm --recursive run type-check"
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "type-check": "turbo run type-check"
   },
   "devDependencies": {
     "turbo": "^2.10.9",
