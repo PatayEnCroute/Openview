@@ -3,9 +3,10 @@ name: SonarQube Cloud Scan
 on:
   push:
     branches: [main]
+  # No branch filter on purpose: a pull request targeting a stacked branch
+  # rather than main would otherwise get no CI at all, and silently so.
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]
 
 permissions:
   contents: read
