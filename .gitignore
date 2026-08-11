@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Compilation Output
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Secrets, Environment Files & Keys (CRITICAL FOR PUBLIC REPOS)
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+*.der
+*.kdbx
+*.jks
+*.keystore
+*.id_rsa
+*.id_ed25519
+secrets.json
+credentials.json
+service-account*.json
+config.local.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDEs & System files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.swp
+*.swo
+
+# Testing & Reports
+coverage/
+.nyc_output/
+.scannerwork/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Caches
+.cache/
+.eslintcache
+.stylelintcache
+.prettiercache
+.parcel-cache/
+
+# Temp files
+*.tmp
+*.temp
