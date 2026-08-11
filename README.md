@@ -24,6 +24,8 @@ La solution s'articule autour de quatre briques fondamentales :
 
 👉 Pour plus de détails techniques et les design patterns appliqués, consultez le document [ARCHITECTURE.md](ARCHITECTURE.md).
 
+Les décisions d'architecture tranchées sont consignées dans [`docs/adr/`](docs/adr/), et les chartes visuelles des deux composants React dans [`packages/designer/DESIGN.md`](packages/designer/DESIGN.md) et [`packages/viewer/DESIGN.md`](packages/viewer/DESIGN.md).
+
 ## 🛠️ Stack Technique & Structure du Monorepo
 
 Le projet est structuré sous la forme d'un Monorepo.

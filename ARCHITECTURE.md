@@ -25,6 +25,7 @@ La solution est découpée en quatre modules complémentaires organisés au sein
 2. **`@openview/designer` (Le Designer)**
    * **Rôle :** Interface graphique d'édition visuelle permettant aux utilisateurs de construire des modèles (templates) à partir de schémas de données dynamiques (variables, boucles, conditions).
    * **Technologie :** Composant React embarquable.
+   * **Charte visuelle :** [`packages/designer/DESIGN.md`](packages/designer/DESIGN.md).
 
 3. **`@openview/engine` (Le Moteur de Rendu)**
    * **Rôle :** Service de rendu backend chargé d'injecter dynamiquement les données JSON dans les templates pour générer le document final (PDF, HTML, etc.).
@@ -33,6 +34,7 @@ La solution est découpée en quatre modules complémentaires organisés au sein
 4. **`@openview/viewer` (Le Visualiseur)**
    * **Rôle :** Composant front-end léger d'affichage du document généré permettant l'interaction et la modification de variables à la volée.
    * **Technologie :** Composant React léger.
+   * **Charte visuelle :** [`packages/viewer/DESIGN.md`](packages/viewer/DESIGN.md).
 
 ---
 
@@ -105,11 +107,14 @@ openview/
 ├── AGENTS.md                 # Règles de codage imposées aux agents IA
 ├── .github/                  # Workflows CI/CD et sécurité
 ├── tools/                    # Outillage partagé (Biome, Vitest, scripts)
+├── docs/adr/                 # Décisions d'architecture (ADR)
 ├── packages/
 │   ├── core/                 # @openview/core (Types AST, Zod parsing et contrats)
 │   ├── designer/             # @openview/designer (Interface graphique d'édition)
+│   │   └── DESIGN.md         #   └─ Charte visuelle & design system
 │   ├── engine/               # @openview/engine (Pipeline de fusion et moteur de rendu)
 │   └── viewer/               # @openview/viewer (Composant d'affichage interactif)
+│       └── DESIGN.md         #   └─ Charte visuelle & design system
 ├── apps/
 │   └── playground/           # Application locale de test de bout en bout
 ├── package.json              
