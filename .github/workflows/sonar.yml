@@ -49,8 +49,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # No explicit build step: Sonar analyses sources plus the LCOV report, never
-      # dist/, and the `test:coverage` task already pulls in `^build` for whatever
-      # a test actually needs. Building the whole monorepo here was dead work.
+      # dist/, and the `test:coverage` script runs `turbo run build` itself for
+      # whatever a test resolves through a sibling's `exports`. Building the whole
+      # monorepo again here was dead work.
+      #
+      # Writes one report at coverage/lcov.info -- the single path
+      # sonar-project.properties reads. Per-package reports were unresolvable: see
+      # the comment there.
       - name: Generate Test Coverage (LCOV)
         run: pnpm run test:coverage
 

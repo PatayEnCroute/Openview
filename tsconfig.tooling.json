@@ -1,0 +1,31 @@
+{
+  /**
+   * Puts the build/test tooling that lives outside every workspace package under
+   * the compiler: the root `vitest.config.ts` and anything under `tools/`.
+   *
+   * This exists because of a specific failure. The coverage gate used to be defined
+   * in a plain object in `tools/`, exported from a file where `vitest` was not
+   * resolvable and included in no tsconfig -- so `thresholds` misspelt as
+   * `threshold`, or a nonexistent `provider`, type-checked nowhere and silently
+   * disabled the 90% gate with all four pipeline gates still green. The config is
+   * now a real `defineConfig(...)` call in a file this project compiles, so an
+   * unknown key is a type error.
+   *
+   * Run from the root `type-check` script, not through turbo: neither the root nor
+   * `tools/` is a workspace package.
+   */
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["vitest.config.ts", "tools/**/*.ts"],
+  "exclude": ["node_modules"]
+}

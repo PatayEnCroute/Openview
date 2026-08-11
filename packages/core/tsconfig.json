@@ -12,5 +12,9 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts"]
+  /* TypeScript globs have no brace expansion, so all four spellings the Vitest
+     glob runs are listed. Missing one is not cosmetic: `*.spec.ts` was absent, so
+     a spec file was compiled into dist/ and published in the tarball with a
+     top-level `vitest` import that consumers do not install. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.spec.ts", "src/**/*.spec.tsx"]
 }

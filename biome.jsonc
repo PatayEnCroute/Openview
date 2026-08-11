@@ -1,0 +1,176 @@
+{
+  /* Deliberately `.jsonc`, not `.json`. Biome's loader accepts a comment in a
+     plain `biome.json` and then silently DISCARDS every key after it -- the
+     `overrides` array below vanished, with no error and no warning, and all
+     three architecture guards stopped firing while `pnpm run lint` still
+     reported success. Verified on 2.5.8: same content as `.jsonc` works. */
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!**/dist", "!**/coverage", "!**/.turbo", "!pnpm-lock.yaml"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noTsIgnore": "error",
+        "noEmptyBlockStatements": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error"
+      },
+      "correctness": {
+        "noUnusedFunctionParameters": "error",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      }
+    }
+  },
+  "plugins": ["./tools/biome/no-double-cast.grit", "./tools/biome/no-silent-catch.grit"],
+  /* Architecture guards use `patterns`, not `paths`. `paths` compares the specifier
+     as an exact string, so `react-dom` never matched `react-dom/client` -- the
+     canonical React 19 entry point -- nor `react/jsx-runtime`, `react-dom/server`
+     or `puppeteer-core`. Each group therefore lists the bare name AND its
+     subpaths, plus the `-core` sibling packages that ship the same thing under
+     another name. */
+  "overrides": [
+    {
+      "includes": ["packages/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["react", "react/**", "react-dom", "react-dom/**"],
+                    "message": "@openview/core must stay isomorphic (AGENTS.md 2): no UI dependency."
+                  },
+                  {
+                    "group": [
+                      "puppeteer",
+                      "puppeteer/**",
+                      "puppeteer-core",
+                      "puppeteer-core/**",
+                      "playwright",
+                      "playwright/**",
+                      "playwright-core",
+                      "playwright-core/**"
+                    ],
+                    "message": "@openview/core must stay isomorphic (AGENTS.md 2): no server dependency."
+                  },
+                  {
+                    "group": [
+                      "@openview/designer",
+                      "@openview/designer/**",
+                      "@openview/engine",
+                      "@openview/engine/**",
+                      "@openview/viewer",
+                      "@openview/viewer/**"
+                    ],
+                    "message": "core is the root of the dependency graph and must never import a sibling package."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/engine/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["react", "react/**", "react-dom", "react-dom/**"],
+                    "message": "@openview/engine is a Node service (AGENTS.md 2): no UI dependency."
+                  },
+                  {
+                    "group": [
+                      "puppeteer",
+                      "puppeteer/**",
+                      "puppeteer-core",
+                      "puppeteer-core/**",
+                      "playwright",
+                      "playwright/**",
+                      "playwright-core",
+                      "playwright-core/**"
+                    ],
+                    "message": "Puppeteer and Playwright bundle a browser (~150-300 MB). They belong in their own adapter package behind the RenderPort, so integrators who only need HTML never download one."
+                  },
+                  {
+                    "group": [
+                      "@openview/designer",
+                      "@openview/designer/**",
+                      "@openview/viewer",
+                      "@openview/viewer/**"
+                    ],
+                    "message": "the engine must not depend on the UI layer."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/designer/**", "packages/viewer/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "puppeteer",
+                      "puppeteer/**",
+                      "puppeteer-core",
+                      "puppeteer-core/**",
+                      "playwright",
+                      "playwright/**",
+                      "playwright-core",
+                      "playwright-core/**"
+                    ],
+                    "message": "browser packages must not pull the render backend into the bundle."
+                  },
+                  {
+                    "group": ["@openview/engine", "@openview/engine/**"],
+                    "message": "the UI must reach the engine through a port, never by importing it (Hexagonal). Importing it ships Chromium to the browser bundle."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

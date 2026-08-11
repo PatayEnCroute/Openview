@@ -52,8 +52,25 @@ jobs:
         with:
           node-version: 24
 
-      # Blocking on purpose. This step previously carried `continue-on-error: true`,
-      # which made it decorative: it could report a critical CVE and still pass.
-      # `pnpm audit` reads the lockfile and needs no install.
-      - name: Audit Dependencies
-        run: pnpm audit --audit-level=high
+      # Blocking on purpose. This step once carried `continue-on-error: true`, which
+      # made it decorative: it could report a critical CVE and still pass.
+      #
+      # Scoped to --prod so the blocking gate covers only code that reaches a
+      # consumer. Over the whole graph it also covered devDependencies, where a
+      # single high-severity advisory with no patched release -- routine in the
+      # vite/vitest/babel/turbo chain -- froze every merge, including the pull
+      # request that would fix it. That merge freeze is what gets
+      # `continue-on-error` reinstated, and then nothing is gated at all.
+      #
+      # --ignore-registry-errors keeps a registry outage from failing the build; the
+      # flag exists for exactly that. `pnpm audit` reads the lockfile, no install.
+      - name: Audit Production Dependencies
+        run: pnpm audit --audit-level=high --prod --ignore-registry-errors
+
+      # Dev advisories are reported, never enforced: they ship to nobody, so blocking
+      # on them buys a merge freeze rather than security. `always()` so this still
+      # reports when the production audit above has already failed.
+      - name: Audit Dev Dependencies (report only)
+        if: always()
+        continue-on-error: true
+        run: pnpm audit --audit-level=high --dev --ignore-registry-errors

@@ -19,7 +19,7 @@ pnpm run lint && pnpm run build && pnpm run type-check && pnpm run test:coverage
 Trois réflexes qui coûtent cher ici :
 
 - **Ne desserrez jamais une contrainte pour débloquer une compilation.** Modifier
-  `tsconfig`, `biome.json` ou un plugin GritQL parce qu'il vous refuse quelque
+  `tsconfig`, `biome.jsonc` ou un plugin GritQL parce qu'il vous refuse quelque
   chose, c'est supprimer le garde-fou plutôt que le bug (AGENTS.md §7).
 - **`!`, `@ts-ignore` et `as unknown as` sont bloquants**, pas déconseillés. Un
   blocage signifie que le type est faux ou que la donnée n'est pas validée par

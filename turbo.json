@@ -1,21 +1,26 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // Files that define the gates but live outside every package. Without them here,
+  // they were in no hash input at all: `$TURBO_DEFAULT$` only covers files inside a
+  // package directory, so lowering the coverage thresholds or dropping `strict` from
+  // tsconfig.base.json left every cached task valid, and re-running the commands
+  // CONTRIBUTING.md tells contributors to run replayed the previous PASS without
+  // executing anything. A weakened gate reported green.
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "tsconfig.tooling.json",
+    "tools/tsconfig.typecheck.json",
+    "vitest.config.ts",
+    "biome.jsonc",
+    "tools/biome/*.grit"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "*.tsbuildinfo"]
     },
     "type-check": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$"]
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$"]
-    },
-    "test:coverage": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$"]
+      "dependsOn": ["^build"]
     },
     "clean": {
       "cache": false

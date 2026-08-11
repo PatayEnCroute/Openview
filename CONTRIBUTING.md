@@ -14,8 +14,10 @@ version exacte, activez-la avec `corepack enable`).
 pnpm install
 ```
 
-L'installation configure aussi le hook de pre-commit (`core.hooksPath`), qui
-formate et vérifie les fichiers indexés avant chaque commit.
+L'installation configure aussi le hook de pre-commit (`core.hooksPath`). Il
+**vérifie** le contenu indexé avant chaque commit — exactement ce que le commit
+va enregistrer, et non le contenu du répertoire de travail. Il ne corrige rien :
+lancez `pnpm run lint:fix` puis réindexez.
 
 ## 🧪 Les quatre portes de validation
 
