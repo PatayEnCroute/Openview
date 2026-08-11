@@ -1,4 +1,4 @@
-import type { TemplateSchema } from '@openview/core';
+import type { Template } from '@openview/core';
 
 export type BlockType = 'text' | 'image' | 'container' | 'table' | 'loop' | 'condition';
 
@@ -13,11 +13,11 @@ export interface OpenviewDesignerOptions {
 }
 
 export interface OpenviewDesignerProps {
-  initialTemplate?: Partial<TemplateSchema> | undefined;
+  initialTemplate?: Partial<Template> | undefined;
   dataSchema?: Record<string, unknown> | undefined;
   options?: OpenviewDesignerOptions | undefined;
-  onChange?: ((template: TemplateSchema) => void) | undefined;
-  onSave?: ((template: TemplateSchema) => Promise<void> | void) | undefined;
-  onExportPdf?: ((template: TemplateSchema) => Promise<void> | void) | undefined;
+  onChange?: ((template: Template) => void) | undefined;
+  onSave?: ((template: Template) => Promise<void> | void) | undefined;
+  onExportPdf?: ((template: Template) => Promise<void> | void) | undefined;
   className?: string | undefined;
 }

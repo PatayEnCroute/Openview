@@ -1,21 +1,36 @@
-import { z } from 'zod';
-
 /**
- * Schéma Zod officiel pour la validation d'un Template Openview.
+ * @openview/core -- data contracts, AST and ports.
+ *
+ * Pure TypeScript and Zod: no React, no Node, no browser API. That constraint is
+ * enforced by this package's `lib`/`types` and by `noRestrictedImports`, not by
+ * good intentions.
  */
-export const TemplateSchema = z.object({
-  id: z.string().min(1, 'Template ID is required'),
-  name: z.string().min(1, 'Template name is required'),
-  version: z.string().default('1.0.0'),
-  createdAt: z.string().datetime().optional(),
-  updatedAt: z.string().datetime().optional(),
-});
 
-export type TemplateSchema = z.infer<typeof TemplateSchema>;
+export type {
+  ConditionNode,
+  ContainerNode,
+  DocumentNode,
+  DocumentNodeType,
+  ExpressionSource,
+  ImageNode,
+  LoopNode,
+  TextNode,
+} from './ast/nodes.js';
+export {
+  ConditionNodeSchema,
+  ContainerNodeSchema,
+  DocumentNodeSchema,
+  ImageNodeSchema,
+  LoopNodeSchema,
+  TextNodeSchema,
+} from './ast/nodes.js';
+export type { NodeVisitor } from './ast/visitor.js';
+export { childrenOf, collectExpressions, findNodeById, visitNode, walk } from './ast/visitor.js';
 
-/**
- * Fonction de validation d'un template brut
- */
-export function parseTemplateSchema(rawSchema: unknown): TemplateSchema {
-  return TemplateSchema.parse(rawSchema);
-}
+export { OpenviewError, TemplateMigrationError } from './errors.js';
+export type { RenderFormat, RenderPort, RenderRequest, RenderResult } from './ports/render.js';
+export type { TemplateStoragePort } from './ports/storage.js';
+export type { TemplateMigration } from './template/migrate.js';
+export { migrateToCurrent, parseTemplate, TEMPLATE_MIGRATIONS } from './template/migrate.js';
+export type { Template, TemplateSummary } from './template/template.js';
+export { CURRENT_SCHEMA_VERSION, TemplateSchema } from './template/template.js';

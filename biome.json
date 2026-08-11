@@ -76,6 +76,8 @@
                 "paths": {
                   "react": "@openview/engine is a Node service (AGENTS.md 2): no UI dependency.",
                   "react-dom": "@openview/engine is a Node service (AGENTS.md 2): no UI dependency.",
+                  "puppeteer": "Puppeteer bundles Chromium (~150-300 MB). It belongs in its own adapter package behind the RenderPort, so integrators who only need HTML never download it.",
+                  "playwright": "Playwright bundles browsers. It belongs in its own adapter package behind the RenderPort, so integrators who only need HTML never download it.",
                   "@openview/designer": "the engine must not depend on the UI layer.",
                   "@openview/viewer": "the engine must not depend on the UI layer."
                 }
