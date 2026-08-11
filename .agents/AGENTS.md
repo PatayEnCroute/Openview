@@ -75,3 +75,13 @@ Lorsqu'on demande à l'IA d'implémenter une nouvelle fonctionnalité :
 
 - **Assainissement XSS :** Tout contenu HTML ou template rendu dynamiquement dans `@openview/viewer` ou `@openview/engine` doit être assaini (*sanitized*).
 - **Secrets :** Aucun secret, clé API ou valeur confidentielle ne doit figurer dans le code.
+
+---
+
+## ⚙️ 7. Pièges CI/CD & Monorepo à Éviter
+
+1. **Précédence du Build sur le Type-Check :**
+   - En environnement CI, les fichiers d'avertissement/déclarations `.d.ts` dans `./dist` doivent exister pour que les paquets consommateurs compilent. Exécutez systématiquement `build` avant `type-check` (ou utilisez Turborepo `dependsOn: ["^build"]`).
+
+2. **Action pnpm GitHub Actions (`pnpm/action-setup@v4`) :**
+   - Ne spécifiez **jamais** l'attribut `version` dans le fichier YAML du workflow si `packageManager` est défini dans `package.json` afin d'éviter les erreurs de conflit de version.
