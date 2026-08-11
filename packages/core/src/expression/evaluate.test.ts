@@ -1,0 +1,168 @@
+import { describe, expect, it } from 'vitest';
+import { ExpressionEvaluationError } from '../errors.js';
+import { evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
+import type { Expression } from './expression.js';
+
+const scope = {
+  invoice: {
+    total: 0,
+    label: 'ACME',
+    paid: false,
+    notes: '',
+    lines: [{ sku: 'A' }, { sku: 'B' }],
+    customer: { name: 'Ada' },
+  },
+};
+
+const path = (p: string): Expression => ({ kind: 'path', path: p });
+const literal = (value: string | number | boolean | null): Expression => ({
+  kind: 'literal',
+  value,
+});
+
+describe('evaluateExpression', () => {
+  it('resolves a deep path', () => {
+    expect(evaluateExpression(path('invoice.customer.name'), scope)).toBe('Ada');
+  });
+
+  it('returns undefined for an absent path rather than throwing', () => {
+    // Core reports absence; the render pipeline decides blank vs error.
+    expect(evaluateExpression(path('invoice.missing.deep'), scope)).toBeUndefined();
+  });
+
+  it('returns undefined when a path traverses a primitive', () => {
+    expect(evaluateExpression(path('invoice.label.nope'), scope)).toBeUndefined();
+  });
+
+  it('returns literals unchanged', () => {
+    expect(evaluateExpression(literal(42), scope)).toBe(42);
+  });
+
+  it('reports an empty string, array and object as empty', () => {
+    expect(evaluateExpression({ kind: 'isEmpty', operand: path('invoice.notes') }, scope)).toBe(
+      true,
+    );
+    expect(evaluateExpression({ kind: 'isEmpty', operand: path('invoice.missing') }, scope)).toBe(
+      true,
+    );
+    expect(evaluateExpression({ kind: 'isEmpty', operand: path('invoice.lines') }, scope)).toBe(
+      false,
+    );
+    expect(evaluateExpression({ kind: 'isEmpty', operand: literal(0) }, scope)).toBe(false);
+  });
+
+  it('distinguishes an empty object from a populated one', () => {
+    const withObjects = { blank: {}, filled: { name: 'Ada' } };
+    expect(evaluateExpression({ kind: 'isEmpty', operand: path('blank') }, withObjects)).toBe(true);
+    expect(evaluateExpression({ kind: 'isEmpty', operand: path('filled') }, withObjects)).toBe(
+      false,
+    );
+  });
+
+  it('short-circuits `and` before touching missing data', () => {
+    const expression: Expression = {
+      kind: 'logical',
+      op: 'and',
+      operands: [
+        literal(false),
+        // Would throw if evaluated: ordering a string against a number.
+        { kind: 'compare', op: 'gt', left: path('invoice.label'), right: literal(1) },
+      ],
+    };
+    expect(evaluateExpression(expression, scope)).toBe(false);
+  });
+
+  it('short-circuits `or` on the first true operand', () => {
+    const expression: Expression = {
+      kind: 'logical',
+      op: 'or',
+      operands: [
+        literal(true),
+        { kind: 'compare', op: 'gt', left: path('invoice.label'), right: literal(1) },
+      ],
+    };
+    expect(evaluateExpression(expression, scope)).toBe(true);
+  });
+
+  it('negates a predicate', () => {
+    expect(evaluateExpression({ kind: 'not', operand: literal(false) }, scope)).toBe(true);
+  });
+
+  it('throws on an expression kind it does not know', () => {
+    const smuggled: Expression = JSON.parse('{"kind":"regex"}');
+    expect(() => evaluateExpression(smuggled, scope)).toThrow(TypeError);
+  });
+});
+
+describe('comparison', () => {
+  const compare = (op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte', a: Expression, b: Expression) =>
+    evaluateExpression({ kind: 'compare', op, left: a, right: b }, scope);
+
+  it('compares numbers and strings by value', () => {
+    expect(compare('eq', path('invoice.total'), literal(0))).toBe(true);
+    expect(compare('neq', path('invoice.label'), literal('ACME'))).toBe(false);
+    expect(compare('gte', literal(2), literal(2))).toBe(true);
+    expect(compare('lte', literal(2), literal(3))).toBe(true);
+    expect(compare('lt', literal('a'), literal('b'))).toBe(true);
+    expect(compare('gt', literal(3), literal(2))).toBe(true);
+  });
+
+  it('treats an absent path as not equal to a value', () => {
+    expect(compare('eq', path('invoice.missing'), literal('x'))).toBe(false);
+  });
+
+  it('refuses to order a string against a number', () => {
+    // JavaScript would evaluate '10' < '9' as true. A template comparing a
+    // numeric string to a number is a data-shape bug that must surface.
+    expect(() => compare('gt', path('invoice.label'), literal(1))).toThrow(
+      ExpressionEvaluationError,
+    );
+  });
+
+  it('refuses to order against missing data', () => {
+    expect(() => compare('lt', path('invoice.missing'), literal(1))).toThrow(
+      /needs two numbers or two strings/,
+    );
+  });
+
+  it('refuses eq on non-primitives, which would compare by reference', () => {
+    expect(() => compare('eq', path('invoice.lines'), path('invoice.lines'))).toThrow(
+      /operate on primitives/,
+    );
+  });
+});
+
+describe('evaluatePredicate', () => {
+  it('accepts a boolean result', () => {
+    expect(evaluatePredicate(path('invoice.paid'), scope)).toBe(false);
+  });
+
+  it('treats absent data as false rather than aborting the render', () => {
+    expect(evaluatePredicate(path('invoice.missing'), scope)).toBe(false);
+  });
+
+  it('refuses JavaScript truthiness', () => {
+    // The bug this prevents: `invoice.total` of 0 is falsy, so a truthiness-based
+    // condition would silently drop a zero line from an invoice.
+    expect(() => evaluatePredicate(path('invoice.total'), scope)).toThrow(
+      /must evaluate to a boolean/,
+    );
+    expect(() => evaluatePredicate(path('invoice.label'), scope)).toThrow(
+      ExpressionEvaluationError,
+    );
+  });
+});
+
+describe('evaluateSequence', () => {
+  it('iterates a list', () => {
+    expect(evaluateSequence(path('invoice.lines'), scope)).toHaveLength(2);
+  });
+
+  it('yields no iterations for absent data', () => {
+    expect(evaluateSequence(path('invoice.missing'), scope)).toStrictEqual([]);
+  });
+
+  it('refuses a value that is present but not a list', () => {
+    expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(/needs a list/);
+  });
+});

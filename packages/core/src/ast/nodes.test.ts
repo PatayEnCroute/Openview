@@ -11,12 +11,17 @@ describe('DocumentNodeSchema', () => {
         {
           type: 'loop',
           id: 'lines',
-          each: 'invoice.lines',
+          each: { kind: 'path', path: 'invoice.lines' },
           children: [
             {
               type: 'condition',
               id: 'discounted',
-              when: 'line.discount > 0',
+              when: {
+                kind: 'compare',
+                op: 'gt',
+                left: { kind: 'path', path: 'line.discount' },
+                right: { kind: 'literal', value: 0 },
+              },
               children: [{ type: 'text', id: 'label', content: 'Discount applied' }],
             },
           ],
@@ -45,9 +50,20 @@ describe('DocumentNodeSchema', () => {
     expect(() => DocumentNodeSchema.parse({ type: 'text', id: '', content: 'x' })).toThrow();
   });
 
-  it('rejects a loop with no expression to iterate over', () => {
+  it('rejects a loop whose source is not a valid expression', () => {
     expect(() =>
-      DocumentNodeSchema.parse({ type: 'loop', id: 'l1', each: '', children: [] }),
+      DocumentNodeSchema.parse({ type: 'loop', id: 'l1', each: 'invoice.lines', children: [] }),
+    ).toThrow();
+  });
+
+  it('rejects a condition carrying a malformed expression', () => {
+    expect(() =>
+      DocumentNodeSchema.parse({
+        type: 'condition',
+        id: 'c1',
+        when: { kind: 'compare', op: 'gt', left: { kind: 'path', path: 'a' } },
+        children: [],
+      }),
     ).toThrow();
   });
 

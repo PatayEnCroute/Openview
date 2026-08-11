@@ -1,8 +1,9 @@
 # ADR 0001 — Langage d'expression des templates
 
-- **Statut :** 🟡 **Proposé — décision requise avant l'étape 2 (engine)**
+- **Statut :** 🟢 **Accepté — option C** (2026-08-11), implémentée dans `@openview/core`
 - **Date :** 2026-08-11
 - **Impact :** `@openview/core` (contrat de données), `@openview/engine` (évaluation), `@openview/designer` (édition)
+- **Implémentation :** [`src/expression/expression.ts`](../../packages/core/src/expression/expression.ts) (représentation) et [`src/expression/evaluate.ts`](../../packages/core/src/expression/evaluate.ts) (évaluateur)
 
 ---
 
@@ -76,7 +77,7 @@ reste de l'arbre :
 
 ---
 
-## Décision proposée
+## Décision retenue
 
 **Option C**, avec un jeu d'opérateurs délibérément minimal en v1 : `path`,
 `literal`, `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `and`, `or`, `not`, `isEmpty`.
@@ -92,24 +93,54 @@ textuel déjà stocké chez des clients) impose une migration douloureuse.
 
 ---
 
-## Conséquences si l'option C est retenue
+## Conséquences, telles qu'implémentées
 
-- `ExpressionSource = string` disparaît au profit d'un `Expression` structuré, et
-  `LoopNode.each` / `ConditionNode.when` changent de type. **À faire avant tout
-  enregistrement de template réel** : après, c'est une migration de schéma.
-- `CURRENT_SCHEMA_VERSION` passe à 2 avec la migration correspondante — sauf si
-  le changement atterrit avant la première release, ce qui est l'objectif.
-- L'évaluateur vit dans `@openview/core` (pur, testable, isomorphe), pas dans
-  `engine` : le Designer en a besoin pour prévisualiser.
+- `ExpressionSource = string` a disparu. `LoopNode.each` et `ConditionNode.when`
+  portent désormais un `Expression` structuré.
+- **`CURRENT_SCHEMA_VERSION` reste à 1**, aucune migration n'est nécessaire :
+  le changement atterrit avant la première release, aucun template n'existe.
+  C'était précisément l'objectif du calendrier.
+- L'évaluateur vit dans `@openview/core` — pur, testable, isomorphe — parce que
+  le Designer en a besoin pour prévisualiser autant que l'Engine pour rendre.
+- `collectExpressions()` devient `collectDataPaths()` : la représentation
+  structurée rend l'analyse **exacte** plutôt qu'heuristique, y compris pour un
+  chemin enfoui dans une comparaison imbriquée.
+- Les segments `__proto__`, `constructor` et `prototype` sont refusés **au
+  parsing**, donc un template malveillant n'atteint jamais le stockage. Les
+  chemins viennent d'utilisateurs ; c'est le premier pas d'une évasion de bac à
+  sable.
+
+### Deux décisions prises à l'implémentation
+
+**Aucune coercion dans les comparaisons.** JavaScript évalue `'10' < '9'` à
+`true`. `gt`/`gte`/`lt`/`lte` exigent deux nombres ou deux chaînes et lèvent
+une erreur typée sinon ; `eq`/`neq` refusent les non-primitifs, qui se
+compareraient par référence. Un template comparant une chaîne numérique à un
+nombre est un bug de forme de données qui doit remonter.
+
+**Aucune truthiness JavaScript dans les conditions.** Une condition doit
+s'évaluer à un booléen strict. Sans cette règle, `{ path: 'invoice.total' }`
+serait faux pour un total de `0` — une facture qui masque silencieusement une
+ligne à zéro. Les auteurs disposent de `isEmpty`, `not` et des comparaisons.
 
 ---
 
-## Ce qui reste à trancher
+## Ce qui reste ouvert
 
-1. **Confirmez-vous l'option C ?** C'est la question bloquante ; les autres en
-   découlent.
-2. **Chemins manquants :** une donnée absente rend-elle une chaîne vide, ou
-   est-ce une erreur de rendu ? Une facture au total manquant qui s'imprime avec
-   un blanc est un incident client.
-3. **Typage des données :** le template déclare-t-il le schéma Zod des données
-   qu'il attend, permettant de valider un jeu de données *avant* rendu ?
+**Question 2 — donnée manquante : blanc ou erreur ?** Partiellement tranchée par
+la séparation des responsabilités : `core` *signale* l'absence (`undefined`), et
+c'est la **pipeline de rendu** qui appliquera la politique. Deux cas ont
+toutefois reçu un comportement, parce qu'il fallait bien en choisir un :
+
+- une condition sur une donnée absente vaut `false` — la branche est masquée,
+  le document ne s'interrompt pas ;
+- une boucle sur une donnée absente n'itère pas — zéro ligne, pas d'erreur.
+
+Reste à décider pour les **valeurs textuelles** rendues dans le document : un
+`{{ invoice.total }}` absent doit-il imprimer un blanc ou faire échouer le
+rendu ? À trancher à l'étape 2, quand `DataBindingStep` existera.
+
+**Question 3 — typage des données.** Toujours ouverte : un template
+déclare-t-il le schéma Zod des données qu'il attend, permettant de valider un
+jeu de données *avant* rendu ? `collectDataPaths()` fournit déjà la moitié de la
+réponse — on sait quels chemins un template lit ; il manque leur type attendu.

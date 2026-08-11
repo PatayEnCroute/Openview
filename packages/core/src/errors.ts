@@ -10,6 +10,14 @@ export class OpenviewError extends Error {
   }
 }
 
+/** An expression could not be evaluated against the supplied render data. */
+export class ExpressionEvaluationError extends OpenviewError {
+  constructor(message: string, options?: ErrorOptions | undefined) {
+    super(message, options);
+    this.name = 'ExpressionEvaluationError';
+  }
+}
+
 /** A stored template could not be brought up to the current schema version. */
 export class TemplateMigrationError extends OpenviewError {
   constructor(

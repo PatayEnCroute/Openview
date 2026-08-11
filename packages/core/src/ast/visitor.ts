@@ -1,3 +1,4 @@
+import { pathsOf } from '../expression/expression.js';
 import type {
   ConditionNode,
   ContainerNode,
@@ -81,16 +82,21 @@ export function findNodeById(root: DocumentNode, id: string): DocumentNode | und
 }
 
 /**
- * Every expression a template depends on, in traversal order and de-duplicated.
- * The engine uses this to know which data keys a template needs before binding.
+ * Every data path a template reads, in traversal order and de-duplicated.
+ *
+ * This is static analysis, not a heuristic: because expressions are structured
+ * trees rather than strings (ADR 0001), the answer is exact. The engine can tell
+ * a caller which keys a template needs before rendering anything, and the
+ * designer can flag a template that binds to a field its data schema does not
+ * declare.
  */
-export function collectExpressions(root: DocumentNode): readonly string[] {
+export function collectDataPaths(root: DocumentNode): readonly string[] {
   const found = new Set<string>();
   for (const node of walk(root)) {
     if (node.type === 'loop') {
-      found.add(node.each);
+      pathsOf(node.each, found);
     } else if (node.type === 'condition') {
-      found.add(node.when);
+      pathsOf(node.when, found);
     }
   }
   return [...found];

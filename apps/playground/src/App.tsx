@@ -1,8 +1,24 @@
-import { CURRENT_SCHEMA_VERSION, collectExpressions, parseTemplate, walk } from '@openview/core';
+import {
+  CURRENT_SCHEMA_VERSION,
+  collectDataPaths,
+  type Expression,
+  evaluatePredicate,
+  evaluateSequence,
+  parseTemplate,
+  walk,
+} from '@openview/core';
 
-// Exercises the core contract end to end: recursive parsing, Visitor traversal
-// and static expression collection. If @openview/core breaks its contract, this
-// page stops rendering -- which is the point of the playground.
+// Exercises the core contract end to end: recursive parsing, Visitor traversal,
+// static path analysis and expression evaluation. If @openview/core breaks its
+// contract, this page stops rendering -- which is the point of the playground.
+
+const discountApplies: Expression = {
+  kind: 'compare',
+  op: 'gt',
+  left: { kind: 'path', path: 'line.discount' },
+  right: { kind: 'literal', value: 0 },
+};
+
 const sampleTemplate = parseTemplate({
   schemaVersion: CURRENT_SCHEMA_VERSION,
   id: 'tpl_demo_1',
@@ -16,13 +32,13 @@ const sampleTemplate = parseTemplate({
       {
         type: 'loop',
         id: 'lines',
-        each: 'invoice.lines',
+        each: { kind: 'path', path: 'invoice.lines' },
         children: [
           { type: 'text', id: 'line-label', content: 'Ligne' },
           {
             type: 'condition',
             id: 'discounted',
-            when: 'line.discount > 0',
+            when: discountApplies,
             children: [{ type: 'text', id: 'discount-note', content: 'Remise appliquée' }],
           },
         ],
@@ -31,8 +47,19 @@ const sampleTemplate = parseTemplate({
   },
 });
 
+const renderData = {
+  invoice: {
+    lines: [
+      { sku: 'A-1', discount: 0 },
+      { sku: 'B-2', discount: 15 },
+    ],
+  },
+};
+
 const nodeIds = [...walk(sampleTemplate.root)].map((node) => `${node.id} (${node.type})`);
-const expressions = collectExpressions(sampleTemplate.root);
+const dataPaths = collectDataPaths(sampleTemplate.root);
+const lines = evaluateSequence({ kind: 'path', path: 'invoice.lines' }, renderData);
+const discountPerLine = lines.map((line) => evaluatePredicate(discountApplies, { line }));
 
 const codeStyle = {
   background: '#f4f4f4',
@@ -57,18 +84,23 @@ export default function App() {
         ))}
       </ol>
 
-      <h2>Expressions requises par le template</h2>
-      {expressions.length === 0 ? (
-        <p>Aucune liaison dynamique.</p>
-      ) : (
-        <ul>
-          {expressions.map((expression) => (
-            <li key={expression}>
-              <code>{expression}</code>
-            </li>
-          ))}
-        </ul>
-      )}
+      <h2>Données requises (analyse statique des expressions)</h2>
+      <ul>
+        {dataPaths.map((dataPath) => (
+          <li key={dataPath}>
+            <code>{dataPath}</code>
+          </li>
+        ))}
+      </ul>
+
+      <h2>Évaluation de la condition, ligne par ligne</h2>
+      <ul>
+        {discountPerLine.map((applies, index) => (
+          <li key={nodeIds[index] ?? index}>
+            Ligne {index + 1} : remise {applies ? 'appliquée' : 'absente'}
+          </li>
+        ))}
+      </ul>
 
       <h2>Document validé</h2>
       <pre style={codeStyle}>{JSON.stringify(sampleTemplate, null, 2)}</pre>

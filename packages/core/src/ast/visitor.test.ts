@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import type { Expression } from '../expression/expression.js';
 import type { DocumentNode } from './nodes.js';
-import { childrenOf, collectExpressions, findNodeById, visitNode, walk } from './visitor.js';
+import { childrenOf, collectDataPaths, findNodeById, visitNode, walk } from './visitor.js';
+
+const discountApplies: Expression = {
+  kind: 'compare',
+  op: 'gt',
+  left: { kind: 'path', path: 'line.discount' },
+  right: { kind: 'literal', value: 0 },
+};
 
 const tree: DocumentNode = {
   type: 'container',
@@ -10,13 +18,13 @@ const tree: DocumentNode = {
     {
       type: 'loop',
       id: 'lines',
-      each: 'invoice.lines',
+      each: { kind: 'path', path: 'invoice.lines' },
       children: [
         { type: 'image', id: 'thumb', src: 'thumb.png' },
         {
           type: 'condition',
           id: 'discounted',
-          when: 'line.discount > 0',
+          when: discountApplies,
           children: [{ type: 'text', id: 'label', content: 'Discounted' }],
         },
       ],
@@ -31,17 +39,17 @@ describe('visitNode', () => {
         text: (n) => `text:${n.content}`,
         image: (n) => `image:${n.src}`,
         container: (n) => `container:${n.children.length}`,
-        loop: (n) => `loop:${n.each}`,
-        condition: (n) => `condition:${n.when}`,
+        loop: (n) => `loop:${n.each.kind}`,
+        condition: (n) => `condition:${n.when.kind}`,
       });
 
     expect(describeNode(tree)).toBe('container:2');
     expect([...walk(tree)].map(describeNode)).toStrictEqual([
       'container:2',
       'text:Invoice',
-      'loop:invoice.lines',
+      'loop:path',
       'image:thumb.png',
-      'condition:line.discount > 0',
+      'condition:compare',
       'text:Discounted',
     ]);
   });
@@ -104,24 +112,27 @@ describe('findNodeById', () => {
   });
 });
 
-describe('collectExpressions', () => {
-  it('gathers loop and condition expressions in traversal order', () => {
-    expect(collectExpressions(tree)).toStrictEqual(['invoice.lines', 'line.discount > 0']);
+describe('collectDataPaths', () => {
+  it('reaches inside compound expressions, not just top-level paths', () => {
+    // `line.discount` is nested two levels down inside a compare node. A string
+    // language would have needed parsing to find it; the structured form makes
+    // this exact.
+    expect(collectDataPaths(tree)).toStrictEqual(['invoice.lines', 'line.discount']);
   });
 
-  it('de-duplicates repeated expressions', () => {
+  it('de-duplicates repeated paths', () => {
     const repeated: DocumentNode = {
       type: 'container',
       id: 'root',
       children: [
-        { type: 'loop', id: 'a', each: 'items', children: [] },
-        { type: 'loop', id: 'b', each: 'items', children: [] },
+        { type: 'loop', id: 'a', each: { kind: 'path', path: 'items' }, children: [] },
+        { type: 'loop', id: 'b', each: { kind: 'path', path: 'items' }, children: [] },
       ],
     };
-    expect(collectExpressions(repeated)).toStrictEqual(['items']);
+    expect(collectDataPaths(repeated)).toStrictEqual(['items']);
   });
 
   it('returns nothing for a tree with no dynamic bindings', () => {
-    expect(collectExpressions({ type: 'text', id: 't', content: 'static' })).toStrictEqual([]);
+    expect(collectDataPaths({ type: 'text', id: 't', content: 'static' })).toStrictEqual([]);
   });
 });
