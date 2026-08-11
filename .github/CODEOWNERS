@@ -1,0 +1,7 @@
+# Ownership for key configurations and security policies
+*                       @PatayEnCroute
+/.github/               @PatayEnCroute
+/SECURITY.md            @PatayEnCroute
+/.gitignore             @PatayEnCroute
+/pnpm-workspace.yaml   @PatayEnCroute
+/package.json           @PatayEnCroute
