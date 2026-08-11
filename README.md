@@ -65,6 +65,16 @@ openview/
 - [ ] Étape 4 : Conception de l'éditeur visuel de templates (`@openview/designer`)
 - [ ] Étape 5 : Mise en place du Playground pour les tests d'intégration locaux
 
+## 🤝 Contribuer
+
+Les contributions sont bienvenues. Le guide [CONTRIBUTING.md](CONTRIBUTING.md)
+décrit la mise en route, les quatre portes de validation exécutées par la CI et
+les règles de code appliquées automatiquement par le linter.
+
+Les échanges se tiennent selon notre [Code de Conduite](CODE_OF_CONDUCT.md).
+Pour signaler une faille de sécurité, suivez [SECURITY.md](SECURITY.md) — jamais
+via une issue publique.
+
 ## 📄 Licence
 
-Ce projet est OpenSource.
+Ce projet est distribué sous licence **[Apache 2.0](LICENSE)**.

@@ -61,6 +61,14 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# Local tooling state (embedding caches, episodic stores). Binary SQLite files
+# that get rewritten on every run: never useful in history, and on a public
+# repository their contents are not reviewable in a diff.
+data/
+*.sqlite
+*.sqlite3
+*.db
+
 # Caches
 .cache/
 .eslintcache

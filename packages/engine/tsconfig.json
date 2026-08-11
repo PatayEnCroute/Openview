@@ -1,8 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    /* Node service: Node globals, no DOM. The DOM built by the render pipeline
+       lives inside the browser context (page.evaluate), never in this process,
+       so exposing DOM typings here would let that confusion compile. */
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts"]
 }

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseTemplateSchema } from './index';
+import { describe, expect, it } from 'vitest';
+import { parseTemplateSchema } from './index.js';
 
 describe('TemplateSchema & parseTemplateSchema', () => {
   it('should validate a correct template schema', () => {

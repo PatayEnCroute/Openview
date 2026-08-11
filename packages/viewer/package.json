@@ -2,11 +2,41 @@
   "name": "@openview/viewer",
   "version": "0.1.0",
   "description": "Composant front-end léger d'affichage et d'interaction Openview",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PatayEnCroute/Openview.git",
+    "directory": "packages/viewer"
+  },
+  "homepage": "https://github.com/PatayEnCroute/Openview#readme",
+  "bugs": {
+    "url": "https://github.com/PatayEnCroute/Openview/issues"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
-    "type-check": "tsc --noEmit"
+    "clean": "node ../../tools/clean.mjs",
+    "type-check": "tsc -p tsconfig.typecheck.json"
   },
   "peerDependencies": {
     "react": "^19.0.0",

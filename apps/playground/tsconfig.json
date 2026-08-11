@@ -1,6 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    /* Browser app. `vite/client` comes in via the triple-slash reference in
+       src/vite-env.d.ts, so no ambient `types` entry is needed here. */
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "noEmit": true
   },
   "include": ["src/**/*"],

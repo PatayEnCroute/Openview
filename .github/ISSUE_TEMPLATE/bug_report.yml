@@ -1,0 +1,65 @@
+name: 🐛 Rapport de bug
+description: Signaler un comportement incorrect d'Openview
+labels: ['bug', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci pour ce signalement.
+
+        ⚠️ **N'utilisez pas ce formulaire pour une faille de sécurité.**
+        Suivez la procédure de divulgation responsable décrite dans
+        [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Paquet concerné
+      options:
+        - '@openview/core'
+        - '@openview/designer'
+        - '@openview/engine'
+        - '@openview/viewer'
+        - '@openview/playground'
+        - Outillage / CI
+        - Je ne sais pas
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Collez le message d'erreur complet ou la stack trace si vous en avez une.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      description: |
+        Un cas reproductible minimal accélère énormément la correction.
+        Pour un problème de rendu, joignez le template JSON et les données qui le déclenchent.
+      placeholder: |
+        1. Charger le template ci-dessous
+        2. Appeler ...
+        3. Observer ...
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Version d'Openview, version de Node, système d'exploitation.
+      placeholder: 'openview 0.1.0, Node 24.13.3, Windows 11'
+    validations:
+      required: true

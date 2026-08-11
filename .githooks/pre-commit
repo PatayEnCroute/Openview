@@ -1,0 +1,28 @@
+#!/bin/sh
+# Openview pre-commit gate.
+#
+# Deliberately dependency-free: a shell hook plus `core.hooksPath` needs no npm
+# package and no postinstall script, which matters on a public repository where
+# every added build script widens the supply-chain surface.
+#
+# Enabled by `pnpm install` (the root `prepare` script). To bypass once, use
+# `git commit --no-verify` -- but the same checks run in CI, so it only defers.
+set -e
+
+if [ -z "$(git diff --cached --name-only --diff-filter=ACMR)" ]; then
+  exit 0
+fi
+
+echo "pre-commit: biome check on staged files"
+
+# -z emits NUL-delimited paths and `xargs -0` consumes them unsplit. Plain xargs
+# word-splits on spaces, so `my file.ts` arrived as two broken arguments: biome
+# reported "Checked 0 files" and the path never got linted at all.
+#
+# Read-only on purpose. Passing --write and re-staging with `git add` promoted the
+# whole working-tree file into the index, silently committing hunks a developer
+# had deliberately left out of `git add -p`. Run `pnpm run lint:fix` to apply fixes.
+git diff --cached --name-only --diff-filter=ACMR -z |
+  xargs -0 ./node_modules/.bin/biome check --files-ignore-unknown=true --no-errors-on-unmatched
+
+echo "pre-commit: ok"
