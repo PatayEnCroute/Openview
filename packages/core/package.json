@@ -1,0 +1,29 @@
+{
+  "name": "@openview/core",
+  "version": "0.1.0",
+  "description": "Schémas de données, types partagés et parsing des templates pour Openview",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
+    "vitest": "^4.1.10"
+  },
+  "keywords": [
+    "openview",
+    "core",
+    "schema",
+    "templates"
+  ]
+}

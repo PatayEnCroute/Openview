@@ -1,0 +1,19 @@
+{
+  "name": "openview-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo Openview - Moteur d'édition, de rendu et de visualisation de documents dynamiques",
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "dev": "pnpm --recursive run dev",
+    "lint": "pnpm --recursive run lint",
+    "test": "pnpm --recursive run test",
+    "test:coverage": "pnpm --recursive run test:coverage",
+    "type-check": "pnpm --recursive run type-check"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.9",
+    "typescript": "^7.0.2"
+  },
+  "packageManager": "pnpm@11.21.0"
+}

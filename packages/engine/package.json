@@ -1,0 +1,14 @@
+{
+  "name": "@openview/engine",
+  "version": "0.1.0",
+  "description": "Moteur de fusion de données et de rendu backend pour Openview",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openview/core": "workspace:*"
+  }
+}
