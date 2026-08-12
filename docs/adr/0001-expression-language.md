@@ -140,6 +140,13 @@ Reste à décider pour les **valeurs textuelles** rendues dans le document : un
 `{{ invoice.total }}` absent doit-il imprimer un blanc ou faire échouer le
 rendu ? À trancher à l'étape 2, quand `DataBindingStep` existera.
 
+> [ADR 0002](0002-data-binding-and-loop-scope.md) a depuis fourni la
+> représentation manquante — un texte porte des segments, dont certains sont des
+> liaisons. La question restante est donc purement une question de *politique*, et
+> elle en emporte une seconde : comment une valeur non textuelle devient du texte.
+> ADR 0002 y ajoute aussi la portée de boucle, que celui-ci avait laissée
+> implicite.
+
 **Question 3 — typage des données.** Toujours ouverte : un template
 déclare-t-il le schéma Zod des données qu'il attend, permettant de valider un
 jeu de données *avant* rendu ? `collectDataPaths()` fournit déjà la moitié de la

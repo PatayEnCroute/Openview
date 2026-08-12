@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { findNodeById } from '../ast/visitor.js';
 import { ExpressionEvaluationError } from '../errors.js';
-import { evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
+import { parseTemplate } from '../template/migrate.js';
+import { CURRENT_SCHEMA_VERSION } from '../template/template.js';
+import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
 import type { Expression } from './expression.js';
 
 const scope = {
@@ -119,10 +122,13 @@ describe('comparison', () => {
     );
   });
 
-  it('refuses to order against missing data', () => {
-    expect(() => compare('lt', path('invoice.missing'), literal(1))).toThrow(
-      /needs two numbers or two strings/,
-    );
+  it('orders absent data as false rather than aborting the document', () => {
+    // This used to throw. One invoice line missing an optional `discount` would
+    // then have killed the whole render, and eq/neq already treated absence as
+    // false, so the four ordering operators were the odd ones out.
+    expect(compare('lt', path('invoice.missing'), literal(1))).toBe(false);
+    expect(compare('gt', path('invoice.missing'), literal(1))).toBe(false);
+    expect(compare('gte', literal(1), path('invoice.missing'))).toBe(false);
   });
 
   it('refuses eq on non-primitives, which would compare by reference', () => {
@@ -164,5 +170,123 @@ describe('evaluateSequence', () => {
 
   it('refuses a value that is present but not a list', () => {
     expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(/needs a list/);
+  });
+});
+
+describe('scope reading', () => {
+  it('ignores inherited properties, so a path cannot reach Object.prototype', () => {
+    // These paths are refused by the schema, so reaching them means the document
+    // bypassed validation -- data read straight from storage. `Reflect.get` alone
+    // returned a function here, which a text binding would have printed.
+    expect(evaluateExpression(path('invoice.toString'), scope)).toBeUndefined();
+    expect(evaluateExpression(path('invoice.hasOwnProperty'), scope)).toBeUndefined();
+  });
+
+  it('ignores a non-enumerable own property, which childScope cannot copy', () => {
+    const hidden: Record<string, unknown> = { invoice: { total: 1 } };
+    Object.defineProperty(hidden, 'company', { value: { name: 'ACME' } });
+
+    // The divergence this rules out: readable outside a loop, gone inside one.
+    // Both now report absence, so the resolver and the scope builder agree.
+    expect(evaluateExpression(path('company.name'), hidden)).toBeUndefined();
+    expect(
+      evaluateExpression(path('company.name'), childScope(hidden, 'line', {})),
+    ).toBeUndefined();
+  });
+
+  it('honours a getter declared as an own enumerable property', () => {
+    const withGetter = {
+      get today(): string {
+        return '2026-08-12';
+      },
+    };
+
+    expect(evaluateExpression(path('today'), withGetter)).toBe('2026-08-12');
+    expect(evaluateExpression(path('today'), childScope(withGetter, 'line', {}))).toBe(
+      '2026-08-12',
+    );
+  });
+});
+
+describe('childScope', () => {
+  it('binds the current item under the alias, keeping the enclosing data reachable', () => {
+    const lines = evaluateSequence(path('invoice.lines'), scope);
+    const first = childScope(scope, 'line', lines[0]);
+
+    expect(evaluateExpression(path('line.sku'), first)).toBe('A');
+    // A line still knows its invoice: the enclosing scope is not replaced.
+    expect(evaluateExpression(path('invoice.label'), first)).toBe('ACME');
+  });
+
+  it('lets the innermost loop shadow an outer alias', () => {
+    const outer = childScope(scope, 'row', { sku: 'outer' });
+    const inner = childScope(outer, 'row', { sku: 'inner' });
+
+    expect(evaluateExpression(path('row.sku'), inner)).toBe('inner');
+    // Lexical shadowing: the outer binding still holds in its own scope. This is
+    // why an alias collision is a defined outcome and not an ambiguous one.
+    expect(evaluateExpression(path('row.sku'), outer)).toBe('outer');
+  });
+
+  it('leaves the parent scope untouched', () => {
+    childScope(scope, 'line', { sku: 'X' });
+    expect(evaluateExpression(path('line.sku'), scope)).toBeUndefined();
+  });
+
+  it('reads a primitive item through the alias alone', () => {
+    // A list of strings, printed with no field access.
+    expect(evaluateExpression(path('tag'), childScope({}, 'tag', 'urgent'))).toBe('urgent');
+  });
+
+  it('drives a parsed template loop, with no alias invented by the caller', () => {
+    // The seam ADR 0002 rests on. The alias and the condition both come off the
+    // parsed document, and nothing outside the template literal names `line`: if
+    // the schema stopped carrying `as`, or the evaluator stopped honouring it,
+    // this fails -- which neither half's own unit tests would catch.
+    const template = parseTemplate({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'tpl_1',
+      name: 'Invoice',
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'loop',
+            id: 'lines',
+            each: { kind: 'path', path: 'invoice.lines' },
+            as: 'line',
+            children: [
+              {
+                type: 'condition',
+                id: 'discounted',
+                when: {
+                  kind: 'compare',
+                  op: 'gt',
+                  left: { kind: 'path', path: 'line.discount' },
+                  right: { kind: 'literal', value: 0 },
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const loop = findNodeById(template.root, 'lines');
+    const condition = findNodeById(template.root, 'discounted');
+    if (loop?.type !== 'loop' || condition?.type !== 'condition') {
+      // A throw rather than an assertion: it narrows both nodes for the lines
+      // below without the non-null assertion this repo forbids.
+      throw new Error('the parsed template lost its loop or its condition');
+    }
+
+    const data = { invoice: { lines: [{ discount: 0 }, { discount: 15 }] } };
+    const applied = evaluateSequence(loop.each, data).map((item) =>
+      evaluatePredicate(condition.when, childScope(data, loop.as, item)),
+    );
+
+    expect(applied).toStrictEqual([false, true]);
   });
 });

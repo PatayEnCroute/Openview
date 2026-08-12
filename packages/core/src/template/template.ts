@@ -9,6 +9,13 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  * TEMPLATE_MIGRATIONS in ./migrate.ts in the same commit. A template saved by an
  * older release must stay renderable: this is the one decision that cannot be
  * revisited once a real user has saved a document.
+ *
+ * "Whenever" includes adding a purely OPTIONAL field, which needs no migration
+ * step but still needs the bump. Zod strips unknown keys, so a document written by
+ * a newer release and opened by an older one loses the new field silently -- and
+ * an editor then re-saves the loss. The version is what makes migrateToCurrent
+ * refuse the document instead ("written by a newer release; upgrade before
+ * opening it").
  */
 export const CURRENT_SCHEMA_VERSION = 1;
 
