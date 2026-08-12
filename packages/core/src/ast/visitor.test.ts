@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Expression } from '../expression/expression.js';
-import type { DocumentNode } from './nodes.js';
-import { childrenOf, collectDataPaths, findNodeById, visitNode, walk } from './visitor.js';
+import type { DocumentNode, TextSegment } from './nodes.js';
+import {
+  childrenOf,
+  collectDataPaths,
+  findNodeById,
+  nodeReads,
+  visitNode,
+  visitSegment,
+  walk,
+} from './visitor.js';
 
 const discountApplies: Expression = {
   kind: 'compare',
@@ -79,6 +87,62 @@ describe('visitNode', () => {
         condition: () => 'x',
       }),
     ).toThrow(TypeError);
+  });
+});
+
+describe('visitSegment', () => {
+  it('dispatches each segment kind to its own branch', () => {
+    const describeSegment = (segment: TextSegment): string =>
+      visitSegment(segment, {
+        literal: (s) => `literal:${s.text}`,
+        binding: (s) => `binding:${s.value.kind}`,
+      });
+
+    expect(describeSegment({ kind: 'literal', text: 'Total' })).toBe('literal:Total');
+    expect(describeSegment({ kind: 'binding', value: { kind: 'path', path: 'a.b' } })).toBe(
+      'binding:path',
+    );
+  });
+
+  it('throws on a segment kind it does not know', () => {
+    // The guarantee visitNode gives for node types, now given for runs: a third
+    // kind added to the union breaks compilation at this single site instead of
+    // being silently skipped wherever segments are walked.
+    const smuggled: TextSegment = JSON.parse('{"kind":"mark","text":"x"}');
+
+    expect(() => visitSegment(smuggled, { literal: () => 'x', binding: () => 'x' })).toThrow(
+      TypeError,
+    );
+  });
+});
+
+describe('nodeReads', () => {
+  it('reports the expression a loop evaluates and the alias it binds', () => {
+    const loop = findNodeById(tree, 'lines');
+    if (loop?.type !== 'loop') {
+      throw new Error('the fixture should carry a loop');
+    }
+
+    expect(nodeReads(loop)).toStrictEqual({ reads: [loop.each], binds: 'line' });
+  });
+
+  it('reports only the binding runs of a text block', () => {
+    const label = findNodeById(tree, 'label');
+    if (label?.type !== 'text') {
+      throw new Error('the fixture should carry a text node');
+    }
+
+    expect(nodeReads(label)).toStrictEqual({
+      reads: [{ kind: 'path', path: 'line.discount' }],
+      binds: undefined,
+    });
+  });
+
+  it('reports nothing for a node that reads no data', () => {
+    expect(nodeReads({ type: 'image', id: 'i', src: 'logo.png' })).toStrictEqual({
+      reads: [],
+      binds: undefined,
+    });
   });
 });
 
@@ -213,6 +277,26 @@ describe('collectDataPaths', () => {
     };
 
     expect(collectDataPaths(afterLoop)).toStrictEqual(['items', 'item.sku']);
+  });
+
+  it('excludes a bare alias, not only an alias-rooted field', () => {
+    // A loop over a list of strings, whose child prints the item itself with no
+    // field access. `invoice.tags` is the caller's key; `tag` never is.
+    const bareAlias: DocumentNode = {
+      type: 'loop',
+      id: 'l',
+      each: { kind: 'path', path: 'invoice.tags' },
+      as: 'tag',
+      children: [
+        {
+          type: 'text',
+          id: 't',
+          content: [{ kind: 'binding', value: { kind: 'path', path: 'tag' } }],
+        },
+      ],
+    };
+
+    expect(collectDataPaths(bareAlias)).toStrictEqual(['invoice.tags']);
   });
 
   it('de-duplicates repeated paths', () => {

@@ -29,8 +29,16 @@ export {
   TextNodeSchema,
   TextSegmentSchema,
 } from './ast/nodes.js';
-export type { NodeVisitor } from './ast/visitor.js';
-export { childrenOf, collectDataPaths, findNodeById, visitNode, walk } from './ast/visitor.js';
+export type { NodeReads, NodeVisitor, SegmentVisitor } from './ast/visitor.js';
+export {
+  childrenOf,
+  collectDataPaths,
+  findNodeById,
+  nodeReads,
+  visitNode,
+  visitSegment,
+  walk,
+} from './ast/visitor.js';
 
 export {
   ExpressionEvaluationError,

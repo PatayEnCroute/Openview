@@ -5,7 +5,10 @@ import type {
   DocumentNode,
   ImageNode,
   LoopNode,
+  TextBindingSegment,
+  TextLiteralSegment,
   TextNode,
+  TextSegment,
 } from './nodes.js';
 
 /**
@@ -82,6 +85,86 @@ export function findNodeById(root: DocumentNode, id: string): DocumentNode | und
 }
 
 /**
+ * Visitor over the runs of a text block.
+ *
+ * Segments get the same protection node types get: the `switch` exists once, and
+ * its `never` branch turns "a segment kind was forgotten" into a compile error
+ * here rather than a silently skipped run somewhere. AGENTS.md 3.B asks for a
+ * Visitor as soon as a second traversal appears, and the second one already
+ * exists -- this file collects the paths a run reads, the playground renders it,
+ * and the render pipeline will make a third.
+ */
+export interface SegmentVisitor<TResult> {
+  readonly literal: (segment: TextLiteralSegment) => TResult;
+  readonly binding: (segment: TextBindingSegment) => TResult;
+}
+
+export function visitSegment<TResult>(
+  segment: TextSegment,
+  visitor: SegmentVisitor<TResult>,
+): TResult {
+  switch (segment.kind) {
+    case 'literal':
+      return visitor.literal(segment);
+    case 'binding':
+      return visitor.binding(segment);
+    default: {
+      const exhaustive: never = segment;
+      throw new TypeError(`Unhandled text segment: ${JSON.stringify(exhaustive)}`);
+    }
+  }
+}
+
+/** What a single node reads, and the loop alias it binds for its children. */
+export interface NodeReads {
+  /** Evaluated in the node's ENCLOSING scope, before {@link NodeReads.binds}. */
+  readonly reads: readonly Expression[];
+  readonly binds: string | undefined;
+}
+
+const NO_READS: NodeReads = { reads: [], binds: undefined };
+
+const SEGMENT_EXPRESSIONS: SegmentVisitor<readonly Expression[]> = {
+  literal: () => [],
+  binding: (segment) => [segment.value],
+};
+
+/**
+ * Hoisted to module scope deliberately: it captures nothing, so one object serves
+ * a whole traversal instead of one being built per visited node.
+ */
+const READS_VISITOR: NodeVisitor<NodeReads> = {
+  text: (text) => ({
+    reads: text.content.flatMap((segment) => visitSegment(segment, SEGMENT_EXPRESSIONS)),
+    binds: undefined,
+  }),
+  // An image src is a plain string today, so it reads no data. When it gains a
+  // binding, this is the branch that has to report it.
+  image: () => NO_READS,
+  container: () => NO_READS,
+  loop: (loop) => ({ reads: [loop.each], binds: loop.as }),
+  condition: (condition) => ({ reads: [condition.when], binds: undefined }),
+};
+
+/**
+ * The seam static analysis and the render pipeline actually share.
+ *
+ * `DataBindingStep` in @openview/engine needs exactly these two facts -- which
+ * expressions a node evaluates, and which alias it binds for its children -- but
+ * it needs them once per loop **item**, carrying an `EvaluationScope` of values,
+ * where {@link collectDataPaths} needs them once per **node**, carrying a set of
+ * names. Those two traversals cannot be the same function, so telling the
+ * renderer's author to reuse the descent below would send them after a refactor
+ * that does not exist. This primitive is what they can share, and sharing it is
+ * what keeps "a loop's children are read under its alias" stated once: two copies
+ * of that rule are free to disagree, and the symptom would be a document printing
+ * blanks for data the analysis said was not needed.
+ */
+export function nodeReads(node: DocumentNode): NodeReads {
+  return visitNode(node, READS_VISITOR);
+}
+
+/**
  * Records the paths an expression reads *from the caller's data*, skipping those
  * rooted at a loop alias.
  *
@@ -94,6 +177,12 @@ function addCallerPaths(
   aliases: ReadonlySet<string>,
   into: Set<string>,
 ): void {
+  if (aliases.size === 0) {
+    // Nothing can be filtered out, so fill the result directly and skip the
+    // intermediate Set. Most of a tree sits outside any loop.
+    pathsOf(expression, into);
+    return;
+  }
   for (const dataPath of pathsOf(expression)) {
     // indexOf/slice rather than split: only the root segment decides, and this
     // runs once per expression of the whole tree.
@@ -109,69 +198,43 @@ function addCallerPaths(
  * Depth-first descent carrying the aliases in scope.
  *
  * `walk` cannot serve here: it yields nodes without their ancestry, so it cannot
- * know which loops a node sits under. The `switch` still lives in `visitNode`
- * alone -- a new node type breaks compilation there, not here.
- *
- * Read this before writing the renderer. This function is the only place that
- * encodes "a loop's children are read under its alias". `DataBindingStep` in
- * @openview/engine needs the same descent, pairing `evaluateSequence` with
- * `childScope`, and a second copy of the alias stack is free to disagree with
- * this one: `collectDataPaths` would then promise a caller one set of keys while
- * the renderer reads another, and the symptom is a document rendering blanks for
- * data the static analysis said was not needed. Extract a shared scope-aware
- * traversal from here instead of reimplementing it (ADR 0002).
+ * know which loops a node sits under. Descent goes through `childrenOf`, so a
+ * future container type is walked into without this function being told about it,
+ * and the `switch` still lives in `visitNode` alone.
  */
 function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set<string>): void {
-  visitNode<void>(node, {
-    text: (text) => {
-      for (const segment of text.content) {
-        if (segment.kind === 'binding') {
-          addCallerPaths(segment.value, aliases, into);
-        }
-      }
-    },
-    // An image src is a plain string today, so it reads no data. When it gains a
-    // binding, this is the branch that has to collect it.
-    image: () => undefined,
-    container: (container) => {
-      collectChildren(container.children, aliases, into);
-    },
-    loop: (loop) => {
-      // `each` is read in the enclosing scope: the alias is not bound yet.
-      addCallerPaths(loop.each, aliases, into);
-      collectChildren(loop.children, new Set(aliases).add(loop.as), into);
-    },
-    condition: (condition) => {
-      addCallerPaths(condition.when, aliases, into);
-      collectChildren(condition.children, aliases, into);
-    },
-  });
-}
+  const { reads, binds } = nodeReads(node);
+  for (const expression of reads) {
+    addCallerPaths(expression, aliases, into);
+  }
 
-function collectChildren(
-  children: readonly DocumentNode[],
-  aliases: ReadonlySet<string>,
-  into: Set<string>,
-): void {
-  for (const child of children) {
-    collectFrom(child, aliases, into);
+  const inner = binds === undefined ? aliases : new Set(aliases).add(binds);
+  for (const child of childrenOf(node)) {
+    collectFrom(child, inner, into);
   }
 }
 
 /**
- * Every data path a template reads from the caller's data, in traversal order and
- * de-duplicated.
+ * Every data path a template reads from the **caller's** data, in traversal order
+ * and de-duplicated.
  *
- * This is static analysis, not a heuristic: because expressions are structured
- * trees rather than strings (ADR 0001), the answer is exact. The engine can tell
- * a caller which keys a template needs before rendering anything, and the
- * designer can flag a template that binds to a field its data schema does not
- * declare.
+ * Exact rather than heuristic: because expressions are structured trees (ADR
+ * 0001), the engine can tell a caller which keys a template needs before
+ * rendering anything.
  *
- * Loop aliases are excluded, and text bindings are included: before ADR 0002 this
- * function reported `line.discount` -- a name the caller never supplies -- and
- * ignored every value a document actually prints, which made both halves of the
- * promise above false.
+ * Two limits, both deliberate, and both narrower than an earlier version of this
+ * docstring claimed.
+ *
+ * Paths rooted at a loop alias are excluded, because they are internal
+ * references. The consequence is that a per-item field is invisible here: a
+ * typo'd `line.skuu` is reported by nothing, so this is **not** the function a
+ * designer can use to flag a binding against a per-item data schema. That needs
+ * each read paired with the scope it is relative to; ADR 0002 records it as open.
+ *
+ * And an alias that shadows a caller key -- `loop invoice.lines as invoice`, with
+ * a child reading `invoice.total` -- silently changes what that child means, and
+ * this function reports nothing at all rather than a collision. Detecting it needs
+ * the same scope-qualified output, and is open for the same reason.
  */
 export function collectDataPaths(root: DocumentNode): readonly string[] {
   const found = new Set<string>();
