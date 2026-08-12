@@ -1,5 +1,13 @@
 import { z } from 'zod/v4';
-import { type Expression, ExpressionSchema, isIdentifier } from '../expression/expression.js';
+import {
+  type Expression,
+  ExpressionSchema,
+  isIdentifier,
+  type LiteralExpression,
+  LiteralExpressionSchema,
+  type PathExpression,
+  PathExpressionSchema,
+} from '../expression/expression.js';
 
 /**
  * Composite pattern. Containers and leaves are manipulated uniformly through
@@ -36,7 +44,16 @@ export interface TextLiteralSegment {
 
 export interface TextBindingSegment {
   readonly kind: 'binding';
-  readonly value: Expression;
+  /**
+   * A literal or a path, not the full expression algebra. Those two are the only
+   * kinds that yield something printable: `compare`, `logical`, `not` and
+   * `isEmpty` are predicates, and a print position that accepted them would let a
+   * template print `true` into an invoice. The two sibling expression positions
+   * each enforce their own result kind at evaluation (`evaluatePredicate` refuses
+   * a non-boolean, `evaluateSequence` a non-list); this one enforces it at save
+   * time, where the narrowing costs no migration.
+   */
+  readonly value: LiteralExpression | PathExpression;
 }
 
 export type TextSegment = TextLiteralSegment | TextBindingSegment;
@@ -109,15 +126,24 @@ export const TextLiteralSegmentSchema = z.object({
   text: z.string(),
 });
 
+/** The kinds that yield a printable value -- see {@link TextBindingSegment.value}. */
+const printableExpressionSchema = z.discriminatedUnion('kind', [
+  LiteralExpressionSchema,
+  PathExpressionSchema,
+]);
+
 export const TextBindingSegmentSchema = z.object({
   kind: z.literal('binding'),
-  value: ExpressionSchema,
+  value: printableExpressionSchema,
 });
 
 /**
- * No `z.ZodType<TextSegment>` annotation here: segments are not recursive, and
- * the agreement between the hand-written union and this schema is checked
- * transitively through DocumentNodeSchema's explicit binding below.
+ * No `z.ZodType<TextSegment>` annotation, and `DocumentNodeSchema`'s explicit
+ * binding below does **not** police this union in its place: zod declares
+ * `ZodType<out Output, ...>`, so it is covariant in its output and a schema that
+ * produces *less* than `TextSegment` stays assignable and still compiles. The
+ * real guard is the mutual-assignability assertion in nodes.test.ts, which fails
+ * in both directions.
  */
 export const TextSegmentSchema = z.discriminatedUnion('kind', [
   TextLiteralSegmentSchema,

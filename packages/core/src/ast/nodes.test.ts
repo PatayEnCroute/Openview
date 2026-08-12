@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import type { z } from 'zod/v4';
 import {
   type DocumentNode,
   DocumentNodeSchema,
   TextNodeSchema,
   type TextSegment,
+  type TextSegmentSchema,
 } from './nodes.js';
+
+/** True only when each type accepts the other; `false` otherwise, which fails to assign. */
+type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
+  ? [TRight] extends [TLeft]
+    ? true
+    : false
+  : false;
 
 describe('DocumentNodeSchema', () => {
   it('parses a tree nested several levels deep', () => {
@@ -59,13 +68,36 @@ describe('DocumentNodeSchema', () => {
       ],
     });
 
-    // The assignment is the assertion: segments carry no explicit
-    // `z.ZodType<TextSegment>` annotation, so this is where a schema that drifted
-    // from the hand-written union stops compiling. Tests are type-checked here.
     const segments: readonly TextSegment[] = parsed.content;
 
     expect(segments).toHaveLength(2);
     expect(segments[1]?.kind).toBe('binding');
+  });
+
+  it('keeps the segment schema and the hand-written union in step', () => {
+    // A compile-time assertion wearing a runtime expectation, and the only guard
+    // that works here. `z.ZodType` is covariant in its output, so neither
+    // DocumentNodeSchema's explicit binding nor the assignment above can catch a
+    // schema that drifted -- both accept one producing LESS than TextSegment.
+    // This fails to compile in both directions.
+    const inStep: MutuallyAssignable<z.infer<typeof TextSegmentSchema>, TextSegment> = true;
+
+    expect(inStep).toBe(true);
+  });
+
+  it('rejects a predicate expression in a print position', () => {
+    // `isEmpty` yields a boolean, so accepting it here would let a template print
+    // `true` into an invoice. The sibling positions enforce their result kind at
+    // evaluation; this one enforces it at save time.
+    expect(() =>
+      DocumentNodeSchema.parse({
+        type: 'text',
+        id: 't',
+        content: [
+          { kind: 'binding', value: { kind: 'isEmpty', operand: { kind: 'path', path: 'a' } } },
+        ],
+      }),
+    ).toThrow();
   });
 
   it('accepts an empty paragraph', () => {
@@ -136,22 +168,31 @@ describe('DocumentNodeSchema', () => {
     ).toThrow();
   });
 
-  it.each(['', 'line.total', 'my line', '1st', '__proto__', 'constructor', 'prototype'])(
-    'rejects %o as a loop alias',
-    (alias) => {
-      // The alias becomes a key of the evaluation scope, so it obeys exactly the
-      // rule a path obeys, prototype-chain names included.
-      expect(() =>
-        DocumentNodeSchema.parse({
-          type: 'loop',
-          id: 'l1',
-          each: { kind: 'path', path: 'items' },
-          as: alias,
-          children: [],
-        }),
-      ).toThrow();
-    },
-  );
+  it.each([
+    '',
+    'line.total',
+    'my line',
+    '1st',
+    '__proto__',
+    'constructor',
+    'prototype',
+    'toString',
+    'hasOwnProperty',
+  ])('rejects %o as a loop alias', (alias) => {
+    // The alias becomes a key of the evaluation scope, so it obeys exactly the
+    // rule a path obeys -- every member of Object.prototype included, because
+    // `as: 'toString'` would install data over a method and make String(scope)
+    // throw.
+    expect(() =>
+      DocumentNodeSchema.parse({
+        type: 'loop',
+        id: 'l1',
+        each: { kind: 'path', path: 'items' },
+        as: alias,
+        children: [],
+      }),
+    ).toThrow();
+  });
 
   it('rejects a condition carrying a malformed expression', () => {
     expect(() =>
