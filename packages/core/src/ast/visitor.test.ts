@@ -123,17 +123,96 @@ describe('findNodeById', () => {
 });
 
 describe('collectDataPaths', () => {
+  it('reports the caller keys and not the loop alias', () => {
+    // Before ADR 0002 this returned ['invoice.lines', 'line.discount'], and
+    // `line` is a name the caller never supplies -- an integrator handing over
+    // { invoice } was told a key was missing when nothing was. `line.discount`
+    // appears twice in the tree here, in the condition and in the binding, and
+    // neither occurrence may leak out.
+    expect(collectDataPaths(tree)).toStrictEqual(['invoice.lines']);
+  });
+
   it('reaches inside compound expressions, not just top-level paths', () => {
-    // `line.discount` is nested two levels down inside a compare node. A string
+    // `invoice.total` sits two levels down inside a compare node. A string
     // language would have needed parsing to find it; the structured form makes
     // this exact.
-    //
-    // It is also reported here as a key the CALLER must supply, which is wrong now
-    // that the loop declares `line` itself -- and the text binding this fixture
-    // gained is not collected at all. Both are fixed in the next commit; the
-    // assertion is left telling the truth about today's behaviour rather than
-    // hiding it.
-    expect(collectDataPaths(tree)).toStrictEqual(['invoice.lines', 'line.discount']);
+    const guarded: DocumentNode = {
+      type: 'condition',
+      id: 'c',
+      when: {
+        kind: 'compare',
+        op: 'gt',
+        left: { kind: 'path', path: 'invoice.total' },
+        right: { kind: 'literal', value: 0 },
+      },
+      children: [],
+    };
+    expect(collectDataPaths(guarded)).toStrictEqual(['invoice.total']);
+  });
+
+  it('collects what a text binding prints', () => {
+    // The other half of the old bug: every value a document actually printed was
+    // invisible to this function, because no node could print one.
+    const paragraph: DocumentNode = {
+      type: 'text',
+      id: 't',
+      content: [
+        { kind: 'literal', text: 'Total due: ' },
+        { kind: 'binding', value: { kind: 'path', path: 'invoice.total' } },
+      ],
+    };
+    expect(collectDataPaths(paragraph)).toStrictEqual(['invoice.total']);
+  });
+
+  it('sees through nested loops without reporting either alias', () => {
+    const nested: DocumentNode = {
+      type: 'loop',
+      id: 'outer',
+      each: { kind: 'path', path: 'invoice.groups' },
+      as: 'group',
+      children: [
+        {
+          type: 'loop',
+          id: 'inner',
+          // Rooted at the outer alias: internal, so it must not be reported
+          // either, even though it is a loop source.
+          each: { kind: 'path', path: 'group.lines' },
+          as: 'line',
+          children: [
+            {
+              type: 'text',
+              id: 't',
+              content: [
+                { kind: 'binding', value: { kind: 'path', path: 'line.sku' } },
+                { kind: 'binding', value: { kind: 'path', path: 'group.label' } },
+                { kind: 'binding', value: { kind: 'path', path: 'company.name' } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(collectDataPaths(nested)).toStrictEqual(['invoice.groups', 'company.name']);
+  });
+
+  it('reports an alias-rooted path used outside its loop', () => {
+    // The scope boundary, pinned: `item` is not bound after the loop closes, so
+    // there the caller really would have to supply it.
+    const afterLoop: DocumentNode = {
+      type: 'container',
+      id: 'root',
+      children: [
+        { type: 'loop', id: 'l', each: { kind: 'path', path: 'items' }, as: 'item', children: [] },
+        {
+          type: 'text',
+          id: 't',
+          content: [{ kind: 'binding', value: { kind: 'path', path: 'item.sku' } }],
+        },
+      ],
+    };
+
+    expect(collectDataPaths(afterLoop)).toStrictEqual(['items', 'item.sku']);
   });
 
   it('de-duplicates repeated paths', () => {
@@ -152,5 +231,9 @@ describe('collectDataPaths', () => {
     expect(
       collectDataPaths({ type: 'text', id: 't', content: [{ kind: 'literal', text: 'static' }] }),
     ).toStrictEqual([]);
+  });
+
+  it('returns nothing for an image, which reads no data yet', () => {
+    expect(collectDataPaths({ type: 'image', id: 'i', src: 'logo.png' })).toStrictEqual([]);
   });
 });
