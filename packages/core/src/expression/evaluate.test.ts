@@ -122,10 +122,13 @@ describe('comparison', () => {
     );
   });
 
-  it('refuses to order against missing data', () => {
-    expect(() => compare('lt', path('invoice.missing'), literal(1))).toThrow(
-      /needs two numbers or two strings/,
-    );
+  it('orders absent data as false rather than aborting the document', () => {
+    // This used to throw. One invoice line missing an optional `discount` would
+    // then have killed the whole render, and eq/neq already treated absence as
+    // false, so the four ordering operators were the odd ones out.
+    expect(compare('lt', path('invoice.missing'), literal(1))).toBe(false);
+    expect(compare('gt', path('invoice.missing'), literal(1))).toBe(false);
+    expect(compare('gte', literal(1), path('invoice.missing'))).toBe(false);
   });
 
   it('refuses eq on non-primitives, which would compare by reference', () => {
@@ -167,6 +170,41 @@ describe('evaluateSequence', () => {
 
   it('refuses a value that is present but not a list', () => {
     expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(/needs a list/);
+  });
+});
+
+describe('scope reading', () => {
+  it('ignores inherited properties, so a path cannot reach Object.prototype', () => {
+    // These paths are refused by the schema, so reaching them means the document
+    // bypassed validation -- data read straight from storage. `Reflect.get` alone
+    // returned a function here, which a text binding would have printed.
+    expect(evaluateExpression(path('invoice.toString'), scope)).toBeUndefined();
+    expect(evaluateExpression(path('invoice.hasOwnProperty'), scope)).toBeUndefined();
+  });
+
+  it('ignores a non-enumerable own property, which childScope cannot copy', () => {
+    const hidden: Record<string, unknown> = { invoice: { total: 1 } };
+    Object.defineProperty(hidden, 'company', { value: { name: 'ACME' } });
+
+    // The divergence this rules out: readable outside a loop, gone inside one.
+    // Both now report absence, so the resolver and the scope builder agree.
+    expect(evaluateExpression(path('company.name'), hidden)).toBeUndefined();
+    expect(
+      evaluateExpression(path('company.name'), childScope(hidden, 'line', {})),
+    ).toBeUndefined();
+  });
+
+  it('honours a getter declared as an own enumerable property', () => {
+    const withGetter = {
+      get today(): string {
+        return '2026-08-12';
+      },
+    };
+
+    expect(evaluateExpression(path('today'), withGetter)).toBe('2026-08-12');
+    expect(evaluateExpression(path('today'), childScope(withGetter, 'line', {}))).toBe(
+      '2026-08-12',
+    );
   });
 });
 

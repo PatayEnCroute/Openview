@@ -81,23 +81,29 @@ export const LiteralExpressionSchema = z.object({
  *
  * The character classes live in a string so the whole-path pattern can be
  * composed from the same source rather than restating them. That keeps one rule
- * for both call sites *and* validates a path in a single regex pass: testing the
- * pattern segment by segment would charge every template load a `split` and a
- * test per segment, and parsing is a frontier operation (AGENTS.md 1.2).
+ * for both call sites and validates a path with one regex pass over the whole
+ * string, rather than one per segment.
  *
- * Those names must never be traversed. Paths come from user-authored templates,
- * so `constructor` would hand a template access to `Function` and `__proto__` to
- * the prototype chain -- the usual first step of a sandbox escape. Rejected at
- * save time rather than at render time, so a malicious template never reaches
- * storage.
+ * The forbidden set is **derived** from `Object.prototype` instead of listed, so
+ * it cannot fall behind: a three-name list left `toString`, `valueOf`,
+ * `hasOwnProperty` and the rest accepted. Note what does and does not make this
+ * a security boundary -- the prototype chain is closed off by `resolvePath`,
+ * which reads own enumerable properties only, not by this set. Two reasons
+ * remain to reject the names at save time:
+ *
+ * - a path segment naming an inherited member (`invoice.toString`) is a template
+ *   bug, and saying so when the template is saved beats resolving to nothing when
+ *   a document renders;
+ * - a loop alias becomes a key of the evaluation scope, so an alias named
+ *   `toString` would install data over a method every JavaScript consumer assumes
+ *   exists, and `String(scope)` would throw.
  */
 const IDENTIFIER_SOURCE = '[A-Za-z_$][\\w$]*';
 const IDENTIFIER_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}$`);
 const PATH_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}(\\.${IDENTIFIER_SOURCE})*$`);
 
 const FORBIDDEN_IDENTIFIERS: ReadonlySet<string> = new Set([
-  '__proto__',
-  'constructor',
+  ...Object.getOwnPropertyNames(Object.prototype),
   'prototype',
 ]);
 
@@ -117,7 +123,7 @@ export const PathExpressionSchema = z.object({
     .regex(PATH_PATTERN, 'A path must be dot-separated identifiers, e.g. invoice.customer.name')
     .refine(
       (path) => path.split('.').every((segment) => !FORBIDDEN_IDENTIFIERS.has(segment)),
-      'A path may not traverse __proto__, constructor or prototype',
+      'A path segment may not name an inherited member such as __proto__, constructor or toString',
     ),
 });
 
