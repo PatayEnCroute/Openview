@@ -74,31 +74,49 @@ export const LiteralExpressionSchema = z.object({
 });
 
 /**
- * Segments that must never be traversed. Paths come from user-authored
- * templates, so `constructor` would hand a template access to `Function` and
- * `__proto__` to the prototype chain -- the usual first step of a sandbox
- * escape. Rejected at save time rather than at render time, so a malicious
- * template never reaches storage.
+ * A single identifier: the atom a dotted path is built from, and the shape a
+ * loop alias must take as well (ADR 0002). One rule, two call sites -- a second
+ * copy of the list below would eventually drift from this one, and the copy that
+ * forgot a name would be the hole.
+ *
+ * The character classes live in a string so the whole-path pattern can be
+ * composed from the same source rather than restating them. That keeps one rule
+ * for both call sites *and* validates a path in a single regex pass: testing the
+ * pattern segment by segment would charge every template load a `split` and a
+ * test per segment, and parsing is a frontier operation (AGENTS.md 1.2).
+ *
+ * Those names must never be traversed. Paths come from user-authored templates,
+ * so `constructor` would hand a template access to `Function` and `__proto__` to
+ * the prototype chain -- the usual first step of a sandbox escape. Rejected at
+ * save time rather than at render time, so a malicious template never reaches
+ * storage.
  */
-const FORBIDDEN_PATH_SEGMENTS: ReadonlySet<string> = new Set([
+const IDENTIFIER_SOURCE = '[A-Za-z_$][\\w$]*';
+const IDENTIFIER_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}$`);
+const PATH_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}(\\.${IDENTIFIER_SOURCE})*$`);
+
+const FORBIDDEN_IDENTIFIERS: ReadonlySet<string> = new Set([
   '__proto__',
   'constructor',
   'prototype',
 ]);
 
+/** The rule a loop alias obeys too, so LoopNodeSchema cannot drift from it. */
+export function isIdentifier(value: string): boolean {
+  return IDENTIFIER_PATTERN.test(value) && !FORBIDDEN_IDENTIFIERS.has(value);
+}
+
 export const PathExpressionSchema = z.object({
   kind: z.literal('path'),
   // Validated here rather than at evaluation time, so a malformed path fails
-  // when the template is saved instead of when a document renders.
+  // when the template is saved instead of when a document renders. One regex for
+  // the shape, one split for the forbidden names: two passes, two messages.
   path: z
     .string()
     .min(1, 'A path expression needs a path')
-    .regex(
-      /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/,
-      'A path must be dot-separated identifiers, e.g. invoice.customer.name',
-    )
+    .regex(PATH_PATTERN, 'A path must be dot-separated identifiers, e.g. invoice.customer.name')
     .refine(
-      (path) => path.split('.').every((segment) => !FORBIDDEN_PATH_SEGMENTS.has(segment)),
+      (path) => path.split('.').every((segment) => !FORBIDDEN_IDENTIFIERS.has(segment)),
       'A path may not traverse __proto__, constructor or prototype',
     ),
 });
