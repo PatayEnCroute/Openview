@@ -25,7 +25,9 @@ describe('parseTemplate', () => {
 
   it('rejects a template whose root is not a container', () => {
     expect(() =>
-      parseTemplate({ ...validTemplate, root: { type: 'text', id: 'r', content: 'x' } }),
+      // Valid as a text node, so the only reason this is rejected is that a root
+      // must be a container.
+      parseTemplate({ ...validTemplate, root: { type: 'text', id: 'r', content: [] } }),
     ).toThrow();
   });
 

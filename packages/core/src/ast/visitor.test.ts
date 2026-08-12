@@ -14,18 +14,28 @@ const tree: DocumentNode = {
   type: 'container',
   id: 'root',
   children: [
-    { type: 'text', id: 'title', content: 'Invoice' },
+    { type: 'text', id: 'title', content: [{ kind: 'literal', text: 'Invoice' }] },
     {
       type: 'loop',
       id: 'lines',
       each: { kind: 'path', path: 'invoice.lines' },
+      as: 'line',
       children: [
         { type: 'image', id: 'thumb', src: 'thumb.png' },
         {
           type: 'condition',
           id: 'discounted',
           when: discountApplies,
-          children: [{ type: 'text', id: 'label', content: 'Discounted' }],
+          children: [
+            {
+              type: 'text',
+              id: 'label',
+              content: [
+                { kind: 'literal', text: 'Discount: ' },
+                { kind: 'binding', value: { kind: 'path', path: 'line.discount' } },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -36,7 +46,7 @@ describe('visitNode', () => {
   it('dispatches each node type to its own branch', () => {
     const describeNode = (node: DocumentNode): string =>
       visitNode(node, {
-        text: (n) => `text:${n.content}`,
+        text: (n) => `text:${n.content.map((segment) => segment.kind).join('+')}`,
         image: (n) => `image:${n.src}`,
         container: (n) => `container:${n.children.length}`,
         loop: (n) => `loop:${n.each.kind}`,
@@ -46,11 +56,11 @@ describe('visitNode', () => {
     expect(describeNode(tree)).toBe('container:2');
     expect([...walk(tree)].map(describeNode)).toStrictEqual([
       'container:2',
-      'text:Invoice',
+      'text:literal',
       'loop:path',
       'image:thumb.png',
       'condition:compare',
-      'text:Discounted',
+      'text:literal+binding',
     ]);
   });
 
@@ -74,7 +84,7 @@ describe('visitNode', () => {
 
 describe('childrenOf', () => {
   it('reports no children for leaves', () => {
-    expect(childrenOf({ type: 'text', id: 't', content: 'x' })).toStrictEqual([]);
+    expect(childrenOf({ type: 'text', id: 't', content: [] })).toStrictEqual([]);
     expect(childrenOf({ type: 'image', id: 'i', src: 's' })).toStrictEqual([]);
   });
 
@@ -96,7 +106,7 @@ describe('walk', () => {
   });
 
   it('yields a lone leaf', () => {
-    expect([...walk({ type: 'text', id: 'solo', content: 'x' })].map((n) => n.id)).toStrictEqual([
+    expect([...walk({ type: 'text', id: 'solo', content: [] })].map((n) => n.id)).toStrictEqual([
       'solo',
     ]);
   });
@@ -117,6 +127,12 @@ describe('collectDataPaths', () => {
     // `line.discount` is nested two levels down inside a compare node. A string
     // language would have needed parsing to find it; the structured form makes
     // this exact.
+    //
+    // It is also reported here as a key the CALLER must supply, which is wrong now
+    // that the loop declares `line` itself -- and the text binding this fixture
+    // gained is not collected at all. Both are fixed in the next commit; the
+    // assertion is left telling the truth about today's behaviour rather than
+    // hiding it.
     expect(collectDataPaths(tree)).toStrictEqual(['invoice.lines', 'line.discount']);
   });
 
@@ -125,14 +141,16 @@ describe('collectDataPaths', () => {
       type: 'container',
       id: 'root',
       children: [
-        { type: 'loop', id: 'a', each: { kind: 'path', path: 'items' }, children: [] },
-        { type: 'loop', id: 'b', each: { kind: 'path', path: 'items' }, children: [] },
+        { type: 'loop', id: 'a', each: { kind: 'path', path: 'items' }, as: 'x', children: [] },
+        { type: 'loop', id: 'b', each: { kind: 'path', path: 'items' }, as: 'y', children: [] },
       ],
     };
     expect(collectDataPaths(repeated)).toStrictEqual(['items']);
   });
 
   it('returns nothing for a tree with no dynamic bindings', () => {
-    expect(collectDataPaths({ type: 'text', id: 't', content: 'static' })).toStrictEqual([]);
+    expect(
+      collectDataPaths({ type: 'text', id: 't', content: [{ kind: 'literal', text: 'static' }] }),
+    ).toStrictEqual([]);
   });
 });

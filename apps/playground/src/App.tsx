@@ -28,18 +28,25 @@ const sampleTemplate = parseTemplate({
     type: 'container',
     id: 'root',
     children: [
-      { type: 'text', id: 'title', content: 'Facture' },
+      { type: 'text', id: 'title', content: [{ kind: 'literal', text: 'Facture' }] },
       {
         type: 'loop',
         id: 'lines',
         each: { kind: 'path', path: 'invoice.lines' },
+        as: 'line',
         children: [
-          { type: 'text', id: 'line-label', content: 'Ligne' },
+          { type: 'text', id: 'line-label', content: [{ kind: 'literal', text: 'Ligne' }] },
           {
             type: 'condition',
             id: 'discounted',
             when: discountApplies,
-            children: [{ type: 'text', id: 'discount-note', content: 'Remise appliquée' }],
+            children: [
+              {
+                type: 'text',
+                id: 'discount-note',
+                content: [{ kind: 'literal', text: 'Remise appliquée' }],
+              },
+            ],
           },
         ],
       },

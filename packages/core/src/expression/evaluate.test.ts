@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { findNodeById } from '../ast/visitor.js';
 import { ExpressionEvaluationError } from '../errors.js';
+import { parseTemplate } from '../template/migrate.js';
+import { CURRENT_SCHEMA_VERSION } from '../template/template.js';
 import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
 import type { Expression } from './expression.js';
 
@@ -195,5 +198,57 @@ describe('childScope', () => {
   it('reads a primitive item through the alias alone', () => {
     // A list of strings, printed with no field access.
     expect(evaluateExpression(path('tag'), childScope({}, 'tag', 'urgent'))).toBe('urgent');
+  });
+
+  it('drives a parsed template loop, with no alias invented by the caller', () => {
+    // The seam ADR 0002 rests on. The alias and the condition both come off the
+    // parsed document, and nothing outside the template literal names `line`: if
+    // the schema stopped carrying `as`, or the evaluator stopped honouring it,
+    // this fails -- which neither half's own unit tests would catch.
+    const template = parseTemplate({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'tpl_1',
+      name: 'Invoice',
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'loop',
+            id: 'lines',
+            each: { kind: 'path', path: 'invoice.lines' },
+            as: 'line',
+            children: [
+              {
+                type: 'condition',
+                id: 'discounted',
+                when: {
+                  kind: 'compare',
+                  op: 'gt',
+                  left: { kind: 'path', path: 'line.discount' },
+                  right: { kind: 'literal', value: 0 },
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const loop = findNodeById(template.root, 'lines');
+    const condition = findNodeById(template.root, 'discounted');
+    if (loop?.type !== 'loop' || condition?.type !== 'condition') {
+      // A throw rather than an assertion: it narrows both nodes for the lines
+      // below without the non-null assertion this repo forbids.
+      throw new Error('the parsed template lost its loop or its condition');
+    }
+
+    const data = { invoice: { lines: [{ discount: 0 }, { discount: 15 }] } };
+    const applied = evaluateSequence(loop.each, data).map((item) =>
+      evaluatePredicate(condition.when, childScope(data, loop.as, item)),
+    );
+
+    expect(applied).toStrictEqual([false, true]);
   });
 });

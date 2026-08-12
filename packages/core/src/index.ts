@@ -13,7 +13,10 @@ export type {
   DocumentNodeType,
   ImageNode,
   LoopNode,
+  TextBindingSegment,
+  TextLiteralSegment,
   TextNode,
+  TextSegment,
 } from './ast/nodes.js';
 export {
   ConditionNodeSchema,
@@ -21,7 +24,10 @@ export {
   DocumentNodeSchema,
   ImageNodeSchema,
   LoopNodeSchema,
+  TextBindingSegmentSchema,
+  TextLiteralSegmentSchema,
   TextNodeSchema,
+  TextSegmentSchema,
 } from './ast/nodes.js';
 export type { NodeVisitor } from './ast/visitor.js';
 export { childrenOf, collectDataPaths, findNodeById, visitNode, walk } from './ast/visitor.js';
