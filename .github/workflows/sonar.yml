@@ -21,12 +21,28 @@ jobs:
   sonar-scan:
     name: Sonar Analysis
     runs-on: ubuntu-latest
-    # A pull request opened from a fork cannot read SONAR_TOKEN, so the scan would
-    # fail for reasons no external contributor can fix. Skip it there; the CI and
-    # security workflows still gate the change.
+    # Two kinds of pull request run cannot read SONAR_TOKEN, and the scan then dies
+    # on an authentication error nobody can fix from the pull request itself:
+    #
+    #   - a fork, whose runs never see this repository's secrets;
+    #   - anything Dependabot triggers. Its branches live in this repository, so
+    #     the fork test below answers yes, yet GitHub routes those runs to the
+    #     separate Dependabot secret store: SONAR_TOKEN comes back empty and the
+    #     scanner talks to SonarCloud anonymously ("Not authorized or project not
+    #     found", exit code 3).
+    #
+    # Skipping the second case leaves no hole. A bump touches package.json and
+    # pnpm-lock.yaml, neither of which is in sonar.sources, so there is no new code
+    # to measure; CI still builds, type-checks and tests it, and the push analysis
+    # on main runs once it merges. `github.actor` is the exact condition -- a human
+    # pushing a commit onto a Dependabot branch does get the secret, so that run
+    # does get scanned.
+    # (Every line of this folded scalar stays at one indentation level: a deeper
+    # line would keep its newline instead of being joined by a space.)
     if: >-
       github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]')
 
     steps:
       - name: Checkout Code
