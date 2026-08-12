@@ -175,3 +175,27 @@ export function evaluateSequence(
   }
   return value;
 }
+
+/**
+ * The scope a loop's children are evaluated in: the enclosing scope, plus the
+ * current item bound to the loop's alias (ADR 0002, option B1).
+ *
+ * The counterpart of {@link evaluateSequence} -- that one yields the items, this
+ * one makes an item readable. Without it a loop could iterate and its children
+ * could see nothing, which is where @openview/core stood before ADR 0002.
+ *
+ * Shadowing is lexical and the innermost loop wins; it falls out of the spread.
+ * Two nested loops sharing an alias therefore produce a *defined* result rather
+ * than an ambiguous one, which is why no validation pass forbids the collision.
+ *
+ * The spread copies the scope's top-level keys -- a handful in practice -- not
+ * the data behind them, so the per-iteration cost stays negligible even on a
+ * 5000-line document. `Object.create(parent)` would be O(1) but would put the
+ * data on the prototype chain, which `resolvePath` walks via `Reflect.get`: that
+ * is not a semantics to hand to user-authored paths.
+ */
+export function childScope(parent: EvaluationScope, alias: string, item: unknown): EvaluationScope {
+  // A computed key defines an own property, unlike the literal `{ __proto__: x }`
+  // form, so an alias cannot reassign the prototype even if one slipped through.
+  return { ...parent, [alias]: item };
+}

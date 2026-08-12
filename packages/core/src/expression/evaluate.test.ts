@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ExpressionEvaluationError } from '../errors.js';
-import { evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
+import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
 import type { Expression } from './expression.js';
 
 const scope = {
@@ -164,5 +164,36 @@ describe('evaluateSequence', () => {
 
   it('refuses a value that is present but not a list', () => {
     expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(/needs a list/);
+  });
+});
+
+describe('childScope', () => {
+  it('binds the current item under the alias, keeping the enclosing data reachable', () => {
+    const lines = evaluateSequence(path('invoice.lines'), scope);
+    const first = childScope(scope, 'line', lines[0]);
+
+    expect(evaluateExpression(path('line.sku'), first)).toBe('A');
+    // A line still knows its invoice: the enclosing scope is not replaced.
+    expect(evaluateExpression(path('invoice.label'), first)).toBe('ACME');
+  });
+
+  it('lets the innermost loop shadow an outer alias', () => {
+    const outer = childScope(scope, 'row', { sku: 'outer' });
+    const inner = childScope(outer, 'row', { sku: 'inner' });
+
+    expect(evaluateExpression(path('row.sku'), inner)).toBe('inner');
+    // Lexical shadowing: the outer binding still holds in its own scope. This is
+    // why an alias collision is a defined outcome and not an ambiguous one.
+    expect(evaluateExpression(path('row.sku'), outer)).toBe('outer');
+  });
+
+  it('leaves the parent scope untouched', () => {
+    childScope(scope, 'line', { sku: 'X' });
+    expect(evaluateExpression(path('line.sku'), scope)).toBeUndefined();
+  });
+
+  it('reads a primitive item through the alias alone', () => {
+    // A list of strings, printed with no field access.
+    expect(evaluateExpression(path('tag'), childScope({}, 'tag', 'urgent'))).toBe('urgent');
   });
 });

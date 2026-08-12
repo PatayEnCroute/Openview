@@ -34,6 +34,7 @@ export {
 
 export type { EvaluationScope } from './expression/evaluate.js';
 export {
+  childScope,
   evaluateExpression,
   evaluatePredicate,
   evaluateSequence,
