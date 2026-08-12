@@ -10,13 +10,15 @@ import {
   evaluateSequence,
   findNodeById,
   parseTemplate,
+  type TextSegment,
+  visitSegment,
   walk,
 } from '@openview/core';
 
 // Exercises the core contract end to end: recursive parsing, Visitor traversal,
 // static path analysis, expression evaluation and loop scoping. If
 // @openview/core breaks its contract, this page stops rendering -- which is the
-// point of the playground.
+// point of the playground, and the reason nothing below falls back to a default.
 
 const discountApplies: Expression = {
   kind: 'compare',
@@ -89,18 +91,33 @@ const renderData = {
  * Valeurs brutes, volontairement : transformer une liaison en texte imprimable
  * est le travail de `DataBindingStep` (étape 2), et l'ADR 0001 laisse ouverte la
  * politique de la valeur absente. Le playground ne la tranche pas à sa place.
+ *
+ * Le parcours passe par `visitSegment` : c'est la deuxième traversée de segments
+ * du dépôt, et une nouvelle sorte de segment doit casser la compilation ici.
  */
-function rawSegments(node: DocumentNode | undefined, scope: EvaluationScope): readonly string[] {
-  if (node === undefined || node.type !== 'text') {
-    return [];
+function rawSegments(segments: readonly TextSegment[], scope: EvaluationScope): readonly string[] {
+  return segments.map((segment) =>
+    visitSegment(segment, {
+      literal: (literal) => JSON.stringify(literal.text),
+      binding: (binding) => {
+        const value = evaluateExpression(binding.value, scope);
+        return value === undefined ? '(absent)' : JSON.stringify(value);
+      },
+    }),
+  );
+}
+
+/**
+ * Tombe plutôt que de dégrader. Chaque nœud lu ci-dessous figure dans le littéral
+ * de template au-dessus : s'il manque, c'est le contrat de core qui est cassé, et
+ * une section vide le dirait beaucoup moins bien qu'une exception.
+ */
+function requireNode(id: string): DocumentNode {
+  const node = findNodeById(sampleTemplate.root, id);
+  if (node === undefined) {
+    throw new Error(`Nœud « ${id} » absent du document validé : contrat de core cassé.`);
   }
-  return node.content.map((segment) => {
-    if (segment.kind === 'literal') {
-      return JSON.stringify(segment.text);
-    }
-    const value = evaluateExpression(segment.value, scope);
-    return value === undefined ? '(absent)' : JSON.stringify(value);
-  });
+  return node;
 }
 
 const nodeIds = [...walk(sampleTemplate.root)].map((node) => `${node.id} (${node.type})`);
@@ -109,29 +126,33 @@ const dataPaths = collectDataPaths(sampleTemplate.root);
 // Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de boucle,
 // la condition sur le nœud de condition. `discountApplies` plus haut ne sert qu'à
 // construire le template ; l'évaluation ci-dessous n'y touche pas.
-const loopNode = findNodeById(sampleTemplate.root, 'lines');
-const conditionNode = findNodeById(sampleTemplate.root, 'discounted');
-const discountCondition = conditionNode?.type === 'condition' ? conditionNode.when : undefined;
+const titleNode = requireNode('title');
+if (titleNode.type !== 'text') {
+  throw new Error(`« title » devrait être un texte, pas un ${titleNode.type}.`);
+}
 
-const lineScopes =
-  loopNode?.type === 'loop'
-    ? evaluateSequence(loopNode.each, renderData).map((item) =>
-        childScope(renderData, loopNode.as, item),
-      )
-    : [];
+const loopNode = requireNode('lines');
+if (loopNode.type !== 'loop') {
+  throw new Error(`« lines » devrait être une boucle, pas un ${loopNode.type}.`);
+}
 
-const titleSegments = rawSegments(findNodeById(sampleTemplate.root, 'title'), renderData);
-const lineLabelNode = findNodeById(sampleTemplate.root, 'line-label');
+const lineLabelNode = requireNode('line-label');
+if (lineLabelNode.type !== 'text') {
+  throw new Error(`« line-label » devrait être un texte, pas un ${lineLabelNode.type}.`);
+}
 
-// Évalué hors du rendu. La clé combine la position et le contenu : deux lignes de
-// facture identiques restent distinctes, là où le contenu seul les aurait
-// confondues.
-const lineRows = lineScopes.map((lineScope, index) => {
-  const label = rawSegments(lineLabelNode, lineScope).join(' + ');
+const conditionNode = requireNode('discounted');
+if (conditionNode.type !== 'condition') {
+  throw new Error(`« discounted » devrait être une condition, pas un ${conditionNode.type}.`);
+}
+
+const titleSegments = rawSegments(titleNode.content, renderData);
+
+const lineRows = evaluateSequence(loopNode.each, renderData).map((item) => {
+  const lineScope = childScope(renderData, loopNode.as, item);
   return {
-    key: `${index}-${label}`,
-    label,
-    discounted: discountCondition !== undefined && evaluatePredicate(discountCondition, lineScope),
+    label: rawSegments(lineLabelNode.content, lineScope).join(' + '),
+    discounted: evaluatePredicate(conditionNode.when, lineScope),
   };
 });
 
@@ -178,8 +199,14 @@ export default function App() {
 
       <h2>Boucle : une portée dérivée par élément</h2>
       <ol>
-        {lineRows.map((row) => (
-          <li key={row.key}>
+        {lineRows.map((row, index) => (
+          // Les lignes d'une boucle sont positionnelles : elles ne sont jamais
+          // réordonnées, et deux lignes de facture identiques doivent rester deux
+          // entrées distinctes. L'index est donc ici la clé juste — une clé dérivée
+          // du contenu les confondrait, et la composer avec l'index ne fait que
+          // sortir du champ de vision de la règle sans la satisfaire.
+          // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée, cf. ci-dessus (AGENTS.md §1.1)
+          <li key={index}>
             <code>{row.label}</code> — remise {row.discounted ? 'appliquée' : 'absente'}
           </li>
         ))}
