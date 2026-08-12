@@ -199,13 +199,15 @@ export default function App() {
 
       <h2>Boucle : une portée dérivée par élément</h2>
       <ol>
+        {/*
+          Les lignes d'une boucle sont positionnelles : elles ne sont jamais
+          réordonnées, et deux lignes de facture identiques doivent rester deux
+          entrées distinctes. L'index est donc ici la clé juste — une clé dérivée du
+          contenu les confondrait, et la composer avec l'index ne fait que sortir du
+          champ de vision de la règle sans la satisfaire.
+        */}
         {lineRows.map((row, index) => (
-          // Les lignes d'une boucle sont positionnelles : elles ne sont jamais
-          // réordonnées, et deux lignes de facture identiques doivent rester deux
-          // entrées distinctes. L'index est donc ici la clé juste — une clé dérivée
-          // du contenu les confondrait, et la composer avec l'index ne fait que
-          // sortir du champ de vision de la règle sans la satisfaire.
-          // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée, cf. ci-dessus (AGENTS.md §1.1)
+          // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
           <li key={index}>
             <code>{row.label}</code> — remise {row.discounted ? 'appliquée' : 'absente'}
           </li>
