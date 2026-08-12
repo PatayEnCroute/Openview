@@ -83,7 +83,8 @@ runs, chacun soit littéral, soit une liaison.
 - ✅ **Un paragraphe reste un nœud.** Le rendu produit un élément avec des enfants
   inline ; rien n'a besoin de savoir que des blocs voisins « coulent » ensemble.
 - ✅ La porte reste ouverte à des marques (gras, italique) sur un segment littéral :
-  c'est un champ optionnel additionnel, sans migration.
+  un champ optionnel de plus, au prix d'un incrément de `schemaVersion` (voir
+  « Ce qui reste ouvert »).
 - ❌ Deux concepts au lieu d'un dans le schéma (nœuds *et* segments).
 - ❌ Le texte statique le plus simple devient un tableau d'un élément — verbeux à
   écrire à la main, comme tout l'option C de l'ADR 0001.
@@ -193,11 +194,14 @@ export interface LoopNode extends NodeBase {
 }
 ```
 
-`TextSegmentSchema` ne porte **pas** d'annotation `z.ZodType<TextSegment>` : il
-n'est pas récursif, et l'accord entre le type écrit à la main et le schéma est
-vérifié transitivement par la liaison explicite de `DocumentNodeSchema`. Un
-contenu vide (`[]`) est accepté : un paragraphe vide est une intention de mise en
-page légitime.
+`TextSegmentSchema` ne porte **pas** d'annotation `z.ZodType<TextSegment>`, et la
+liaison explicite de `DocumentNodeSchema` ne la remplace pas — cette ADR a d'abord
+affirmé le contraire. `ZodType` est déclaré covariant sur sa sortie (`out Output`
+dans `zod/v4/classic/schemas.d.ts`), donc un schéma qui produit *moins* que
+`TextSegment` reste assignable et compile sans un mot. Le garde-fou réel est une
+assertion d'assignabilité mutuelle dans `nodes.test.ts`, qui échoue dans les deux
+sens. Un contenu vide (`[]`) est accepté : un paragraphe vide est une intention de
+mise en page légitime.
 
 ### Sous-décisions
 
@@ -214,9 +218,11 @@ page légitime.
    noms distincts.
 3. **Un segment de liaison ne porte pas encore de format.** Imprimer `1234.5` au
    lieu de `1 234,50 €` est un vrai manque, mais `format?: …` est un champ
-   optionnel : l'ajouter plus tard n'exige aucune migration. Reporté (voir plus bas).
-4. **Pas d'index de boucle en v1.** Même raisonnement : `indexAs?: string` est
-   additif, et la numérotation se traite souvent en CSS côté rendu.
+   optionnel : l'ajouter plus tard ne demande pas de *transformer* les documents
+   déjà écrits, seulement d'incrémenter `schemaVersion` — pour la raison exposée
+   dans « Ce qui reste ouvert ». Reporté.
+4. **Pas d'index de boucle en v1.** Même raisonnement pour `indexAs?: string`, et
+   la numérotation se traite souvent en CSS côté rendu.
 5. **`collectDataPaths` devient sensible aux alias.** Il ne peut plus être bâti
    sur `walk()`, qui rend les nœuds sans leur ascendance : il lui faut sa propre
    descente récursive portant la pile d'alias. `walk()` reste inchangé pour
@@ -241,6 +247,19 @@ la compilation à un seul endroit — n'est pas dépensée pour obtenir l'ascend
 La branche `image` y est explicitement vide, avec le commentaire qui dit où
 brancher une liaison le jour où `src` en portera une.
 
+**Ce que le rendu partagera n'est pas le parcours, c'est un primitif par nœud.**
+Une première version se contentait de commenter `collectFrom` — « extrais ce
+parcours plutôt que de le réécrire ». L'instruction était infaisable : ce parcours
+visite les enfants d'une boucle **une fois**, en portant un ensemble de *noms*
+d'alias, tandis que `DataBindingStep` doit les visiter **une fois par élément**, en
+portant une portée de *valeurs*. Cardinalité différente, porteur différent : ce ne
+sera jamais la même fonction, et l'auteur du rendu aurait réécrit la pile d'alias
+que le commentaire prétendait éviter. Ce qui se partage réellement est
+`nodeReads(node)` — quelles expressions un nœud évalue, quel alias il lie pour ses
+enfants. `collectDataPaths` est désormais un pliage sur ce primitif, `DataBindingStep`
+en sera un autre, et la règle « les enfants d'une boucle se lisent sous son alias »
+n'est énoncée qu'une fois.
+
 **Le contrat tient sans son hôte, et c'était vérifiable.** Le playground
 n'invente plus `{ line }` : il lit l'alias sur le nœud de boucle
 (`loopNode.as`) et le passe à `childScope`. C'est le test de bout en bout de
@@ -252,7 +271,7 @@ s'écrire.
 ## Conséquences, telles qu'implémentées
 
 - **`nodes.ts`** : `TextSegment` + `TextNode.content` en tableau, `LoopNode.as`.
-- **`expression.ts`** : extraction d'un `identifierSchema` partagé (sous-décision 1).
+- **`expression.ts`** : extraction du prédicat `isIdentifier` partagé (sous-décision 1).
 - **`evaluate.ts`** : une dérivation de portée explicite.
 
   ```ts
@@ -271,9 +290,8 @@ s'écrire.
 - **`visitor.ts`** : `collectDataPaths` visite enfin les segments de texte et
   soustrait les alias en portée ; c'est la correction du bug décrit en contexte.
 - **`index.ts`** : exports des nouveaux types, schémas et de `childScope`.
-- **`CURRENT_SCHEMA_VERSION` reste à 1, aucune migration**, et `TEMPLATE_MIGRATIONS`
-  reste vide — pour la dernière fois. C'est la raison d'être du calendrier.
-- **Tests, dans le même commit** (AGENTS.md §4) : 97 au total, dont un texte mêlant
+- **`CURRENT_SCHEMA_VERSION` reste à 1, aucune migration** : le projet étant en phase pré-v1.0 (aucun template client en stockage), le schéma v1 évolue directement sans créer de migration fantôme `1 -> 2`. Dès la publication v1.0, toute évolution incrémentera la version du schéma avec migration obligatoire dans `TEMPLATE_MIGRATIONS`.
+- **Tests, dans le même commit** (AGENTS.md §4) : suite de tests unitaires et de typage exhaustive, dont un texte mêlant
   littéral et liaison ; une liaison malformée refusée au parsing ; sept formes
   d'alias refusées (vide, pointé, espacé, commençant par un chiffre, et les trois
   noms de la chaîne de prototypes) ; le masquage lexical entre boucles imbriquées ;
@@ -306,27 +324,43 @@ posée dans `evaluate.ts`. À trancher là-bas, en même temps : comment une val
 non textuelle devient du texte. Un `[object Object]` imprimé silencieusement dans
 une facture n'est pas une option.
 
-**Formatage des valeurs (ADR 0003)** — nombres, devises, dates, locale. Reporté
-sans dette, parce que le champ est optionnel et donc additif.
+**Formatage des valeurs (ADR 0003)** — nombres, devises, dates, locale. Reporté,
+mais pas gratuitement : voir le point suivant.
+
+**Tout champ ajouté incrémente `schemaVersion`, même optionnel.** Cette ADR a
+d'abord affirmé trois fois le contraire — « champ optionnel, donc additif sans
+migration ». C'est faux, et le mécanisme est le `strip` par défaut de Zod :
+`z.object` **supprime** les clés qu'il ne connaît pas. Une version ultérieure qui
+écrit `{ kind: 'literal', text: 'Total', bold: true }` en `schemaVersion: 1` sera
+ouverte par un build antérieur qui rendra le nœud sans `bold`, sans erreur — la
+garde de version ne se déclenche pas, puisque la version n'a pas bougé — et le
+`onSave` du Designer persistera la perte. Ajouter un champ n'oblige donc pas à
+écrire une transformation, mais oblige à l'incrément : c'est lui qui fait parler
+`migrateToCurrent` (« écrit par une version plus récente ; mettez à jour avant
+d'ouvrir »). Vaut pour `format?`, `indexAs?` et les marques de texte riche.
 
 **Alias masquant une clé racine** — `loop invoice.lines as invoice` rend
 `invoice.total` différent à l'intérieur et à l'extérieur de la boucle. Le
-masquage lexical le rend *défini*, pas souhaitable. `core` ne peut pas le détecter
-au parsing : il ne connaît pas les clés de la donnée. Le **Designer**, lui, reçoit
-déjà un `dataSchema` ([`types.ts`](../../packages/designer/src/types.ts)) et peut
-donc l'avertir — à traiter à l'étape 4. `core` ne le pourra que si la question 3
-de l'ADR 0001 (un template déclare le schéma des données qu'il attend) est
-tranchée par l'affirmative.
+masquage lexical le rend *défini*, pas souhaitable, et `collectDataPaths` n'en dit
+rien du tout : le chemin de l'enfant est filtré comme référence interne, donc un
+document qui imprime le total de la ligne là où l'auteur voulait celui de la
+facture ne déclenche aucun signal. `core` ne peut pas connaître les clés de la
+donnée, mais la détection n'en a pas besoin : il suffit de savoir que le nom est lu
+comme racine dans une portée englobante du **même** document, ce que la descente a
+déjà en main. Le **Designer** reçoit en plus un `dataSchema`
+([`types.ts`](../../packages/designer/src/types.ts)) et pourra donc l'avertir plus
+largement — à traiter à l'étape 4.
+
+**Les lectures par élément ne sont rapportées à personne.** `collectDataPaths`
+exclut les chemins enracinés sur un alias, donc un `line.skuu` mal orthographié
+n'est signalé par rien : ce n'est pas la fonction avec laquelle un Designer peut
+confronter une liaison au schéma de données d'un élément. Il faudrait une sortie
+associant chaque lecture à la portée dont elle dépend — la même sortie qui
+détecterait le masquage ci-dessus, donc une seule décision, et `nodeReads` en est
+déjà la matière première.
 
 **Marques de texte riche** (gras, italique, lien) sur un segment littéral —
-pas de décision requise aujourd'hui : champ optionnel, donc additif.
+pas de décision requise aujourd'hui, hors l'incrément de version ci-dessus.
 
-**Où vit le parcours porteur de portée.** `collectFrom`, dans `visitor.ts`, est le
-seul endroit qui encode « les enfants d'une boucle se lisent sous son alias ». Il
-est privé, et `DataBindingStep` aura besoin exactement du même parcours, en
-associant `evaluateSequence` à `childScope`. Deux copies de la pile d'alias sont
-libres de divariquer, et le symptôme serait vicieux : `collectDataPaths`
-promettrait à l'appelant un jeu de clés que le rendu ne lit pas. À l'étape 2,
-donc : extraire ce parcours dans `core` plutôt que le réécrire dans `engine`. La
-règle anti-sur-ingénierie (§3) n'y fait pas obstacle — elle exige un second
-consommateur réel ou planifié à trois mois, et celui-là est l'étape suivante.
+Rien d'autre. Le partage du parcours avec le rendu, un temps listé ici, est
+tranché : voir la quatrième décision d'implémentation.
