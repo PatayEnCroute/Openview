@@ -45,4 +45,6 @@ body:
       label: Cohérence architecturale
       options:
         - label: Cette proposition ne conduit pas `@openview/core` à dépendre de React ou de Node.
+        - label: Cette proposition n'oblige Openview à réserver aucun nom de champ et n'attend aucune structure de données particulière — le jeu de données appartient à l'application intégratrice.
+        - label: Cette proposition n'introduit ni horloge, ni fuseau, ni locale système, ni règle métier (taux, barème, arrondi « légal ») dans `core` ou `engine`.
         - label: J'ai lu [ARCHITECTURE.md](../blob/main/ARCHITECTURE.md).

@@ -37,8 +37,10 @@ Deux contraintes cadrent la décision :
 Résolution de chemin, sans opérateur.
 
 - ✅ Trivial à implémenter, aucune surface d'injection, rapide.
-- ❌ Ne couvre pas les conditions. `si remise > 0` est le cas d'usage n°1 sur une
-  facture ; sans comparaison, le produit ne fait pas son travail.
+- ❌ Ne couvre pas les conditions. Masquer un bloc selon la donnée — `si remise > 0`,
+  mais tout autant une clause de contrat ou un pied de page réglementaire — est le
+  premier besoin de toute édition ; sans comparaison, le produit ne fait pas son
+  travail.
 
 ### B. Un langage textuel, avec parseur maison ou bibliothèque
 
@@ -110,7 +112,7 @@ textuel déjà stocké chez des clients) impose une migration douloureuse.
   chemins viennent d'utilisateurs ; c'est le premier pas d'une évasion de bac à
   sable.
 
-### Deux décisions prises à l'implémentation
+### Trois décisions prises à l'implémentation
 
 **Aucune coercion dans les comparaisons.** JavaScript évalue `'10' < '9'` à
 `true`. `gt`/`gte`/`lt`/`lte` exigent deux nombres ou deux chaînes et lèvent
@@ -122,6 +124,15 @@ nombre est un bug de forme de données qui doit remonter.
 s'évaluer à un booléen strict. Sans cette règle, `{ path: 'invoice.total' }`
 serait faux pour un total de `0` — une facture qui masque silencieusement une
 ligne à zéro. Les auteurs disposent de `isEmpty`, `not` et des comparaisons.
+
+**Aucune horloge, et aucun accès à l'environnement.** L'algèbre ne comporte ni
+`now()`, ni `today`, ni lecture de locale ou de fuseau : « aujourd'hui » est une
+donnée comme une autre, fournie par l'intégrateur sous le nom qu'il veut. Ce n'est
+pas une convention de nommage qu'Openview imposerait — c'est la conséquence du
+déterminisme exigé par le lot E6 du [moteur](../roadmap/engine.md) : deux
+exécutions du même modèle doivent donner le même document au caractère près, ce
+qu'un évaluateur qui lit l'horloge ne peut pas garantir. La règle vaut d'avance
+pour l'ADR 0003 (formatage) : une date se **formate**, elle ne se fabrique pas.
 
 ---
 
@@ -147,7 +158,13 @@ rendu ? À trancher à l'étape 2, quand `DataBindingStep` existera.
 > ADR 0002 y ajoute aussi la portée de boucle, que celui-ci avait laissée
 > implicite.
 
-**Question 3 — typage des données.** Toujours ouverte : un template
-déclare-t-il le schéma Zod des données qu'il attend, permettant de valider un
-jeu de données *avant* rendu ? `collectDataPaths()` fournit déjà la moitié de la
-réponse — on sait quels chemins un template lit ; il manque leur type attendu.
+**Question 3 — typage des lectures.** Toujours ouverte, et à formuler dans le bon
+sens : **un modèle ne déclare pas le schéma des données, il déclare ce qu'il en
+lit.** Le catalogue des champs disponibles appartient à l'application
+intégratrice, qui le transmet au Designer (`dataCatalogue`,
+[`types.ts`](../../packages/designer/src/types.ts)) ; `core` ne le connaît pas et
+n'a pas à le connaître. `collectDataPaths()` fournit déjà une moitié — quels
+chemins un modèle lit ; il manque le type attendu à chaque lecture. Les deux
+réunis permettraient de confronter un modèle au catalogue de l'hôte *avant*
+rendu. C'est une vérification de compatibilité entre deux parties, jamais un
+schéma qu'Openview imposerait à l'appelant.

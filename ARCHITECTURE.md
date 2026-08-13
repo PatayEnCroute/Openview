@@ -6,9 +6,11 @@ Document de référence décrivant l'architecture technique, les principes de co
 
 ## 1. Vision et Positionnement
 
-Openview est une solution d'édition, de rendu et de visualisation de documents dynamiques (factures, rapports, étiquettes, contrats, etc.).
+Openview est un **moteur d'édition embarquable** : un concepteur visuel de modèles de documents et un moteur de rendu, installés dans l'application d'un tiers. Ce n'est ni un logiciel de gestion, ni un outil de facturation, ni une source de données.
 
-* **Philosophie :** Approche *Headless & Embeddable*, offrant une flexibilité totale et un découplage complet vis-à-vis du stockage des données.
+Le type de document — facture, rapport, relevé, bon de livraison, contrat, étiquette, courrier, bordereau — est décidé par l'intégrateur. Openview ne connaît aucun de ces métiers : il exécute un modèle sur un jeu de données qu'on lui remet, sans rien attendre de sa structure ni de ses noms de champs.
+
+* **Philosophie :** *Headless & Embeddable*. Openview ne détient ni les données, ni leur stockage, ni les modèles : l'application hôte les possède et les fournit. Ce découplage n'est pas un confort d'architecture — c'est ce qui interdit à Openview de devenir une seconde source de vérité à côté du logiciel qui l'héberge.
 * **Cibles des utilisateurs finaux :** Non-développeurs (création et édition visuelle de modèles par blocs).
 * **Cibles des intégrateurs :** Développeurs cherchant une brique logicielle robuste et modulaire à intégrer dans leurs applications web.
 
@@ -19,16 +21,16 @@ Openview est une solution d'édition, de rendu et de visualisation de documents 
 La solution est découpée en quatre modules complémentaires organisés au sein du monorepo :
 
 1. **`@openview/core` (Le Cœur)**
-   * **Rôle :** Définition du contrat de données, schémas TypeScript partagés, parsing et validation Zod des modèles de templates (AST).
+   * **Rôle :** définition du contrat de **modèle** (AST), schémas TypeScript partagés, parsing et validation Zod. `core` décrit la forme d'un *modèle* ; il ne nomme aucun champ métier et n'en réserve aucun. Le **catalogue de données** — la liste des champs disponibles et leurs libellés — est déclaré par l'application intégratrice et transmis à l'éditeur : `core` en connaîtra la forme, jamais le sens, et ne portera **jamais** de schéma pour le jeu de données lui-même.
    * **Contrainte :** TypeScript pur, 0 dépendances UI ou serveur.
 
 2. **`@openview/designer` (Le Designer)**
-   * **Rôle :** Interface graphique d'édition visuelle permettant aux utilisateurs de construire des modèles (templates) à partir de schémas de données dynamiques (variables, boucles, conditions).
+   * **Rôle :** interface graphique d'édition visuelle permettant de construire des modèles à partir du **catalogue de données déclaré par l'application hôte** — insertion de champs, répétitions, conditions. Le catalogue vient de l'hôte ; le Designer n'en propose aucun par défaut.
    * **Technologie :** Composant React embarquable.
    * **Charte visuelle :** [`packages/designer/DESIGN.md`](packages/designer/DESIGN.md).
 
 3. **`@openview/engine` (Le Moteur de Rendu)**
-   * **Rôle :** Service de rendu backend chargé d'injecter dynamiquement les données JSON dans les templates pour générer le document final (PDF, HTML, etc.).
+   * **Rôle :** service de rendu backend chargé d'injecter le jeu de données **fourni par l'application hôte** dans un modèle, pour produire le document final (PDF, HTML, etc.). Le moteur ne va chercher aucune donnée de lui-même, et **n'a pas d'horloge** : « aujourd'hui » lui est transmis comme n'importe quelle autre valeur. C'est la condition du déterminisme exigé par le lot E6 de la [roadmap moteur](docs/roadmap/engine.md) — un moteur qui lit l'heure ne peut pas produire deux fois le même document.
    * **Technologie :** Node.js + Puppeteer / Playwright.
 
 4. **`@openview/viewer` (Le Visualiseur)**

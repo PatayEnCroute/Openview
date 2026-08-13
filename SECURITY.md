@@ -30,6 +30,10 @@ Nous nous engageons à reconnaître la réception de votre signalement sous **48
    - Effectuez régulièrement un audit des dépendances avec `pnpm audit`.
    - Ne validez aucun PR introduisant des dépendances vulnérables ou suspectes.
 
+4. **Donnée d'autrui en transit :**
+   - Le moteur et le service de rendu reçoivent le **jeu de données d'une application tierce**. Openview ne le possède pas : il n'est ni conservé, ni journalisé, ni renvoyé dans un message d'erreur.
+   - Un message d'erreur désigne un **chemin** de données (`invoice.total`) et jamais une **valeur**. Un journal de rendu échoué porte un identifiant de requête, un motif et une durée — rien du contenu.
+
 ---
 
 ## 📌 Versions Supportées

@@ -2,7 +2,7 @@
 
 - **Statut :** 🟢 **Accepté — A1 + B1** (2026-08-12), implémentée dans `@openview/core`
 - **Date :** 2026-08-12
-- **Impact :** `@openview/core` (contrat de données), `@openview/engine` (`DataBindingStep`), `@openview/designer` (édition), `@openview/viewer` (rendu client)
+- **Impact :** `@openview/core` (contrat de modèle), `@openview/engine` (`DataBindingStep`), `@openview/designer` (édition), `@openview/viewer` (rendu client)
 - **Implémentation :** [`src/ast/nodes.ts`](../../packages/core/src/ast/nodes.ts) (segments et
   alias), [`src/expression/evaluate.ts`](../../packages/core/src/expression/evaluate.ts)
   (`childScope`), [`src/ast/visitor.ts`](../../packages/core/src/ast/visitor.ts)
@@ -347,7 +347,7 @@ document qui imprime le total de la ligne là où l'auteur voulait celui de la
 facture ne déclenche aucun signal. `core` ne peut pas connaître les clés de la
 donnée, mais la détection n'en a pas besoin : il suffit de savoir que le nom est lu
 comme racine dans une portée englobante du **même** document, ce que la descente a
-déjà en main. Le **Designer** reçoit en plus un `dataSchema`
+déjà en main. Le **Designer** reçoit en plus un `dataCatalogue`
 ([`types.ts`](../../packages/designer/src/types.ts)) et pourra donc l'avertir plus
 largement — à traiter à l'étape 4.
 

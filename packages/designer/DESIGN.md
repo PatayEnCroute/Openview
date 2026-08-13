@@ -105,7 +105,9 @@ Ce document définit l'identité visuelle, la philosophie d'interface utilisateu
 
 ## 1. Philosophie & Principes d'Interface (Shadcn/ui Aesthetics)
 
-Openview Designer est un studio visuel d'édition de documents dynamiques conçu pour être **embarqué (*embeddable*)** dans n'importe quel logiciel hôte (ERP, CRM, SaaS de facturation) ou utilisé en **mode studio indépendant**.
+Openview Designer est un studio visuel d'édition de **modèles** de documents — jamais de documents remplis — conçu pour être **embarqué (*embeddable*)** dans n'importe quel logiciel hôte (ERP, CRM, SaaS métier) ou utilisé en **mode studio indépendant**.
+
+Les champs manipulables dans l'éditeur sont ceux du **catalogue déclaré par l'application hôte**. Le Designer n'en propose aucun par défaut et n'en réserve aucun : il affiche les libellés que l'intégrateur a déclarés, dans le vocabulaire de son métier.
 
 ### Principes Clés
 1. **Économie de moyens & Prévention de la fatigue visuelle** :
@@ -153,11 +155,13 @@ Openview Designer est un studio visuel d'édition de documents dynamiques conçu
 │ • Blocs (Texte,   │ ┌────────────────────────────────────────────┐ │ • Styles          │
 │   Image, Table,   │ │ Page A4 (Grille, Marges)                   │ │   (Typo, Marge)   │
 │   Boucle `for`)   │ │                                            │ │                   │
-│ • Arbre AST       │ │  [Bloc Sélectionné - Bordure Indigo]       │ │ • Dynamic Data    │
-│ • Variables JSON  │ │                                            │ │   {{ user.name }} │
+│ • Arbre AST       │ │  [Bloc Sélectionné - Bordure Indigo]       │ │ • Champs déclarés │
+│ • Variables JSON  │ │                                            │ │   {{ client.nom }}│
 │                   │ └────────────────────────────────────────────┘ │ • Condition `if`  │
 └───────────────────┴────────────────────────────────────────────────┴───────────────────┘
 ```
+
+`client.nom` est un exemple, pas une convention (voir §1).
 
 ---
 
@@ -204,7 +208,8 @@ d'affichage, pilotés par la propriété `layoutMode` de
 ### Notation des liaisons dynamiques
 
 La forme `{{ invoice.total }}` est une **notation d'affichage**, destinée à
-l'utilisateur. Ce n'est **pas** un langage de gabarit et il n'y a rien à parser :
+l'utilisateur — `invoice` y est un exemple, pas une convention. Ce n'est **pas** un
+langage de gabarit et il n'y a rien à parser :
 conformément à l'[ADR 0001](../../docs/adr/0001-expression-language.md), une
 liaison est un objet `Expression` structuré, validé par Zod. Le Designer édite
 cet objet directement et se contente de l'afficher sous cette forme lisible.

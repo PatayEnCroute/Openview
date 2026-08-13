@@ -2,7 +2,7 @@
   "name": "openview-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "Monorepo Openview - Moteur d'édition, de rendu et de visualisation de documents dynamiques",
+  "description": "Monorepo Openview - Concepteur visuel de modèles et moteur de rendu de documents, embarquables",
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
