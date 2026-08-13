@@ -309,6 +309,60 @@ describe('the texts-and-dates schemas', () => {
     ).not.toThrow();
   });
 
+  it.each([['30'], [1.5], [true]])('refuses the literal day count %o AT SAVE TIME', (days) => {
+    // The sibling of the date refinement, and it was missing: a literal `'30'` or `1.5` in a
+    // `days` position parsed cleanly and failed only when a document rendered. The argument
+    // for checking a literal date applies word for word to a literal day count.
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'dateAdd',
+        date: { kind: 'literal', value: '2026-01-01' },
+        days: { kind: 'literal', value: days },
+      }),
+    ).toThrow();
+  });
+
+  it('says nothing about a day count it cannot check at save time', () => {
+    // A path is unverifiable before a render, and so is a computed shift; only a literal is
+    // checkable. `null` passes too, because absence propagates rather than failing.
+    for (const days of [
+      { kind: 'path', path: 'commande.delaiPaiement' },
+      {
+        kind: 'arithmetic',
+        op: 'add',
+        left: { kind: 'literal', value: 15 },
+        right: { kind: 'literal', value: 15 },
+      },
+      { kind: 'literal', value: null },
+      { kind: 'literal', value: 30 },
+    ]) {
+      expect(() =>
+        ExpressionSchema.parse({
+          kind: 'dateAdd',
+          date: { kind: 'literal', value: '2026-01-01' },
+          days,
+        }),
+      ).not.toThrow();
+    }
+  });
+
+  it('stops at its own level, and that boundary is worth writing down', () => {
+    // Both refinements inspect only the operand AT THEIR OWN LEVEL, so a bad literal tucked
+    // inside a conditional still reaches the evaluator. Save-time validation buys the literal
+    // in the position itself and nothing further.
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'endOfMonth',
+        date: {
+          kind: 'if',
+          when: { kind: 'literal', value: true },
+          whenTrue: { kind: 'literal', value: '2026-02-30' },
+          whenFalse: { kind: 'literal', value: '2026-02-28' },
+        },
+      }),
+    ).not.toThrow();
+  });
+
   it('checks both date operands of a dateDiff', () => {
     expect(() =>
       ExpressionSchema.parse({

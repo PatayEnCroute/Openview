@@ -33,13 +33,20 @@
 //   - `new Date` without parentheses is a DISTINCT node; `new Date($args)` does not
 //     cover it, hence its own branch.
 //
-// KNOWN GAPS, barred by review and not by this plugin, all verified silent:
+// KNOWN GAPS, barred by review and not by this plugin. Verified silent:
 //   - aliasing: `const Clock = Date; new Clock();`
 //   - an explicitly undefined locale: `Intl.NumberFormat(undefined, options)`
-//   - a spread argument list: `Intl.NumberFormat(...args)`
-//   - a timeZone passed through a variable: `Intl.DateTimeFormat(l, opts)` where `opts`
-//     is built elsewhere. The matcher sees the identifier, not its value.
-//   - any indirection through a value the matcher cannot follow.
+//   - a spread argument list on NumberFormat: `Intl.NumberFormat(...args)`
+//
+// KNOWN FALSE POSITIVES, and this is the correction that matters most here. An earlier
+// version of this header listed the two forms below as silent gaps as well. They are not:
+// `$args <: not contains `timeZone`` compares SOURCE TEXT, not a value, so any options
+// object that is not an inline literal trips the rule. Both are REFUSED though correct:
+//   - `const options = { timeZone: 'UTC' }; Intl.DateTimeFormat('fr-FR', options)`
+//   - `Intl.DateTimeFormat(...dateArgs)`
+// So lot C6 must write its DateTimeFormat options inline. That is the price of catching
+// the omission this file exists for, and it is written down so the next contributor does
+// not reach for a `biome-ignore` (AGENTS.md 1.1) or edit this file (AGENTS.md 7).
 language js(typescript)
 
 or {

@@ -46,25 +46,37 @@ La colonne de droite dit ce qui vous arrêtera réellement.
 | DOM interdit dans `core`/`engine`, Node interdit dans les paquets navigateur | **tsc** (`lib`/`types` par paquet) |
 | Extensions `.js` sur les imports relatifs de `core`/`engine` | **tsc** (`NodeNext`) |
 | Couverture ≥ 90 %, tests type-checkés | **Vitest** + `tsconfig.typecheck.json` |
-| Aucune lecture d'environnement dans `core`/`engine` : constructeur `Date` à toute arité, `Date.now`, `Date.parse`, `Math.random`, `process.env`, `performance.*`, `globalThis.*`, `toLocale*`, les neuf getters locaux de `Date`, `Intl.*` sans locale, `Intl.DateTimeFormat` sans `timeZone` | **Biome** (`noJsRestrictedProperties` + plugin `no-environment-read`) — *sauf les cinq contournements ci-dessous* |
+| Aucune lecture d'environnement dans `core`/`engine` : constructeur `Date` à toute arité, `Date.now`, `Date.parse`, `Math.random`, `process.env`, `performance.*`, `globalThis.*`, `toLocale*`, les neuf getters locaux de `Date`, `Intl.*` sans locale, `Intl.DateTimeFormat` sans `timeZone` | **Biome** (`noJsRestrictedProperties` + plugin `no-environment-read`) — *avec les trois angles morts et les deux faux positifs ci-dessous* |
 | Assertion `<X>v`, promesses non attendues, patrons de conception, Zod-first | **Revue humaine uniquement** |
 
 La dernière ligne du tableau est votre responsabilité directe : rien ne vous
 rattrapera.
 
 **Et la ligne « lecture d'environnement » n'est couverte qu'en partie — il faut le
-dire, sinon le tableau fait exactement ce qu'il existe pour empêcher.** Cinq
-contournements restent muets et le resteront : un **alias**
+dire, sinon le tableau fait exactement ce qu'il existe pour empêcher.** Une version
+antérieure de cette section annonçait *cinq* contournements « tous vérifiés muets » ;
+la vérification a montré que **deux d'entre eux ne sont pas muets, ce sont des faux
+positifs**. Le motif `$args <: not contains \`timeZone\`` compare du **texte source**,
+pas une valeur : tout objet d'options qui n'est pas un littéral en ligne déclenche donc
+la règle.
+
+**Trois angles morts, réellement muets, barrés par la revue seule :** un **alias**
 (`const C = Date; new C()`), une **locale `undefined` explicite**
-(`Intl.NumberFormat(undefined, opts)`), une **diffusion d'arguments**
-(`Intl.NumberFormat(...args)`), un **`timeZone` porté par une variable** plutôt que
-par un littéral, et **toute indirection par une valeur** que le motif ne peut pas
-suivre. Ceux-là sont barrés par la revue.
+(`Intl.NumberFormat(undefined, opts)`), et une **diffusion d'arguments sur
+`NumberFormat`** (`Intl.NumberFormat(...args)`).
+
+**Deux faux positifs, à connaître avant de perdre une heure dessus :**
+`Intl.DateTimeFormat('fr-FR', options)` avec `options` déclaré ailleurs, et
+`Intl.DateTimeFormat(...args)`, sont **refusés** alors qu'ils sont corrects. Le lot C6
+doit donc écrire son objet d'options **en ligne** — c'est la contrainte à accepter, et
+elle est écrite ici pour que le prochain contributeur ne cherche ni un `biome-ignore`
+(§1.1 l'interdit sans justification) ni une retouche du plugin (§7 l'interdit sans
+mandat).
 
 Ce qui **passe** délibérément, parce que C6 et E4 en ont besoin :
-`Intl.NumberFormat('fr-FR')`, `Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`,
-leurs homologues `new`, et `Date.UTC(…)`. Formater dans une locale que le **modèle**
-déclare est permis ; lire celle de la **machine** ne l'est pas.
+`Intl.NumberFormat('fr-FR')`, `Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`
+**littéral**, leurs homologues `new`, et `Date.UTC(…)`. Formater dans une locale que le
+**modèle** déclare est permis ; lire celle de la **machine** ne l'est pas.
 
 > ⚠️ `noJsRestrictedProperties` est une règle **nursery**, hors versionnement
 > sémantique : une montée de Biome peut la renommer ou la retirer **en silence**. La

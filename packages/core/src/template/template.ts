@@ -48,6 +48,12 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
 export const CURRENT_SCHEMA_VERSION = 2;
 
 /**
+ * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape
+ * guard: `TemplateSchema.parse(raw)` is exactly `parseTemplate`'s body minus its guard, so a
+ * deep enough document raises a bare `RangeError` from Zod instead of a typed
+ * `TemplateShapeError`. Use `parseTemplate` unless you specifically need the schema as a
+ * value -- for `z.infer`, for composition, or for the partial validation a Designer does.
+ *
  * Note what a Template does NOT carry: any description of the data it expects.
  * The catalogue of available fields belongs to the integrating application (see
  * `EvaluationScope`, and `dataCatalogue` on the Designer's props). A template records

@@ -16,19 +16,25 @@ function requireDayNumber(value: string): number {
 }
 
 describe('the round trip', () => {
-  it('holds over the whole supported range, as a property', () => {
-    // A property rather than three examples. This is also what caught the one real bug in
-    // this file: the last term of the year-of-era formula divides by the last day INDEX of
-    // an era, not by its length, and reusing the era length was off by one exactly once per
-    // era -- silent everywhere except here and on 2000-02-29.
+  it('holds for EVERY day number in the supported range', () => {
+    // Exhaustive, not sampled. An earlier version stepped by 97 -- about 1% of the range --
+    // while its name and its comment both claimed a property, and credited that stride with
+    // catching the one real bug in this file: the last term of the year-of-era formula
+    // divides by the last day INDEX of an era, not by its length, so reusing the era length
+    // was off by one exactly once per era. A fixed stride can miss a once-per-era defect
+    // entirely, depending on phase, so the claim was writing a cheque the test could not
+    // cash. All 3.65 M day numbers cost well under a second.
     const first = requireDayNumber('0001-01-01');
     const last = requireDayNumber('9999-12-31');
     const mismatches: string[] = [];
 
-    for (let dayNumber = first; dayNumber <= last; dayNumber += 97) {
+    for (let dayNumber = first; dayNumber <= last; dayNumber += 1) {
       const formatted = civilDateOf(dayNumber);
       if (formatted === undefined || dayNumberOf(formatted) !== dayNumber) {
         mismatches.push(`${dayNumber}`);
+        if (mismatches.length > 4) {
+          break;
+        }
       }
     }
 
@@ -132,6 +138,16 @@ describe('shiftDay', () => {
     expect(shiftDay(requireDayNumber('9999-12-31'), 1)).toBeUndefined();
     expect(shiftDay(requireDayNumber('2026-01-05'), 4_000_000)).toBeUndefined();
   });
+
+  it('refuses an unusable DAY NUMBER, not just an unusable shift', () => {
+    // These are public barrel exports, so an integrator can reach them, and an earlier
+    // version validated only `days`: `NaN < MIN` and `NaN > MAX` are both false, so the range
+    // test was inert and `shiftDay(NaN, 0)` returned `NaN`.
+    expect(shiftDay(Number.NaN, 0)).toBeUndefined();
+    expect(shiftDay(0.5, 1)).toBeUndefined();
+    expect(shiftDay(Number.POSITIVE_INFINITY, 0)).toBeUndefined();
+    expect(shiftDay(requireDayNumber('9999-12-31') + 1, 0)).toBeUndefined();
+  });
 });
 
 describe('endOfMonthOf', () => {
@@ -154,6 +170,19 @@ describe('endOfMonthOf', () => {
 
   it('stays inside the range at the very last month it supports', () => {
     expect(civilDateOf(endOfMonthOf(requireDayNumber('9999-12-01')))).toBe('9999-12-31');
+  });
+
+  it('refuses an unusable day number instead of FABRICATING a date', () => {
+    // The worst of the two symptoms this closes. Unvalidated, `endOfMonthOf(0.5)` returned 30,
+    // which formats as '1970-01-31' -- a real, plausible date silently derived from a nonsense
+    // input, which an integrator would have printed.
+    expect(endOfMonthOf(0.5)).toBeUndefined();
+    expect(endOfMonthOf(0.9)).toBeUndefined();
+    expect(endOfMonthOf(-0.5)).toBeUndefined();
+    expect(endOfMonthOf(Number.NaN)).toBeUndefined();
+    expect(endOfMonthOf(requireDayNumber('9999-12-31') + 1)).toBeUndefined();
+    // And the composition stays safe end to end.
+    expect(civilDateOf(endOfMonthOf(0.5))).toBeUndefined();
   });
 
   it('composes with a shift, which is how "45 days end of month" is written', () => {

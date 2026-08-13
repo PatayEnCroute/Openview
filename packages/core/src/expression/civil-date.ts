@@ -144,13 +144,35 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, '0');
 }
 
-/** The `YYYY-MM-DD` form of a day number, or `undefined` outside the supported range. */
-export function civilDateOf(dayNumber: number): string | undefined {
-  if (
-    !Number.isSafeInteger(dayNumber) ||
-    dayNumber < MIN_DAY_NUMBER ||
-    dayNumber > MAX_DAY_NUMBER
-  ) {
+/**
+ * A day number this module will act on: a whole number inside the supported range.
+ *
+ * Every public function validates its day-number argument through this, and that is a fix
+ * rather than a flourish. `shiftDay` used to check only `days`, and `endOfMonthOf` checked
+ * nothing, so a fractional day number did not merely produce `NaN` -- it TRUNCATED into a
+ * plausible wrong date: `endOfMonthOf(0.5)` returned 30, which formats as `'1970-01-31'`.
+ * `NaN` slipped through too, because `NaN < MIN` and `NaN > MAX` are both false, leaving
+ * the range test inert. The evaluator never reaches those paths, since `requireDate` only
+ * ever yields an in-range safe integer -- which is exactly why the tests, which only varied
+ * `days`, missed them. These are public barrel exports; an integrator can reach them.
+ */
+function isDayNumber(dayNumber: number | undefined): dayNumber is number {
+  return (
+    dayNumber !== undefined &&
+    Number.isSafeInteger(dayNumber) &&
+    dayNumber >= MIN_DAY_NUMBER &&
+    dayNumber <= MAX_DAY_NUMBER
+  );
+}
+
+/**
+ * The `YYYY-MM-DD` form of a day number, or `undefined` outside the supported range.
+ *
+ * Accepts `undefined` so it composes with the functions below without every caller needing
+ * its own guard: an absent day number has no civil form either.
+ */
+export function civilDateOf(dayNumber: number | undefined): string | undefined {
+  if (!isDayNumber(dayNumber)) {
     return undefined;
   }
   const { year, month, day } = civilFromDays(dayNumber);
@@ -158,11 +180,11 @@ export function civilDateOf(dayNumber: number): string | undefined {
 }
 
 /**
- * A whole number of days later, or `undefined` if the shift is not a whole number of days
- * or lands outside the supported range.
+ * A whole number of days later, or `undefined` if either argument is not a whole number of
+ * days or the result lands outside the supported range.
  */
 export function shiftDay(dayNumber: number, days: number): number | undefined {
-  if (!Number.isSafeInteger(days)) {
+  if (!isDayNumber(dayNumber) || !Number.isSafeInteger(days)) {
     return undefined;
   }
   const shifted = dayNumber + days;
@@ -178,7 +200,10 @@ export function shiftDay(dayNumber: number, days: number): number | undefined {
  * of the month of X" is a calculation. `endOfMonth(dateAdd(d, 45))` covers "45 days end of
  * month" without ever opening that door.
  */
-export function endOfMonthOf(dayNumber: number): number {
+export function endOfMonthOf(dayNumber: number): number | undefined {
+  if (!isDayNumber(dayNumber)) {
+    return undefined;
+  }
   const { year, month } = civilFromDays(dayNumber);
   const nextMonth = month === 12 ? 1 : month + 1;
   const nextYear = month === 12 ? year + 1 : year;

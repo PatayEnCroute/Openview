@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import { type DocumentNode, DocumentNodeSchema } from '../ast/nodes.js';
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { type Expression, ExpressionSchema } from '../expression/expression.js';
+import { limitSchema, resolveLimits } from '../expression/limits.js';
 
 /**
  * The shape guard, and the bounded doors that were missing beside it (ADR 0003,
@@ -11,7 +12,9 @@ import { type Expression, ExpressionSchema } from '../expression/expression.js';
  *
  * A stack overflow does not strike at evaluation, it strikes at PARSING. On a chain of
  * `{ kind: 'not', operand: ... }` posted as JSON, Node 24 holds past 100 000 in
- * `JSON.parse` -- V8 parses iteratively -- but **Zod falls over around 1 874**,
+ * `JSON.parse` -- V8 parses iteratively -- but **Zod falls over somewhere in the low
+ * thousands** (1 874 and 1 269 measured on two machines: the figure is stack-size dependent,
+ * so treat every number here as an order of magnitude and not a threshold),
  * `JSON.stringify` around 8 000, and `evaluateExpression` around 20 000. So the first
  * failure is a `RangeError` FROM ZOD, on a model of some 35-50 kB, and it crosses
  * `parseTemplate` unwrapped: not an `OpenviewError`, not a `TemplateMigrationError`.
@@ -38,21 +41,30 @@ export interface ShapeLimits {
    */
   readonly maxDepth: number;
   /**
-   * Total values discovered. **This is the termination condition, not a comfort.** A tree
-   * of depth 40 with SHARED SUBTREES -- the same object referenced twice per level --
-   * produces 5 000 000 visits in 846 ms without ever reaching `maxDepth`: the depth is
-   * bounded and the work is not. A scan bounded on depth alone does not terminate.
+   * Total values discovered -- one per element of an array and one per own property of an
+   * object, plus the root. An array's own `length` is NOT counted: it is not a value the
+   * document contains, and counting it made the ceiling drift with how many arrays a
+   * payload held.
+   *
+   * **This is the termination condition, not a comfort.** A tree of depth 40 with SHARED
+   * SUBTREES -- the same object referenced twice per level -- produces 5 000 000 visits in
+   * 846 ms without ever reaching `maxDepth`: the depth is bounded and the work is not. A
+   * scan bounded on depth alone does not terminate.
    */
   readonly maxNodes: number;
 }
 
-export const DEFAULT_SHAPE_LIMITS: ShapeLimits = { maxDepth: 64, maxNodes: 100_000 };
+/**
+ * The same schema and the same ceiling as {@link EvaluationLimits}, imported rather than
+ * restated: two copies of one bound drift, and raising it in one file would leave the other
+ * refusing values the first accepts.
+ */
+const shapeLimitsSchema = z.object({ maxDepth: limitSchema, maxNodes: limitSchema });
 
-const HARD_CEILING = 1_000_000_000;
-
-const shapeLimitsSchema = z.object({
-  maxDepth: z.number().int().min(1).max(HARD_CEILING),
-  maxNodes: z.number().int().min(1).max(HARD_CEILING),
+/** Parsed at module load, for the reason given on {@link DEFAULT_EVALUATION_LIMITS}. */
+export const DEFAULT_SHAPE_LIMITS: ShapeLimits = shapeLimitsSchema.parse({
+  maxDepth: 64,
+  maxNodes: 100_000,
 });
 
 /**
@@ -61,17 +73,16 @@ const shapeLimitsSchema = z.object({
  * `{ maxNodes: NaN }` makes it never terminate.
  */
 export function resolveShapeLimits(limits?: Partial<ShapeLimits>): ShapeLimits {
-  if (limits === undefined) {
-    return DEFAULT_SHAPE_LIMITS;
-  }
-  const parsed = shapeLimitsSchema.safeParse({ ...DEFAULT_SHAPE_LIMITS, ...limits });
-  if (!parsed.success) {
-    throw new InvalidShapeLimitsError(
-      'A shape limit must be a whole number between 1 and 1 000 000 000. Omit a field to take its default; a present but unusable value is refused rather than replaced, because `maxDepth: 0` disables the guard and `maxNodes: NaN` makes it run forever.',
-      { cause: parsed.error },
-    );
-  }
-  return parsed.data;
+  return resolveLimits(
+    DEFAULT_SHAPE_LIMITS,
+    shapeLimitsSchema,
+    limits,
+    (cause) =>
+      new InvalidShapeLimitsError(
+        'A shape limit must be a whole number between 1 and 1 000 000 000. Omit a field to take its default; a present but unusable value is refused rather than replaced, because `maxDepth: 0` disables the guard and `maxNodes: NaN` makes it run forever.',
+        { cause },
+      ),
+  );
 }
 
 /**
@@ -92,12 +103,38 @@ interface Frame {
   readonly next: Frame | undefined;
 }
 
+function tooManyNodes(maxNodes: number): TemplateShapeError {
+  return new TemplateShapeError(
+    `A template may not carry more than ${maxNodes} values. Shared subtrees count every time they are reached, which is what makes this bound the guard's termination condition rather than a comfort.`,
+    'too-many-nodes',
+    maxNodes,
+  );
+}
+
+const NOT_PLAIN_DATA =
+  "A template must be plain data. A property defined by a getter or setter is refused: reading it would run the caller's code before validation, and it could return one value to the guard and another to the schema.";
+
 /**
  * Refuses a raw payload whose SHAPE is out of bounds, before any schema looks at it.
  *
  * Iterative by construction, so the guard is itself insensitive to the depth it measures.
- * Values are counted as they are DISCOVERED rather than as they are visited, which also
- * bounds how large the pending stack can grow.
+ *
+ * ## Why the width of a single value is checked BEFORE its properties are read
+ *
+ * An earlier version fetched every descriptor of a value in one
+ * `Object.getOwnPropertyDescriptors` call and counted them inside the loop that followed.
+ * That bounded the loop body and not the snapshot the loop walked, so the guard's own cost
+ * scaled with the payload rather than with `maxNodes`: measured, `{ root: new Array(n) }`
+ * still refused with `too-many-nodes`, but took 342 ms and +69 MB at n = 1 000 000 and
+ * 2 401 ms and +831 MB at n = 5 000 000, against a ceiling of 100 000. A 3.8 MB request
+ * body parsed in 15 ms and then spent 798 ms in here. That is the denial of service this
+ * guard exists to prevent, performed by the guard.
+ *
+ * So the width is tested first, against the budget that remains, and descriptors are
+ * fetched ONE AT A TIME afterwards. An array is the shape that matters -- its width is
+ * known in O(1) and it is what a hostile payload uses -- and it now costs O(1) to refuse.
+ * An object still pays for its own key array, which is the price of reading own
+ * non-enumerable keys at all, but never for a descriptor beyond the ceiling.
  *
  * The guard cannot live inside the schema: a `.superRefine` at the head of a `z.lazy`
  * body would re-run at every level of the recursion.
@@ -127,36 +164,56 @@ export function assertBoundedShape(raw: unknown, limits?: Partial<ShapeLimits>):
       continue;
     }
 
-    // `getOwnPropertyDescriptors` in one call rather than a key loop with a lookup per
-    // key: the descriptors are all this needs, and reading them by descriptor is what
-    // keeps a getter from running. Own NON-enumerable properties are included on purpose,
-    // because Zod reads a field of its shape whether or not it is enumerable.
-    for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value))) {
+    // Own NON-enumerable string keys are included on purpose, because Zod reads a field of
+    // its shape whether or not it is enumerable. Symbol keys are excluded: nothing
+    // downstream reads one, so a value hidden under a symbol key is neither validated nor
+    // measured, and no getter under one is ever invoked.
+    const keys: readonly (string | number)[] = Array.isArray(value)
+      ? // Length first, so a hostile array is refused without one property being touched.
+        indicesOf(value.length, maxNodes - discovered, maxNodes)
+      : Object.getOwnPropertyNames(value);
+
+    if (keys.length > maxNodes - discovered) {
+      throw tooManyNodes(maxNodes);
+    }
+
+    for (const key of keys) {
+      // One descriptor at a time, and by descriptor rather than by read: measured, a naive
+      // scan INVOKES a getter, so caller code would run before any validation -- with a
+      // check-then-parse window in which the getter can hand one value to the guard and
+      // another to Zod. `parseTemplate` expects data, not a live object.
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined) {
+        // A hole in a sparse array. There is no value there to measure.
+        continue;
+      }
       if (!('value' in descriptor)) {
-        // Measured: a naive scan INVOKES a getter, so caller code would run before any
-        // validation -- and with a check-then-parse window in which the getter can hand
-        // one value to the guard and another to Zod. `parseTemplate` expects data, not a
-        // live object.
-        throw new TemplateShapeError(
-          "A template must be plain data. A property defined by a getter or setter is refused: reading it would run the caller's code before validation, and it could return one value to the guard and another to the schema.",
-          'not-plain-data',
-          undefined,
-        );
+        throw new TemplateShapeError(NOT_PLAIN_DATA, 'not-plain-data', undefined);
       }
 
       discovered += 1;
-      if (discovered > maxNodes) {
-        throw new TemplateShapeError(
-          `A template may not carry more than ${maxNodes} values. Shared subtrees count every time they are reached, which is what makes this bound the guard's termination condition rather than a comfort.`,
-          'too-many-nodes',
-          maxNodes,
-        );
-      }
-
       const child: unknown = descriptor.value;
       top = { value: child, depth: depth + 1, next: top };
     }
   }
+}
+
+/**
+ * The indices of an array, or a refusal if there are more of them than the budget allows.
+ *
+ * Separated so the length test happens before the index array is built: materialising five
+ * million index strings to then refuse them is the same mistake as materialising five
+ * million descriptors.
+ *
+ * The test sizes the array by `length`, which OVER-counts a sparse one -- a hole contributes
+ * no value, but `length` counts it. Conservative on purpose: it refuses early rather than
+ * late, and `JSON.parse` never produces a hole anyway.
+ */
+function indicesOf(length: number, remaining: number, maxNodes: number): readonly number[] {
+  if (length > remaining) {
+    throw tooManyNodes(maxNodes);
+  }
+  return Array.from({ length }, (_unused, index) => index);
 }
 
 /**

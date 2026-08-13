@@ -445,6 +445,16 @@ export const aliasSchema = z
  * without a word -- verified by removing one. Neither `tsc` nor Biome says anything.
  * The guard is a runtime one, in expression.test.ts: a sample per kind, held in a
  * MAPPED type so that a wrong sample for the right key cannot pass either.
+ *
+ * ## `.parse` on these schemas is the UNBOUNDED door
+ *
+ * `ExpressionSchema.parse(raw)` validates the shape and bounds nothing: Zod's own recursion
+ * gives out somewhere past a thousand nested nodes and raises a bare `RangeError`, which is
+ * not an `OpenviewError` and tells a caller nothing. Reach for `parseExpression` from
+ * `template/guard.ts` instead, which applies the shape guard first and refuses with a typed
+ * `TemplateShapeError`. The schemas stay exported because they are the attachment point for
+ * `z.infer`, for composition and for the partial validation a Designer needs -- uses no
+ * `parse*` function replaces.
  */
 /**
  * The member schemas of each sub-algebra.
@@ -561,6 +571,26 @@ const dateOperandSchema: z.ZodType<PrintableExpression> = PrintableExpressionSch
   'A literal date must be written YYYY-MM-DD, between 0001-01-01 and 9999-12-31',
 );
 
+/**
+ * A day-count operand, checked at SAVE TIME when it is written as a literal.
+ *
+ * The sibling of {@link dateOperandSchema}, and it was missing: a literal `'30'` or `1.5` in
+ * a `days` position parsed cleanly and failed only when a document rendered, though the
+ * argument for checking a literal date applies word for word to a literal day count.
+ *
+ * **Where both refinements stop.** Each inspects only the operand AT ITS OWN LEVEL, so
+ * `endOfMonth(if(cond, '2026-02-30', ...))` still parses -- the bad literal sits inside a
+ * conditional, not in the date position. Save-time validation reaches literals in the
+ * position itself and nothing further; the evaluator is what catches the rest.
+ */
+const dayCountOperandSchema: z.ZodType<PrintableExpression> = PrintableExpressionSchema.refine(
+  (operand) =>
+    operand.kind !== 'literal' ||
+    (typeof operand.value === 'number' && Number.isInteger(operand.value)) ||
+    operand.value === null,
+  'A literal date shift must be a whole number of days',
+);
+
 export const ConcatExpressionSchema = z.object({
   kind: z.literal('concat'),
   parts: z.array(PrintableExpressionSchema).min(2, 'A concat needs at least two parts'),
@@ -580,7 +610,7 @@ export const TextCaseExpressionSchema = z.object({
 export const DateAddExpressionSchema = z.object({
   kind: z.literal('dateAdd'),
   date: dateOperandSchema,
-  days: PrintableExpressionSchema,
+  days: dayCountOperandSchema,
 });
 
 export const DateDiffExpressionSchema = z.object({

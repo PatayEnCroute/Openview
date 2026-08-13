@@ -33,14 +33,27 @@ export interface EvaluationLimits {
   /**
    * Nested descents.
    *
-   * Same name and same value as the shape guard's `maxDepth`, and NOT the same unit: the
-   * guard counts JSON levels, this counts expression descents, and an expression node
-   * weighs at least two JSON levels (the object, then the field carrying its operand). A
-   * template that passes the guard at 64 JSON levels therefore descends at most ~32
-   * times, so this bound **cannot fire on a tree that came through `parseTemplate`** --
-   * which is deliberate. It exists for trees built by hand, which pass no guard at all.
-   * The two values are equal so nobody has to decide which is the lower; the difference
-   * in unit is what provides the margin.
+   * Same name and same value as the shape guard's `maxDepth`, and NOT quite the same unit:
+   * the guard counts JSON levels, this counts expression descents.
+   *
+   * ## The true relationship, because an earlier version of this comment doubled it
+   *
+   * That earlier version claimed "an expression node weighs at least two JSON levels (the
+   * object, then the field carrying its operand)", concluded a template passing the guard
+   * at 64 descends at most ~32 times, and therefore that this bound "cannot fire on a tree
+   * that came through `parseTemplate`". **The premise is false for every single-operand
+   * kind** -- `not`, `isEmpty`, `text`, `textCase`, `endOfMonth`, `count` -- whose operand
+   * object sits at exactly `parentDepth + 1`. Measured: the guard accepts a bare 63-node
+   * `not` chain and refuses at 64, while `enter()` refuses the 65th descent. **One JSON
+   * level per single-operand node, so the margin is ONE NODE, not a factor of two.**
+   *
+   * And the conclusion does not hold either, because the shape limit is a parameter:
+   * `parseTemplate(raw, undefined, { maxDepth: 256 })` is a supported call, and under it a
+   * 70-node `not` chain in a `ConditionNode.when` parses cleanly and then fails at render
+   * with `depth-limit-exceeded`. So the honest statement is narrower: **with the DEFAULT
+   * shape limit the guard refuses first, by one node; raise the shape limit and this bound
+   * becomes reachable from a parsed template.** Anyone tuning one number has to move the
+   * other.
    */
   readonly maxDepth: number;
   /** List elements traversed, CUMULATED -- this is what catches the O(n^k) blow-up. */
@@ -85,27 +98,17 @@ export interface EvaluationBudget {
 }
 
 /**
- * Active by default, never opt-in: *a library whose safety has to be asked for is not a
- * safe library.*
- *
- * `maxDepth` matches the shape guard's value -- see {@link EvaluationLimits.maxDepth} for
- * why the identical number is not a duplication.
- */
-export const DEFAULT_EVALUATION_LIMITS: EvaluationLimits = {
-  maxSteps: 1_000_000,
-  maxDepth: 64,
-  maxItemsVisited: 1_000_000,
-  maxStringLength: 1_048_576,
-};
-
-/**
  * `int().min(1)` rejects `NaN`, the infinities, `0`, negatives and fractions in one
  * expression; the hard cap bounds the top, so a caller cannot pass `Number.MAX_VALUE` and
  * call the result a bound.
+ *
+ * Exported because the shape guard needs the SAME ceiling and the same field shape. Two
+ * copies of one bound drift: raising it in one file would leave the other refusing values
+ * the first accepts.
  */
-const HARD_CEILING = 1_000_000_000;
+export const LIMIT_HARD_CEILING = 1_000_000_000;
 
-const limitSchema = z.number().int().min(1).max(HARD_CEILING);
+export const limitSchema = z.number().int().min(1).max(LIMIT_HARD_CEILING);
 
 const evaluationLimitsSchema = z.object({
   maxSteps: limitSchema,
@@ -115,21 +118,63 @@ const evaluationLimitsSchema = z.object({
 });
 
 /**
- * An ABSENT field takes the default; a field that is PRESENT and unusable raises. Never a
- * silent fallback -- that is how a caller disables the protection by accident.
+ * Active by default, never opt-in: *a library whose safety has to be asked for is not a
+ * safe library.*
+ *
+ * Parsed through the same schema an override goes through, AT MODULE LOAD, so the "loud
+ * refusal, never a silent fallback" property covers the defaults themselves: a typo turning
+ * one of these into `0` or `NaN` would otherwise be accepted in silence, since
+ * `resolveLimits` hands an omitted-overrides call straight back without validating.
+ *
+ * `maxDepth` matches the shape guard's value -- see {@link EvaluationLimits.maxDepth} for
+ * what the identical number does and does not buy.
  */
-export function resolveEvaluationLimits(limits?: Partial<EvaluationLimits>): EvaluationLimits {
-  if (limits === undefined) {
-    return DEFAULT_EVALUATION_LIMITS;
+export const DEFAULT_EVALUATION_LIMITS: EvaluationLimits = evaluationLimitsSchema.parse({
+  maxSteps: 1_000_000,
+  maxDepth: 64,
+  maxItemsVisited: 1_000_000,
+  maxStringLength: 1_048_576,
+});
+
+/**
+ * Merges overrides onto defaults and validates the result, or raises.
+ *
+ * Shared with the shape guard, which had an identical body: an ABSENT field takes the
+ * default; a field that is PRESENT and unusable raises. Never a silent fallback -- that is
+ * how a caller disables the protection by accident.
+ *
+ * The DEFAULTS are validated too, at module load, by the caller passing them through the
+ * same schema. Without that, a typo turning a default into `0` or `NaN` would be accepted
+ * in silence -- the exact accidental disabling the typed errors exist to prevent for
+ * caller input -- because this function hands an omitted-overrides call straight back.
+ */
+export function resolveLimits<TLimits extends object>(
+  defaults: TLimits,
+  schema: z.ZodType<TLimits>,
+  overrides: Partial<TLimits> | undefined,
+  makeError: (cause: unknown) => Error,
+): TLimits {
+  if (overrides === undefined) {
+    return defaults;
   }
-  const parsed = evaluationLimitsSchema.safeParse({ ...DEFAULT_EVALUATION_LIMITS, ...limits });
+  const parsed = schema.safeParse({ ...defaults, ...overrides });
   if (!parsed.success) {
-    throw new InvalidEvaluationLimitsError(
-      'An evaluation limit must be a whole number between 1 and 1 000 000 000. Omit a field to take its default; a present but unusable value is refused rather than replaced, because a silent fallback is how a caller turns the protection off by accident.',
-      { cause: parsed.error },
-    );
+    throw makeError(parsed.error);
   }
   return parsed.data;
+}
+
+export function resolveEvaluationLimits(limits?: Partial<EvaluationLimits>): EvaluationLimits {
+  return resolveLimits(
+    DEFAULT_EVALUATION_LIMITS,
+    evaluationLimitsSchema,
+    limits,
+    (cause) =>
+      new InvalidEvaluationLimitsError(
+        'An evaluation limit must be a whole number between 1 and 1 000 000 000. Omit a field to take its default; a present but unusable value is refused rather than replaced, because a silent fallback is how a caller turns the protection off by accident.',
+        { cause },
+      ),
+  );
 }
 
 export function createBudget(limits?: Partial<EvaluationLimits>): EvaluationBudget {

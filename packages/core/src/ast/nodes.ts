@@ -153,6 +153,10 @@ export const ImageNodeSchema = z.object({
  * explicit `z.ZodType<DocumentNode>` annotation keeps the inferred type from
  * collapsing. The concrete schemas need no annotation: their own inference is
  * fine once `children` resolves through this one.
+ *
+ * **`.parse` on this schema bounds nothing.** A deep enough payload raises a bare
+ * `RangeError` from Zod's own recursion rather than a typed refusal; use
+ * `parseDocumentNode` from `template/guard.ts` for the bounded door.
  */
 export const DocumentNodeSchema: z.ZodType<DocumentNode> = z.lazy(() =>
   z.discriminatedUnion('type', [

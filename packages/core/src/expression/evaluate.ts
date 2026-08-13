@@ -2,6 +2,7 @@ import {
   type ExpressionErrorDetails,
   type ExpressionErrorSite,
   ExpressionEvaluationError,
+  prefixPath,
 } from '../errors.js';
 import { civilDateOf, dayNumberOf, endOfMonthOf, shiftDay } from './civil-date.js';
 import type {
@@ -178,7 +179,7 @@ function prefixing<TResult>(at: readonly (string | number)[], descend: () => TRe
       // read back-to-front for that reason, through a copy rather than an index,
       // which `noUncheckedIndexedAccess` would type as possibly undefined.
       for (const segment of [...at].reverse()) {
-        error.prefix(segment);
+        error[prefixPath](segment);
       }
     }
     // Enriching a typed error and rethrowing it is not swallowing it (AGENTS.md 1.3):
@@ -224,7 +225,7 @@ function requireBoolean(
   if (typeof value === 'boolean') {
     return value;
   }
-  if (value === null || value === undefined) {
+  if (isAbsent(value)) {
     return false;
   }
   return fail(
@@ -255,7 +256,7 @@ function requireNumber(
   site: ExpressionErrorSite,
   at: readonly (string | number)[],
 ): number | undefined {
-  if (value === null || value === undefined) {
+  if (isAbsent(value)) {
     return undefined;
   }
   if (typeof value !== 'number') {
@@ -434,8 +435,12 @@ function requireDays(
     return undefined;
   }
   if (!Number.isInteger(days)) {
+    // `not-a-whole-number` and NOT `operand-type`: the shape here is right -- it IS a
+    // number -- and only its wholeness is wrong. Reporting `operand-type` with
+    // `actualType: 'number'` made the payload contradict itself, so lot C8 generating from
+    // code plus actualType would have said "operates on numbers, got a number".
     return fail(
-      { code: 'operand-type', site, at, actualType: 'number' },
+      { code: 'not-a-whole-number', site, at, actualType: 'number' },
       'A date shift is a whole number of days. Round the value first: the algebra has no rounding of its own, and inventing one here would be a rounding position by stealth.',
     );
   }
@@ -490,6 +495,12 @@ function aggregate(
   let present = 0;
   let extremum: number | undefined;
 
+  // Hoisted out of the loop. Left inside, the operator test ran per element and the ternary
+  // made `sum` fall through to the max branch -- 60 000 pointless comparisons on the
+  // 60 000-line aggregate, and a reader left to wonder what `extremum` means for a sum.
+  const tracksExtremum = expression.op === 'min' || expression.op === 'max';
+  const wantsSmallest = expression.op === 'min';
+
   for (const [index, item] of items.entries()) {
     const itemScope = childScope(scope, expression.as, item);
     const raw = prefixing(['value', index], () =>
@@ -501,7 +512,10 @@ function aggregate(
     }
     present += 1;
     total += value;
-    if (extremum === undefined || (expression.op === 'min' ? value < extremum : value > extremum)) {
+    if (
+      tracksExtremum &&
+      (extremum === undefined || (wantsSmallest ? value < extremum : value > extremum))
+    ) {
       extremum = value;
     }
   }
@@ -573,7 +587,7 @@ function compare(
   // an item, no condition was ever evaluated against per-item data, so the cost
   // was invisible. A value that is PRESENT and of the wrong type still throws
   // below: that is a data-shape bug, not absence.
-  if (left === null || left === undefined || right === null || right === undefined) {
+  if (isAbsent(left) || isAbsent(right)) {
     return false;
   }
 
@@ -905,7 +919,7 @@ export function evaluateSequence(
   // invisible to it.
   const budget = options?.budget ?? createBudget();
   const value = evaluateExpression(expression, scope, { budget });
-  if (value === null || value === undefined) {
+  if (isAbsent(value)) {
     return [];
   }
   const site = options?.caller ?? 'loop';

@@ -604,13 +604,24 @@ Deux règles de comptage sans lesquelles le compteur ment : un pas par nœud év
 **par élément** dans `aggregate`/`filter`/`count`, sinon 200³ itérations comptent pour 3.
 
 > **`EvaluationLimits.maxDepth` et `ShapeLimits.maxDepth` portent le même nom, la même valeur et
-> PAS la même unité.** Le garde de forme compte des **niveaux JSON** ; le budget compte des
-> **descentes d'expression**, et un nœud d'expression pèse au moins deux niveaux JSON. Un modèle
-> qui passe le garde à 64 niveaux JSON descend donc au plus ~32 fois : **la borne d'évaluation ne
-> peut pas se déclencher sur un arbre issu de `parseTemplate`**, et c'est voulu. Elle n'existe que
-> pour les arbres construits à la main, qui ne passent par aucun garde. Les deux valeurs sont
-> égales pour que personne n'ait à arbitrer laquelle est la plus basse ; l'écart d'unité donne la
-> marge.
+> PAS tout à fait la même unité.** Le garde de forme compte des **niveaux JSON** ; le budget
+> compte des **descentes d'expression**.
+>
+> ⚠️ **Correction du 2026-08-13, après revue.** Ce paragraphe affirmait qu'un nœud d'expression
+> « pèse au moins deux niveaux JSON », donc qu'un modèle passant le garde à 64 descend au plus
+> ~32 fois, donc que **la borne d'évaluation ne peut pas se déclencher sur un arbre issu de
+> `parseTemplate`**. La prémisse est **fausse pour tout kind à opérande unique** — `not`,
+> `isEmpty`, `text`, `textCase`, `endOfMonth`, `count` — dont l'objet enfant est à exactement
+> `profondeur + 1`. Mesuré : le garde accepte une chaîne de 63 `not` et refuse à 64, tandis
+> qu'`enter()` refuse la 65ᵉ descente. **Un niveau JSON par nœud à opérande unique : la marge est
+> d'UN NŒUD, pas d'un facteur deux.**
+>
+> Et la conclusion ne tient pas non plus, parce que la limite de forme est un paramètre :
+> `parseTemplate(raw, undefined, { maxDepth: 256 })` est un appel supporté, et sous lui une
+> chaîne de 70 `not` dans un `ConditionNode.when` **parse proprement** puis échoue au rendu en
+> `depth-limit-exceeded`. L'énoncé honnête est donc plus étroit : **avec la limite de forme par
+> défaut le garde refuse le premier, à un nœud près ; relevez-la et cette borne devient
+> atteignable depuis un modèle parsé.** Qui règle l'un des deux nombres doit déplacer l'autre.
 
 **`depth-limit-exceeded` ferme le trou de pile côté évaluation.** `evaluateExpression` est
 **public** et reçoit un `Expression` d'où qu'il vienne : un arbre construit en boucle par un
@@ -802,11 +813,16 @@ résultat, c'est le test qui le dit, pas une facture.
   **complémentaires** : la règle de configuration voit `Date['now']()` et la forme déstructurée,
   mais **jamais la liste d'arguments** ; le plugin voit tout ce qui s'y joue — le constructeur
   `Date` à toutes les arités, `Intl.*()` sans locale, `Intl.DateTimeFormat` sans `timeZone`. La
-  ligne du tableau d'AGENTS.md cesse de dire « à outiller » **et** nomme les cinq contournements
-  qui restent muets : l'alias, `Intl.NumberFormat(undefined, opts)`, la diffusion
-  `Intl.NumberFormat(...args)`, un `timeZone` porté par une variable, et toute indirection par une
-  valeur. *Une couverture partielle déclarée totale est le défaut que ce tableau existe pour
-  empêcher.*
+  ligne du tableau d'AGENTS.md cesse de dire « à outiller » **et** nomme ce que la machine ne
+  couvre pas. ⚠️ **Corrigé après revue :** cette ADR annonçait d'abord *cinq* contournements
+  « tous muets ». Il y en a **trois** — l'alias, `Intl.NumberFormat(undefined, opts)` et
+  `Intl.NumberFormat(...args)` — et **deux FAUX POSITIFS**, parce que le motif
+  `$args <: not contains \`timeZone\`` compare du **texte source** et non une valeur :
+  `Intl.DateTimeFormat('fr-FR', options)` avec `options` déclaré ailleurs, et
+  `Intl.DateTimeFormat(...args)`, sont **refusés alors qu'ils sont corrects**. C6 doit donc écrire
+  son objet d'options **en ligne**. *Une couverture partielle déclarée totale est le défaut que ce
+  tableau existe pour empêcher — et se tromper de sens sur un angle mort envoie le relecteur
+  chercher un trou qui n'existe pas pendant que le vrai défaut bloque le lot d'après.*
 - **Playground** : une facture qui calcule son total (60), sa remise (6), son reste à payer
   (54), son prix moyen en division gardée (20), son échéance (`2026-02-19`), son « 45 jours fin
   de mois » (`2026-03-31`) et ses jours de retard (19) — **aucun montant n'est fourni par le jeu

@@ -57,9 +57,12 @@ describe('valueTypeOf', () => {
     expect(reads).toBe(0);
   });
 
-  it('declares nine tags, all distinct', () => {
-    expect(EXPRESSION_VALUE_TYPES).toHaveLength(9);
-    expect(new Set(EXPRESSION_VALUE_TYPES).size).toBe(9);
+  it('declares no tag twice', () => {
+    // Distinctness is a contract: two entries with the same spelling would make one of them
+    // unreachable and `describe()` silently lose a case. The count is NOT a contract -- an
+    // assertion that the tuple has nine entries only fails when someone edits the tuple, in
+    // which case they edit the number beside it (AGENTS.md 5, no tautological tests).
+    expect(new Set(EXPRESSION_VALUE_TYPES).size).toBe(EXPRESSION_VALUE_TYPES.length);
   });
 });
 

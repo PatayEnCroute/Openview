@@ -93,11 +93,14 @@ describe('resolveEvaluationLimits', () => {
     expect(() => resolveEvaluationLimits(limits)).toThrow(InvalidEvaluationLimitsError);
   });
 
-  it('defaults are active, not opt-in', () => {
-    // A library whose safety has to be asked for is not a safe library.
-    expect(DEFAULT_EVALUATION_LIMITS.maxSteps).toBeGreaterThan(0);
-    expect(DEFAULT_EVALUATION_LIMITS.maxDepth).toBeGreaterThan(0);
-    expect(DEFAULT_EVALUATION_LIMITS.maxItemsVisited).toBeGreaterThan(0);
-    expect(DEFAULT_EVALUATION_LIMITS.maxStringLength).toBeGreaterThan(0);
+  it('validates the DEFAULTS through the same schema an override goes through', () => {
+    // The four `toBeGreaterThan(0)` assertions this replaces were the only guard on the
+    // defaults, and a weak one -- they would have accepted `maxSteps: 1`. The defaults are
+    // now parsed at module load, so an unusable one cannot reach a caller at all: this
+    // asserts the property rather than sampling it, by feeding each default back through
+    // the resolver as an explicit override.
+    expect(resolveEvaluationLimits({ ...DEFAULT_EVALUATION_LIMITS })).toStrictEqual(
+      DEFAULT_EVALUATION_LIMITS,
+    );
   });
 });

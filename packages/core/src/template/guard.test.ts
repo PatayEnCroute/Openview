@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
+import { ExpressionSchema } from '../expression/expression.js';
 import {
   assertBoundedShape,
   DEFAULT_SHAPE_LIMITS,
@@ -13,6 +14,18 @@ function nest(levels: number): unknown {
   let built: unknown = 'leaf';
   for (let remaining = levels - 1; remaining > 0; remaining -= 1) {
     built = { child: built };
+  }
+  return built;
+}
+
+/**
+ * A chain of `levels` nested `not` nodes: a VALID expression, so the bare schema recurses
+ * into it instead of refusing the top level on a missing discriminant.
+ */
+function nestedNot(levels: number): unknown {
+  let built: unknown = { kind: 'literal', value: true };
+  for (let remaining = 1; remaining < levels; remaining += 1) {
+    built = { kind: 'not', operand: built };
   }
   return built;
 }
@@ -72,6 +85,52 @@ describe('assertBoundedShape', () => {
 
     expect(error.code).toBe('too-many-nodes');
     expect(error.limit).toBe(DEFAULT_SHAPE_LIMITS.maxNodes);
+  });
+
+  it('tests a WIDE value against the budget BEFORE reading any of its properties', () => {
+    // The mechanism, pinned without timing so it cannot go flaky. The same payload is scanned
+    // under two ceilings; the array carries an ACCESSOR at index 0, which is refused as
+    // `not-plain-data` the instant a descriptor is fetched:
+    //
+    //   - too tight for the array's width -> `too-many-nodes`, so no descriptor was fetched;
+    //   - roomy enough                    -> `not-plain-data`, so descriptors ARE fetched.
+    //
+    // An earlier version fetched every descriptor in one `getOwnPropertyDescriptors` call and
+    // counted them afterwards, so it would report `not-plain-data` in BOTH cases -- and its
+    // cost scaled with the payload rather than the ceiling: measured,
+    // `{ root: new Array(5_000_000) }` refused only after 2 401 ms and +831 MB against a
+    // ceiling of 100 000. That is the denial of service this guard exists to prevent,
+    // performed by the guard.
+    const wide: unknown[] = [1, 2, 3, 4];
+    Object.defineProperty(wide, 0, { get: () => 1, enumerable: true, configurable: true });
+
+    expect(shapeErrorOf(() => assertBoundedShape({ root: wide }, { maxNodes: 3 })).code).toBe(
+      'too-many-nodes',
+    );
+    expect(shapeErrorOf(() => assertBoundedShape({ root: wide }, { maxNodes: 50 })).code).toBe(
+      'not-plain-data',
+    );
+  });
+
+  it('does not count an array length as a value the document contains', () => {
+    // `{ a: [1, 2, 3] }` holds five values: the root, `a`, and three elements. Enumerating
+    // descriptors used to add the array's own `length`, so it needed a ceiling of 6 and the
+    // documented meaning of `maxNodes` drifted with how many arrays a payload held.
+    expect(() => assertBoundedShape({ a: [1, 2, 3] }, { maxNodes: 5 })).not.toThrow();
+    expect(shapeErrorOf(() => assertBoundedShape({ a: [1, 2, 3] }, { maxNodes: 4 })).code).toBe(
+      'too-many-nodes',
+    );
+  });
+
+  it('steps over a hole in a sparse array', () => {
+    // `JSON.parse` never produces one, but a hand-built payload can, and a hole has no
+    // descriptor at all -- so the guard must skip it rather than mistake the absence for an
+    // accessor. The width pre-check still sizes the array by `length`, which over-counts a
+    // sparse one: conservative, and documented on the guard.
+    const sparse: unknown[] = [1, 2, 3];
+    delete sparse[1];
+
+    expect(() => assertBoundedShape({ a: sparse }, { maxNodes: 5 })).not.toThrow();
   });
 
   it('refuses an accessor WITHOUT invoking it', () => {
@@ -173,12 +232,22 @@ describe('the bounded entry points', () => {
     });
   });
 
-  it('bounds what the bare schemas do not', () => {
+  it('bounds what the bare schemas do not, on the SAME input', () => {
     // The residual risk, named rather than disguised: `ExpressionSchema.parse` stays
     // exported because a Zod schema is the attachment point for z.infer, composition and
-    // the partial validation a Designer needs. What it does not do is bound -- so the
-    // difference between the two doors is pinned here rather than assumed.
-    expect(() => parseExpression(nest(200))).toThrow(TemplateShapeError);
+    // the partial validation a Designer needs. What it does not do is bound.
+    //
+    // Both doors get the same payload, which is the whole point. An earlier version of this
+    // test passed `nest(200)` to the bounded door only -- and 200 is shallow enough that the
+    // bare schema parses it happily, so it demonstrated nothing about the difference its own
+    // comment claimed to pin. The threshold where Zod's recursion gives out is stack-size
+    // dependent (measured around 1 269 here), hence a payload several times past it. It has
+    // to be a VALID expression too, or the bare schema refuses the top level on a missing
+    // discriminant and never recurses far enough to overflow.
+    const deep = nestedNot(5_000);
+
+    expect(() => parseExpression(deep)).toThrow(TemplateShapeError);
+    expect(() => ExpressionSchema.parse(deep)).toThrow(RangeError);
   });
 
   it('refuses a malformed expression after the shape passes', () => {

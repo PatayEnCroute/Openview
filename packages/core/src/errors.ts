@@ -20,11 +20,20 @@ export class OpenviewError extends Error {
  * `not-orderable` stays distinct from `not-comparable` because the evaluator already
  * distinguishes "cannot compare" from "cannot order" in prose; merging them would
  * throw away a distinction the repository had already written down.
+ *
+ * `not-a-whole-number` exists for the same reason `not-finite` does, and it was added after
+ * the first pass got this wrong. A fractional day shift used to raise `operand-type` with
+ * `actualType: 'number'` -- a payload that reports the shape as faulty while also reporting
+ * the correct shape, so lot C8 generating from code plus actualType would render "operates
+ * on numbers, got a number". The rule this restores is the one ADR 0003 already states for
+ * finiteness: **`operand-type` answers for a value's SHAPE; a code of its own answers for
+ * anything else about it.**
  */
 export const OPERAND_ERROR_CODES = [
   'operand-type',
   'division-by-zero',
   'not-finite',
+  'not-a-whole-number',
   'not-a-list',
   'not-a-boolean',
   'not-comparable',
@@ -110,6 +119,16 @@ export type ExpressionErrorDetails =
     });
 
 /**
+ * The key of {@link ExpressionEvaluationError}'s path mutator.
+ *
+ * Exported from this module so the evaluator can reach it, and deliberately NOT re-exported
+ * from `index.ts`: a consumer of the package cannot name it, so it cannot call the method.
+ * That is what turns "the evaluator is the only legitimate caller" from a docstring request
+ * into a property -- without the cast AGENTS.md 1.1 forbids.
+ */
+export const prefixPath = Symbol('openview.prefixPath');
+
+/**
  * An expression could not be evaluated against the supplied render data.
  *
  * The payload exists so that lot C8 can turn a failure into a sentence an author
@@ -155,10 +174,16 @@ export class ExpressionEvaluationError extends OpenviewError {
   }
 
   /**
-   * Prepends one segment to the path. Called by the evaluator's descent wrapper only,
-   * and only while an error is propagating.
+   * Prepends one segment to the path, for the evaluator's descent wrapper and nothing else.
+   *
+   * Keyed on {@link prefixPath}, a symbol this package exports but the barrel does not, so
+   * "only the evaluator calls this" is enforced rather than requested. As a plain public
+   * method it was a footgun: any consumer -- including the engine's `DataBindingStep`, which
+   * ADR 0003 tasks with catching and wrapping these errors -- could corrupt the very path
+   * lot C8 uses to point an author at the failing operand, and a wrapper re-threading paths
+   * of its own would have doubled every segment silently.
    */
-  prefix(segment: string | number): void {
+  [prefixPath](segment: string | number): void {
     this.#reversedPath.push(segment);
   }
 

@@ -7,6 +7,7 @@ import {
   ExpressionEvaluationError,
   LIMIT_ERROR_CODES,
   OPERAND_ERROR_CODES,
+  prefixPath,
 } from '../errors.js';
 import { parseTemplate } from '../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../template/template.js';
@@ -911,13 +912,17 @@ describe('civil dates in the algebra', () => {
     });
   });
 
-  it('refuses a shift that is not a whole number of days', () => {
+  it('refuses a shift that is not a whole number of days, with a code of its own', () => {
+    // NOT `operand-type`: the shape is right -- it IS a number -- and only its wholeness is
+    // wrong. Reporting `operand-type` with `actualType: 'number'` made the payload
+    // contradict itself, so lot C8 generating a message from code plus actualType would have
+    // said "operates on numbers, got a number".
     expect(
       expectEvaluationError(() =>
         evaluateExpression(dateAdd(literal('2026-01-31'), literal(1.5)), dates),
       ),
     ).toStrictEqual({
-      code: 'operand-type',
+      code: 'not-a-whole-number',
       site: 'dateAdd',
       at: ['days'],
       actualType: 'number',
@@ -1065,6 +1070,8 @@ const PRODUCED_CODES: Readonly<Record<ExpressionErrorCode, () => unknown>> = {
   'division-by-zero': () => evaluateExpression(arithmetic('div', literal(1), literal(0)), scope),
   'not-a-date': () =>
     evaluateExpression({ kind: 'endOfMonth', date: literal('not a date') }, scope),
+  'not-a-whole-number': () =>
+    evaluateExpression({ kind: 'dateAdd', date: literal('2026-01-31'), days: literal(1.5) }, scope),
   'string-limit-exceeded': () =>
     evaluateExpression({ kind: 'concat', parts: [literal('abcd'), literal('efgh')] }, scope, {
       budget: createBudget({ maxStringLength: 4 }),
@@ -1233,7 +1240,9 @@ describe('expression error payload', () => {
     const first = caught.details.at;
     expect(caught.details.at).toStrictEqual(first);
 
-    caught.prefix('value');
+    // Through the symbol the barrel does not export: a consumer of the package cannot name
+    // it, so it cannot corrupt the path lot C8 will point authors at.
+    caught[prefixPath]('value');
     expect(first).toStrictEqual(['operand']);
     expect(caught.details.at).toStrictEqual(['value', 'operand']);
   });
