@@ -7,8 +7,9 @@
   d'arithmétique, pas d'appel de fonction » ; [ADR 0002](0002-data-binding-and-loop-scope.md) —
   l'argument de rejet de l'option A3 et la conséquence « `CURRENT_SCHEMA_VERSION` reste à 1 »
 - **Plan d'implémentation :** [docs/plans/c1-formules-et-agregations.md](../plans/c1-formules-et-agregations.md)
+  — périmé une fois le lot livré, comme le dit son propre en-tête
 - **Implémentation :** [`src/expression/expression.ts`](../../packages/core/src/expression/expression.ts)
-  (les 18 kinds et les deux sous-algèbres),
+  (les 18 kinds et les trois sous-algèbres),
   [`src/expression/evaluate.ts`](../../packages/core/src/expression/evaluate.ts) (évaluation,
   `fail()`, `evaluateWithin`),
   [`src/expression/value-type.ts`](../../packages/core/src/expression/value-type.ts) (le *tag*
@@ -806,10 +807,15 @@ résultat, c'est le test qui le dit, pas une facture.
   `Intl.NumberFormat(...args)`, un `timeZone` porté par une variable, et toute indirection par une
   valeur. *Une couverture partielle déclarée totale est le défaut que ce tableau existe pour
   empêcher.*
-- **Playground** : une facture qui calcule son total, sa remise, son reste à payer, son prix
-  moyen en division gardée, son échéance, son « 45 jours fin de mois » et ses jours de retard —
-  aucun montant n'est fourni par le jeu de données, c'est le point — plus une section « refus
-  compréhensible » qui affiche `details.code`, `details.site` et `details.at`.
+- **Playground** : une facture qui calcule son total (60), sa remise (6), son reste à payer
+  (54), son prix moyen en division gardée (20), son échéance (`2026-02-19`), son « 45 jours fin
+  de mois » (`2026-03-31`) et ses jours de retard (19) — **aucun montant n'est fourni par le jeu
+  de données, c'est le point** — plus une section « refus compréhensible » qui évalue quatre
+  formules fautives et affiche `details.code`, `details.site` et `details.at`. La section
+  « Données requises » ne rend qu'une seule clé, `commande.lignes` : aucun alias n'en sort, ni
+  celui de la boucle, ni celui de l'agrégat, ni celui du filtre. C'est aussi le seul
+  consommateur réel du barrel, donc le seul endroit qui révèle un export oublié dans
+  `index.ts`.
 
 ---
 
