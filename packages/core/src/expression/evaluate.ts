@@ -1,7 +1,24 @@
 import { ExpressionEvaluationError } from '../errors.js';
 import type { ComparisonOperator, Expression } from './expression.js';
 
-/** The data a template is rendered against. */
+/**
+ * The data a template is rendered against: the integrating application's own
+ * dataset, under the names it chose.
+ *
+ * `Record<string, unknown>` is the contract, not a placeholder for a schema still
+ * to be written. Openview reserves no key here and expects no particular shape --
+ * a template reads the paths its author picked, and nothing in core knows what
+ * they mean. The one name Openview ever adds to this namespace is a loop alias,
+ * and even that one is declared by the template (see {@link childScope}), never
+ * by the engine.
+ *
+ * Nothing is injected either: no `now`, no *system* locale, no ambient context.
+ * "Today" is a datum like any other, supplied by the caller under whatever name it
+ * likes -- language and currency, by contrast, are declared by the template (C6).
+ * That is not a naming convention -- it falls out of the determinism the engine
+ * owes (roadmap engine, E6): an evaluator that reads the clock cannot render the
+ * same document twice.
+ */
 export type EvaluationScope = Readonly<Record<string, unknown>>;
 
 /**

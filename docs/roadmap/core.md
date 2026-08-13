@@ -4,6 +4,12 @@
 > le contrat ne sait pas exprimer est impossible à rendre et impossible à éditer :
 > cette brique est le plafond de verre des quatre autres.
 >
+> Les critères de recette de cette brique sont énoncés sur des factures. La facture
+> est le **document de référence** du projet, c'est-à-dire le niveau d'exigence à
+> atteindre, pas le périmètre : elle concentre les contraintes les plus dures, et
+> une brique qui les tient rend les autres éditions accessibles sans lot
+> supplémentaire.
+>
 > Retour à la [vue d'ensemble](README.md).
 
 ---
@@ -40,7 +46,7 @@ agrégations sont pleinement dans le périmètre — mais sur qui répond des ch
 | Le **taux** de TVA applicable, la règle d'exigibilité, le régime d'exonération, les mentions obligatoires | **Jamais Openview.** Ce sont des données ou des choix de l'intégrateur |
 | **Comment** un montant s'arrondit | **Le modèle le déclare** (lot C2) — la décision reste celle de son auteur |
 | Le **report de page** (« report : 12 480,00 € ») | **Le [moteur](engine.md)** : seul lui sait où il coupe |
-| La **conformité** de la facture produite | **L'intégrateur.** Énoncé sans détour dans le README et la documentation |
+| La **conformité** du document produit — facture, relevé, contrat ou tout autre | **L'intégrateur.** Énoncé sans détour dans le README et la documentation |
 
 **Comment cette limite est tenue :** par une **clause explicite** dans le README et la
 documentation. C'est la seule mesure retenue.
@@ -80,7 +86,7 @@ quatre familles :
 | **Nombres** | Les quatre opérations, les parenthèses, les pourcentages |
 | **Agrégations** | Somme, compte, moyenne, minimum, maximum sur les lignes d'un tableau |
 | **Conditions** | « si… alors… sinon » à l'intérieur d'une formule, et non seulement autour d'un bloc |
-| **Textes et dates** | Coller deux champs, mettre en majuscules ; échéance = date de facture + 30 jours, nombre de jours de retard |
+| **Textes et dates** | Coller deux champs, mettre en majuscules ; échéance = date de facture + 30 jours ; **nombre de jours entre deux dates fournies** (par exemple entre l'échéance et la date de traitement transmise par l'application hôte) |
 
 **Prêt quand** une facture calcule elle-même son total de lignes, son montant de
 remise, son reste à payer et sa date d'échéance, à partir de données brutes — et
@@ -93,12 +99,17 @@ qu'une formule fautive est refusée avec un message qui désigne l'erreur.
 - une **règle fiscale** : aucun taux, aucun régime, aucun arrondi « légal » n'est connu d'Openview ;
 - des **fonctions définies par l'utilisateur** (macros, bibliothèque de formules réutilisables) ;
 - des **références croisées** entre modèles, ou vers une valeur d'une autre page — le report de page est traité par le [moteur](engine.md) ;
-- une **traçabilité** du calcul (« d'où vient ce montant ? »). Écartée du v1 ; c'est pourtant la meilleure défense le jour où un chiffre sera contesté, à rouvrir si cela arrive.
+- une **traçabilité** du calcul (« d'où vient ce montant ? »). Écartée du v1 ; c'est pourtant la meilleure défense le jour où un chiffre sera contesté, à rouvrir si cela arrive ;
+- une **lecture de l'environnement** : ni horloge, ni fuseau, ni locale système, ni aucune source extérieure. Le jeu de données fourni est la seule entrée. « Aujourd'hui » est une donnée comme une autre, nommée par l'intégrateur ; c'est ce qui rend le déterminisme du lot E6 du [moteur](engine.md) possible.
 
 > Le langage d'expressions actuel et ses limites sont consignés dans
 > [ADR 0001](../adr/0001-expression-language.md). Ce lot l'élargit franchement :
 > l'ADR devra être amendé dans le même mouvement, sinon la décision écrite et le code
 > divergent dès le premier lot.
+>
+> Le *comment* de ce lot — découpage en dix incréments, contrat définitif, plan de
+> test, arbitrages restants — vit dans
+> [docs/plans/c1-formules-et-agregations.md](../plans/c1-formules-et-agregations.md).
 
 ### C2. Les arrondis, déclarés par le modèle
 

@@ -1,17 +1,20 @@
 # Openview
 
-Moteur open-source et modulaire d'édition, de rendu et de visualisation de documents dynamiques pour les applications web.
+Moteur d'édition embarquable, open-source et modulaire : un concepteur visuel de modèles de documents et un moteur de rendu, à installer dans l'application d'un tiers. Ce n'est ni un logiciel de gestion, ni un outil de facturation, ni une source de données — l'application intégratrice possède les données et décide de ce que contient le document ; Openview le décrit, le met en page et l'imprime.
 
 ## 🚀 Vision du Projet
 
-Openview est une solution conçue pour être intégrée directement dans d'autres logiciels afin de résoudre toutes les problématiques liées aux éditions (factures, rapports, étiquettes, contrats, etc.).
+Openview s'intègre dans le logiciel d'un tiers pour y traiter le problème des éditions : décrire un document une fois, le remplir avec les données de l'application hôte, l'imprimer à l'identique à chaque exécution.
 
-Pensée sous une approche *Headless & Embeddable*, la solution offre une flexibilité totale grâce à des composants prêts à l'emploi et une API découplée du stockage.
+Facture, rapport, relevé, bon de livraison, contrat, étiquette, courrier, bordereau : le type de document est un choix de l'intégrateur, pas une fonctionnalité d'Openview. Openview ne connaît aucun de ces métiers — il exécute un modèle sur un jeu de données qu'on lui remet.
+
+L'approche est *headless* et *embeddable* : Openview ne détient ni les données, ni les modèles, ni leur stockage. Il expose des composants prêts à l'emploi et une API que l'application hôte pilote.
 
 ### 🎯 Cibles & Positionnement
 
 * **Utilisateurs finaux :** Non-développeurs (création et édition visuelle de modèles par blocs).
 * **Intégrateurs :** Développeurs cherchant une brique logicielle modulaire et robuste à intégrer dans leurs applications web.
+* **Ce qu'Openview n'est pas :** ni un logiciel de gestion, ni un outil de facturation, ni une source de données. Il ne détient aucun référentiel, n'interroge aucune base et n'invente aucune valeur. C'est l'application intégratrice qui déclare son catalogue de données, fournit le jeu de données et possède les noms des champs.
 
 ## ⚖️ Calculs, conformité et responsabilité
 
@@ -45,6 +48,12 @@ délibérément ce rôle.
 Rien ne vous empêche d'exprimer ces règles dans vos données ou dans vos formules :
 c'est même prévu pour. Mais c'est alors **votre** règle, sous votre responsabilité.
 
+**Openview n'a pas d'horloge non plus.** « Aujourd'hui » n'est pas une valeur qu'il
+fabrique : c'est une donnée du jeu fourni, nommée par l'intégrateur comme il
+l'entend. Ce n'est pas une convention imposée — c'est la condition du déterminisme
+promis par le [moteur](docs/roadmap/engine.md) : un moteur qui lit l'heure ne peut
+pas produire deux fois le même document.
+
 **Avant toute mise en production, faites vérifier les documents produits par les
 personnes qui en répondent.** Un document généré par Openview n'est pas une preuve de
 conformité.
@@ -56,9 +65,9 @@ de garantie de la licence [Apache 2.0](LICENSE) et ne la remplace pas.
 
 La solution s'articule autour de quatre briques fondamentales :
 
-* **Le Cœur (`@openview/core`)** : Définition du contrat de données, types TypeScript partagés (AST), parsing et validation des schémas de templates via Zod.
-* **Le Designer (`@openview/designer`)** : Composant d'édition visuelle permettant aux utilisateurs de construire des modèles (templates) à partir de schémas de données dynamiques (variables, boucles, conditions).
-* **L'Hébergeur / Moteur (`@openview/engine`)** : Service backend ou bibliothèque de rendu chargé d'injecter dynamiquement les données dans les templates pour générer le document final (ex: PDF).
+* **Le Cœur (`@openview/core`)** : Définition du contrat de **modèle** (AST), types TypeScript partagés, parsing et validation Zod. Il décrit la forme d'un modèle, jamais celle des données de l'intégrateur : aucun nom de champ métier n'y est nommé ni réservé.
+* **Le Designer (`@openview/designer`)** : Composant d'édition visuelle permettant de construire des modèles à partir du **catalogue de données déclaré par l'application hôte** — insertion de champs, répétitions, conditions. Le catalogue vient de l'hôte ; le Designer n'en propose aucun par défaut.
+* **L'Hébergeur / Moteur (`@openview/engine`)** : Service backend ou bibliothèque de rendu chargé d'injecter le jeu de données **fourni par l'application hôte** dans un modèle, pour générer le document final (ex: PDF). Il ne va chercher aucune donnée de lui-même.
 * **Le Visualiseur (`@openview/viewer`)** : Composant front-end léger permettant d'afficher le document généré et d'interagir si besoin en modifiant des variables à la volée.
 
 👉 Pour plus de détails techniques et les design patterns appliqués, consultez le document [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -101,9 +110,16 @@ openview/
 
 ## 🗺️ Feuille de route (Roadmap)
 
-Le document de référence est **la facture**, au niveau d'exigence d'un logiciel de
-gestion. Les cinq briques sont publiées **d'un seul bloc** : rien n'est mis à
-disposition avant que la chaîne complète produise un document.
+Le document de référence est **la facture** — le niveau d'exigence à atteindre, pas
+le périmètre du produit. Elle est choisie parce qu'elle concentre les contraintes
+les plus dures d'une édition : multi-pages comptable, totaux reportés de page en
+page, blocs qui ne se coupent jamais, deux langues et deux devises. Ce qui rend une
+facture possible rend possibles les autres éditions — rapports, relevés, bons de
+livraison, contrats, courriers, bordereaux. Les jalons ci-dessous parlent donc de
+factures, et pour cette raison seule.
+
+Les cinq briques sont publiées **d'un seul bloc** : rien n'est mis à disposition
+avant que la chaîne complète produise un document.
 
 - [ ] **J1** — Une facture comptable est entièrement *décrite* par un modèle (`@openview/core`)
 - [ ] **J2** — Un modèle et des données produisent une facture d'une page en PDF (`@openview/engine`)

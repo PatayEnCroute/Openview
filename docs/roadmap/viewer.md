@@ -1,7 +1,14 @@
 # Roadmap — `@openview/viewer` (l'aperçu)
 
-> **Rôle produit :** montrer le document **avant** de le produire, pour vérifier
-> avant d'imprimer, d'envoyer ou de facturer. C'est la brique de la confiance.
+> **Rôle produit :** montrer le document **avant** de le produire, pour le vérifier
+> avant que l'application hôte ne l'imprime, ne l'envoie ou ne l'archive. C'est la
+> brique de la confiance.
+>
+> Les critères de recette de cette brique sont énoncés sur des factures. La facture
+> est le **document de référence** du projet, c'est-à-dire le niveau d'exigence à
+> atteindre, pas le périmètre : elle concentre les contraintes les plus dures, et
+> une brique qui les tient rend les autres éditions accessibles sans lot
+> supplémentaire.
 >
 > Retour à la [vue d'ensemble](README.md).
 

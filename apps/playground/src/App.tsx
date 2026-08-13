@@ -27,6 +27,12 @@ const discountApplies: Expression = {
   right: { kind: 'literal', value: 0 },
 };
 
+// Le modèle s'appelle « Facture Exemple » parce que la facture est le document de
+// référence du projet — celui qui concentre les contraintes les plus dures — et
+// non le périmètre du produit. Les noms de champs ci-dessous (`invoice`, `lines`,
+// `sku`) sont ceux qu'une application intégratrice aurait choisis : Openview n'en
+// réserve aucun et n'en attend aucun. Le même moteur rend un relevé, un bon de
+// livraison ou un courrier avec un tout autre vocabulaire.
 const sampleTemplate = parseTemplate({
   schemaVersion: CURRENT_SCHEMA_VERSION,
   id: 'tpl_demo_1',
@@ -77,6 +83,8 @@ const sampleTemplate = parseTemplate({
   },
 });
 
+// Le jeu de données de l'application hôte. Sa structure et ses noms de champs lui
+// appartiennent ; `core` ne les connaît pas et ne les valide pas.
 const renderData = {
   invoice: {
     number: 'F-2026-014',
@@ -181,8 +189,9 @@ export default function App() {
 
       <h2>Données requises (analyse statique des expressions)</h2>
       <p>
-        Les alias de boucle n'y figurent pas : <code>line</code> est déclaré par le template, ce
-        n'est pas une clé que l'appelant fournit.
+        Les alias de boucle n'y figurent pas : <code>line</code> est déclaré par le template. Les
+        autres chemins sont les noms choisis par l'application intégratrice — c'est la liste que le
+        moteur <em>rend</em> à l'appelant, pas une liste qu'il lui <em>impose</em>.
       </p>
       <ul>
         {dataPaths.map((dataPath) => (

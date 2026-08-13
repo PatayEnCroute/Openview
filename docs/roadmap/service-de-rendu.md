@@ -3,6 +3,11 @@
 > **Rôle produit :** permettre à une application d'obtenir un PDF **sans installer le
 > moteur**. C'est la porte d'entrée la plus facile pour un intégrateur curieux.
 >
+> Les critères de recette de cette brique parlent de factures parce que c'est ce que
+> le [moteur](engine.md) produit : le service, lui, ne connaît pas le type du
+> document qu'il rend et n'apporte aucune capacité de rendu supplémentaire. Ses
+> contraintes propres sont ailleurs — délais, plafonds, abus, modèles hostiles.
+>
 > Retour à la [vue d'ensemble](README.md).
 
 ---
@@ -59,6 +64,11 @@ sans que le service devienne indisponible pour les autres.
 configuration lisible, un journal exploitable quand un rendu échoue, et un moyen de
 savoir si le service est en vie.
 
+> **Le journal ne contient jamais le jeu de données reçu** — identifiant de requête,
+> motif du refus, durée, rien d'autre. « Il reçoit, il rend, il n'a rien retenu »
+> (décision 12) tombe au premier journal verbeux, et un journal de rendu raté est le
+> pire endroit où retrouver les données d'un client.
+
 **Prêt quand** quelqu'un d'extérieur démarre le service, produit une facture, provoque
 volontairement une erreur, et comprend ce qui s'est passé en lisant le journal.
 
@@ -79,7 +89,7 @@ limites sans détour.
 
 ## Ce que cette brique ne fait pas
 
-- Elle ne **conserve** ni modèle, ni document produit, ni historique.
+- Elle ne **conserve** rien : ni modèle, ni **jeu de données reçu**, ni document produit, ni historique.
 - Elle ne sait pas **qui** appelle : ni comptes, ni droits, ni cloisonnement entre clients.
 - Elle ne gère pas la **charge** : pas de file d'attente, pas de répartition, pas de génération en lot.
 - Elle n'apporte **aucune capacité de rendu supplémentaire** par rapport au [moteur](engine.md) : même documents, mêmes limites.

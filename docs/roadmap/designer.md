@@ -4,6 +4,12 @@
 > modèles de documents. C'est la brique qui porte la promesse du projet — et la seule
 > dont le succès se mesure sur une personne, pas sur un fichier.
 >
+> Les critères de recette de cette brique sont énoncés sur des factures. La facture
+> est le **document de référence** du projet, c'est-à-dire le niveau d'exigence à
+> atteindre, pas le périmètre : elle concentre les contraintes les plus dures, et
+> une brique qui les tient rend les autres éditions accessibles sans lot
+> supplémentaire.
+>
 > Retour à la [vue d'ensemble](README.md).
 
 ---
@@ -213,6 +219,7 @@ données sans nous écrire.
 - Elle ne **conserve** rien : c'est l'application hôte.
 - Elle ne **décide** d'aucune règle de calcul métier ou fiscale : elle permet de les écrire, l'auteur du modèle en répond ([règle d'arbitrage](core.md#règle-darbitrage--la-capacité-est-à-nous-la-responsabilité-est-à-lintégrateur)).
 - Elle ne gère ni comptes, ni droits, ni « qui a le droit de modifier quel modèle ».
+- Elle ne connaît **aucun nom de champ d'avance** : la liste des données proposées, leurs libellés et leur organisation viennent entièrement du catalogue déclaré par l'application hôte. Openview n'embarque aucun vocabulaire métier.
 
 Hors périmètre v1 : positionnement libre au millimètre, travail à plusieurs sur un
 même modèle, bibliothèque de formules réutilisables entre modèles, commentaires et

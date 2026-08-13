@@ -8,6 +8,31 @@ lisent [CONTRIBUTING.md](CONTRIBUTING.md), qui en reprend l'essentiel.
 
 ---
 
+## 🧭 Ce qu'Openview n'est pas — règle de périmètre
+
+Openview est un **moteur d'édition embarquable** : un concepteur visuel de modèles
+et un moteur de rendu, installés dans l'application d'un tiers. Il n'est ni un
+logiciel de gestion, ni une source de données. Trois interdits en découlent, et ils
+tranchent la plupart des questions de conception :
+
+- **Ne réservez aucun nom de champ et n'attendez aucune structure de données.** Le
+  jeu de données appartient à l'application intégratrice, qui le nomme. Pas de
+  schéma Zod pour `RenderRequest.data` : sa forme n'est pas à nous (§1.2).
+- **N'écrivez aucune règle métier** — taux, barème, arrondi « légal », numérotation.
+  La facture est le document de référence du projet, c'est-à-dire le niveau
+  d'exigence à atteindre, jamais le périmètre.
+- **N'introduisez ni horloge, ni fuseau, ni locale système, ni aléa** dans `core` et
+  `engine`. « Aujourd'hui » est une donnée fournie, nommée par l'intégrateur : un
+  moteur qui lit son environnement ne peut pas produire deux fois le même document
+  ([roadmap moteur](docs/roadmap/engine.md), lot E6). Formater une date fournie ou
+  un montant dans une locale que le **modèle** déclare reste permis : c'est le lot
+  C6. Ce qui est refusé, c'est de lire la machine.
+
+> **Le test, en cas de doute :** si une fonctionnalité oblige l'intégrateur à nommer
+> un champ comme Openview l'a décidé, elle est à refuser.
+
+---
+
 ## ⚖️ Ce qui est vérifié par une machine, et ce qui ne l'est pas
 
 Un audit des fondations a montré qu'une règle non outillée n'est pas une règle :
@@ -22,9 +47,10 @@ La colonne de droite dit ce qui vous arrêtera réellement.
 | Extensions `.js` sur les imports relatifs de `core`/`engine` | **tsc** (`NodeNext`) |
 | Couverture ≥ 90 %, tests type-checkés | **Vitest** + `tsconfig.typecheck.json` |
 | Assertion `<X>v`, promesses non attendues, patrons de conception, Zod-first | **Revue humaine uniquement** |
+| Aucune lecture d'environnement dans `core`/`engine` : `Date.now()`, `new Date()` sans argument, `Intl.*` sans locale explicite, `Math.random`, `process.env` | **Revue humaine uniquement** — *à outiller* |
 
-Les quatre dernières lignes de la colonne de droite sont votre responsabilité
-directe : rien ne vous rattrapera.
+Les deux dernières lignes du tableau sont votre responsabilité directe : rien ne
+vous rattrapera.
 
 ---
 
@@ -49,9 +75,20 @@ Corrigez la cause, jamais le symptôme.
 
 ### 1.2 Validation des schémas (Zod d'abord)
 
-Tout contrat de donnée est défini et validé dans `@openview/core` avec **Zod**
-avant d'être consommé ailleurs. Aucune donnée externe n'est jamais utilisée sans
+Tout contrat **de donnée** d'Openview — modèle, nœuds, expressions — est défini et
+validé dans `@openview/core` avec **Zod** avant d'être consommé ailleurs. Les
+**ports** font exception par nature : ce sont des interfaces TypeScript, elles
+portent des fonctions, et Zod ne valide pas une fonction — c'est le *contenu*
+qu'elles transportent qui l'est. Aucune donnée externe n'est jamais utilisée sans
 parsing préalable.
+
+**Une exception, et elle est structurante : le jeu de données de l'intégrateur.**
+Il n'a pas de schéma dans `core`, et il n'en aura jamais — sa forme appartient à
+l'application hôte. `RenderRequest.data` est un sac opaque de clés que l'appelant
+nomme. N'écrivez pas de `RenderDataSchema`, ne réservez aucune clé, n'attendez
+aucune structure : c'est à l'appelant de valider son jeu de données contre son
+propre catalogue. Ce que le modèle déclare, ce sont ses **lectures**, et
+`collectDataPaths()` les restitue.
 
 **Zod 4** est la cible : importez depuis `zod/v4`, pas depuis `zod`. Le parsing
 y est nettement plus rapide et le support des types récursifs — votre cas

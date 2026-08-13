@@ -16,7 +16,7 @@ exactement les commandes de la CI :
 pnpm run lint && pnpm run build && pnpm run type-check && pnpm run test:coverage
 ```
 
-Trois réflexes qui coûtent cher ici :
+Quatre réflexes qui coûtent cher ici :
 
 - **Ne desserrez jamais une contrainte pour débloquer une compilation.** Modifier
   `tsconfig`, `biome.jsonc` ou un plugin GritQL parce qu'il vous refuse quelque
@@ -27,3 +27,7 @@ Trois réflexes qui coûtent cher ici :
 - **`await` explicite partout.** TypeScript 7 prive le projet de linting typé,
   donc de `no-floating-promises` : aucun outil ne rattrapera une promesse
   oubliée (§1.5).
+- **Openview ne connaît aucune donnée métier.** Le jeu de données appartient à
+  l'application intégratrice : ne réservez aucun nom de champ, n'écrivez pas de
+  schéma Zod pour `RenderRequest.data`, et n'introduisez pas d'horloge —
+  « aujourd'hui » est une donnée fournie (AGENTS.md, « Ce qu'Openview n'est pas »).

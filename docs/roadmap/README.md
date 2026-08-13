@@ -12,35 +12,52 @@
 
 ## 1. Le cap
 
-Openview aura réussi le jour où **un gestionnaire non développeur produit lui-même
-la facture de son entreprise**, et où **un développeur inconnu installe les briques
-et obtient ce résultat sans avoir besoin de nous parler**.
+Openview est un **moteur d'édition embarquable** : un concepteur visuel de modèles
+et un moteur de rendu, installés dans l'application d'un tiers. Ce n'est ni un
+logiciel de gestion, ni un outil de facturation, ni une source de données — c'est
+l'application intégratrice qui décide de ce que contient le document.
 
-Le document de référence est **la facture**, au niveau d'exigence d'un logiciel de
-gestion. Tout le reste (rapport, contrat, étiquette) vient après ; rien ne passe
-avant.
+Openview aura réussi le jour où **une personne non technique produit elle-même,
+seule, la facture de son entreprise** — à l'intérieur de l'application qui
+l'héberge, et sans jamais sortir de son métier — et où **un développeur inconnu
+installe les briques et obtient ce résultat sans avoir besoin de nous parler**. La
+facture parce que c'est ce que mesure le jalon J6 ; n'importe quelle édition
+ensuite, parce que rien dans les briques ne la connaît.
+
+Le **document de référence** retenu est **la facture** : c'est le niveau d'exigence
+à atteindre, pas le périmètre. Elle est choisie parce qu'elle concentre les
+contraintes les plus dures — multi-pages comptable, totaux reportés de page en
+page, blocs qui ne se coupent jamais, deux langues et deux devises. Ce qui rend une
+facture possible rend possibles les rapports, les relevés, les bons de livraison,
+les contrats, les courriers et les bordereaux : ces éditions attendent la même
+barre, pas un lot de plus. **L'étiquette fait exception**, et pour une raison
+étrangère à cette barre : elle réclame une sortie image, écartée du v1 par la
+décision 5 (§5). Le reste vient après la facture ; rien ne passe avant elle.
+
+Les jalons du §3, et les critères de recette des cinq roadmaps par brique, parlent
+donc de factures, et pour cette raison seule.
 
 ---
 
 ## 2. Les décisions prises
 
-Ces quatorze décisions sont le socle des cinq roadmaps. Les rouvrir, c'est
+Ces dix-sept décisions sont le socle des cinq roadmaps. Les rouvrir, c'est
 réordonner le backlog.
 
 | # | Sujet | Décision | Ce que ça protège, ce que ça coûte |
 | :-- | :--- | :--- | :--- |
-| 1 | Document n°1 | La **facture**, niveau **multi-pages comptable** : totaux reportés de page en page, blocs qui ne se coupent jamais, mentions légales sur la dernière page | Protège la crédibilité : une facture presque juste est inutilisable. Coûte le plus cher des trois niveaux envisagés |
+| 1 | Document n°1 | La **facture**, niveau **multi-pages comptable** : totaux reportés de page en page, blocs qui ne se coupent jamais, mentions légales sur la dernière page | Protège la crédibilité : une facture presque juste est inutilisable. **C'est le niveau d'exigence, pas le périmètre** : la facture concentre les contraintes les plus dures, et une brique qui les tient rend toutes les autres éditions accessibles. Coûte le plus cher des trois niveaux envisagés |
 | 2 | Premier succès visible | **Publication open-source des cinq briques d'un bloc**. Rien de public avant | Protège le message produit. Coûte : aucun retour extérieur pendant tout le parcours |
 | 3 | Capacité | **Solo, temps partiel** | Impose un seul chantier ouvert à la fois et des lots courts |
 | 4 | Ordre | **Brique par brique** : core → engine → viewer → service → designer | Protège la solidité de chaque brique. Coûte : le premier document sort tard |
 | 5 | Format de sortie | **PDF uniquement** | Écarte HTML et image du v1. Réduit franchement la charge du moteur |
 | 6 | Rôle du viewer | **Aperçu avant génération** | Le document interactif (variables modifiées à la volée) passe en v2, alors que c'est la promesse la plus différenciante |
 | 7 | Fidélité de l'aperçu | **Identique au PDF, garanti**, tenu par un **contrôle automatique** | Promesse forte et rassurante. Coûte : aperçu et PDF doivent décider les sauts de page de la même manière, et un contrôle doit le vérifier en continu |
-| 8 | Mise en page dans l'éditeur | **Colonnes + grille complète pas à pas** (aide à l'alignement) **+ calques** pour la profondeur | Couvre les factures réelles. Les calques sont le point le plus délicat en multi-pages |
-| 9 | Données disponibles | **L'intégrateur déclare le catalogue** (client, lignes, totaux…) | Protège l'utilisateur final : il ne voit que des données existantes, nommées en langage métier. Coûte un travail d'amorçage à l'intégrateur |
+| 8 | Mise en page dans l'éditeur | **Colonnes + grille complète pas à pas** (aide à l'alignement) **+ calques** pour la profondeur | Couvre les mises en page réelles, à commencer par les plus contraintes. Les calques sont le point le plus délicat en multi-pages |
+| 9 | Données disponibles | **L'intégrateur déclare le catalogue, et il en est propriétaire.** Il choisit les données exposées, leurs libellés et leur structure ; Openview n'attend aucun nom, n'en réserve aucun et n'en impose aucun. Un catalogue peut décrire un client et des lignes de commande comme un dossier, un relevé ou un contrat | Protège l'utilisateur final : il ne voit que des données existantes, nommées en langage métier. Coûte un travail d'amorçage à l'intégrateur |
 | 10 | Stockage des modèles | **L'intégrateur les conserve.** Openview livre un exemple de référence | Tient la promesse *headless*, aucun coût d'exploitation |
 | 11 | Langue et devise | **Multi-langue et multi-devise dès le contrat** | Décidé tôt à raison : ajouté après coup, ce sujet touche tout |
-| 12 | Service prêt à l'emploi | **Rendu à la demande uniquement.** Ni comptes, ni droits, ni conservation | Reste une petite brique. Ne couvre pas un usage multi-client réel |
+| 12 | Service prêt à l'emploi | **Rendu à la demande uniquement.** Ni comptes, ni droits, ni conservation — **ni du modèle, ni du jeu de données transmis, ni du document produit**. Le service reçoit, rend, oublie | Reste une petite brique. Ne couvre pas un usage multi-client réel |
 | 13 | Premier pas dans l'éditeur | **Bibliothèque de modèles livrés** (facture, rapport, contrat) | Meilleure vitrine et meilleure première expérience. Chaque modèle livré devient une chose à maintenir |
 | 14 | Preuve de qualité | **Validation par un utilisateur métier**, plus le contrôle automatique aperçu/PDF | Seule façon de vérifier la conformité réelle. Suppose de trouver cette personne — ce n'est pas encore fait |
 | 15 | Capacité de calcul | **Formules type tableur et agrégations**, pleinement dans le périmètre : quatre opérations, somme / compte / moyenne / minimum / maximum sur les lignes, conditions dans les formules, textes, **et calculs de dates** | Rend les modèles autonomes au lieu de réclamer une donnée toute prête pour chaque case. Coûte : c'est le lot le plus lourd du contrat, et il double la surface d'erreur à expliquer à l'utilisateur |
@@ -52,12 +69,23 @@ réordonner le backlog.
 > n'ajoute jamais une règle fiscale, un taux, un barème, ni la moindre formulation qui
 > laisserait croire qu'Openview garantit une conformité.
 
+> **Son symétrique, sur les données :** *Openview fournit la capacité, pas la
+> donnée.* L'application intégratrice décide de ce que contient le document : elle
+> déclare son catalogue, elle fournit le jeu de données, elle possède les noms des
+> champs et leurs libellés. Openview ne réclame aucune donnée nommée, n'en réserve
+> aucune et n'attend aucune structure particulière. Un modèle Openview sait dire
+> *comment* présenter et calculer ; il ne sait pas, et n'a pas à savoir, *quoi*.
+
 ---
 
 ## 3. Les jalons
 
 Aucun n'est public : la publication est groupée (décision 2). Ils existent pour
 **prouver l'avancement à soi-même** et éviter le tunnel.
+
+> Rappel du §1 : ces sept jalons sont des **critères de recette**. Ils se disent en
+> factures parce que la facture est le niveau d'exigence retenu — jamais parce que
+> le produit s'arrêterait aux factures.
 
 | Jalon | Ce qu'on peut montrer | Brique |
 | :--- | :--- | :--- |
@@ -90,8 +118,13 @@ Ils ne se rattachent à aucune brique, et sont pourtant la condition de J7.
 
 ## 5. Hors périmètre de la première version
 
-Écrit noir sur blanc pour pouvoir dire non sans rediscuter :
+Écrit noir sur blanc pour pouvoir dire non sans rediscuter. Les trois premières
+lignes ne sont pas des reports en v2 : ce sont des **non permanents**, qui tiennent
+à la nature du produit.
 
+- Openview n'est pas une **source de données** : aucune base interrogée, aucun référentiel client, article ou tarif détenu. Il reçoit un jeu de données, il ne va rien chercher.
+- Openview n'est pas un **logiciel de gestion** : aucun cycle de vie de document, aucun statut, aucun envoi, aucun suivi de règlement.
+- Openview n'a pas d'**horloge** : ni date du jour, ni fuseau, ni locale système. « Aujourd'hui » est une donnée du jeu fourni. Ce n'est pas une préférence, c'est ce qui rend possible le déterminisme du lot E6 du [moteur](engine.md).
 - Sorties **HTML** et **image** (décision 5), et par conséquent les étiquettes et les vignettes d'aperçu.
 - **Document interactif** : l'utilisateur qui modifie des variables et voit le document se recalculer (décision 6) — reporté en v2 alors qu'il porte la promesse la plus forte.
 - **Comptes, droits, cloisonnement entre clients**, conservation des modèles côté service (décisions 10 et 12).
@@ -122,7 +155,7 @@ Ils ne se rattachent à aucune brique, et sont pourtant la condition de J7.
 
 Décidé maintenant, à froid. En cas de retard, on coupe **dans cet ordre** :
 
-1. **La bibliothèque de modèles** passe de trois à un seul (la facture).
+1. **La bibliothèque de modèles** passe de trois à un seul (la facture). Effet de bord à assumer : ce n'est pas deux modèles qu'on perd, c'est la **démonstration visible** qu'Openview n'est pas un outil de facturation.
 2. **Les calques** sortent du v1 ; grille et colonnes suffisent à une facture.
 3. **La barre de formule assistée** retombe en *mode avancé* : les formules et les agrégations restent pleinement fonctionnelles, mais c'est l'intégrateur qui les écrit dans les modèles livrés. La **capacité** est conservée, seul le **confort** est reporté.
 4. **La démo en ligne** est remplacée par les exemples d'intégration.
@@ -146,5 +179,7 @@ plus cher que de les tenir :
 2. **Quelles langues exactement au premier jour ?** Multi-langue est décidé ; la liste ne l'est pas. Deux langues suffisent à prouver le mécanisme. *Bloque J1.*
 3. **Quel intégrateur de référence ?** La documentation et les exemples sont bien meilleurs s'ils sont écrits pour une application précise, même interne. *Bloque J7.*
 4. **Quelles mentions légales obligatoires** sur une facture, et pour quels pays ? Cela conditionne le modèle livré. *Bloque le modèle de facture, pas le moteur.*
-5. **Jusqu'où vont les calculs de dates ?** « + 30 jours » est trivial. « 45 jours fin de mois », « jours ouvrés », les jours fériés — usages de paiement parfaitement courants — sont un nid à cas particuliers, et chacun est une petite règle de plus à porter. À borner explicitement. *Bloque le lot C1 du [contrat](core.md).*
+5. **Jusqu'où vont les calculs de dates ?** « + 30 jours » est trivial. « 45 jours fin de mois », « jours ouvrés », les jours fériés — usages de paiement parfaitement courants — sont un nid à cas particuliers, et chacun est une petite règle de plus à porter. À borner explicitement.
+
+   **Ce qui est déjà tranché, et ne se rouvre pas :** l'algèbre d'expressions **n'a pas d'horloge**. Openview ne lit jamais la date du jour ; « aujourd'hui » est une **donnée du jeu fourni**, nommée par l'intégrateur comme il l'entend. Un calendrier de jours fériés est une donnée au même titre. Ce n'est pas une convention qu'on impose, c'est la conséquence directe du déterminisme exigé par le lot E6 du [moteur](engine.md) : un moteur qui lit l'heure ne peut pas produire deux fois le même document. *Bloque le lot C1 du [contrat](core.md).*
 6. **Quels arrondis dans les modèles livrés ?** Puisque Openview n'impose aucune règle par défaut (décision 16), les modèles livrés doivent en déclarer une — et ce choix sera recopié par tous ceux qui partiront de ces modèles. C'est donc une position par défaut de fait : autant la choisir sciemment. *Bloque le lot D9 de l'[éditeur](designer.md).*

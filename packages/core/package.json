@@ -1,7 +1,7 @@
 {
   "name": "@openview/core",
   "version": "0.1.0",
-  "description": "Schémas de données, types partagés et parsing des templates pour Openview",
+  "description": "Contrat de modèle (AST), schémas Zod et parsing des templates pour Openview",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

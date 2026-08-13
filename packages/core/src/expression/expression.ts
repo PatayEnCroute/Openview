@@ -26,7 +26,10 @@ export interface LiteralExpression {
   readonly value: LiteralValue;
 }
 
-/** Dotted path into the render data, e.g. `invoice.customer.name`. */
+/**
+ * Dotted path into the caller's render data, e.g. `invoice.customer.name`.
+ * The segments are names the caller chose; core knows none of them.
+ */
 export interface PathExpression {
   readonly kind: 'path';
   readonly path: string;
@@ -120,7 +123,7 @@ export const PathExpressionSchema = z.object({
   path: z
     .string()
     .min(1, 'A path expression needs a path')
-    .regex(PATH_PATTERN, 'A path must be dot-separated identifiers, e.g. invoice.customer.name')
+    .regex(PATH_PATTERN, 'A path must be dot-separated identifiers, e.g. section.item.field')
     .refine(
       (path) => path.split('.').every((segment) => !FORBIDDEN_IDENTIFIERS.has(segment)),
       'A path segment may not name an inherited member such as __proto__, constructor or toString',

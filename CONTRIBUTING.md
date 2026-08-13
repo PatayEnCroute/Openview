@@ -42,16 +42,30 @@ pnpm run lint:fix
 
 ## 📐 Règles de code non négociables
 
-Elles sont détaillées dans [AGENTS.md](AGENTS.md) et **appliquées
-mécaniquement** — inutile de discuter avec le linter, il gagnera :
+Elles sont détaillées dans [AGENTS.md](AGENTS.md). Les quatre suivantes sont
+**appliquées mécaniquement** — inutile de discuter avec le linter, il gagnera :
 
 - Pas de `any`, pas de `as unknown as X`, pas de `@ts-ignore`.
 - Pas d'assertion non-nulle `!` : elle annule `noUncheckedIndexedAccess`.
 - Pas de `try/catch` vide. Un commentaire dans le `catch` ne compte pas comme
   traitement de l'erreur ; journalisez-la ou relancez une erreur typée.
-- Toute donnée externe est validée par un schéma **Zod** de `@openview/core`
-  avant d'être consommée.
 - Toute fonction de `@openview/core` ou `@openview/engine` a un `*.test.ts`.
+
+### Trois règles que rien n'arrêtera à votre place
+
+Elles ne sont tenues que par la revue — voir le tableau en tête
+d'[AGENTS.md](AGENTS.md), qui dit ce qui vous arrêtera réellement :
+
+- Tout contrat **de donnée** d'Openview (modèle, nœuds, expressions) est validé par
+  un schéma **Zod** de `@openview/core` ; les **ports**, eux, restent des
+  interfaces TypeScript. Seule exception côté données : le **jeu de données de
+  l'intégrateur** n'a pas de schéma dans `core` et n'en aura jamais — sa forme
+  appartient à l'application hôte.
+- Openview ne réserve **aucun nom de champ** et n'attend **aucune structure de
+  données**. Une fonctionnalité qui oblige l'intégrateur à nommer un champ comme
+  Openview l'a décidé est à refuser.
+- Ni horloge, ni fuseau, ni locale système, ni aléa dans `core` et `engine` :
+  « aujourd'hui » est une donnée fournie.
 
 ### Sens des dépendances
 

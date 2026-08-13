@@ -2,7 +2,13 @@
 
 > **Rôle produit :** transformer un modèle et un jeu de données en **document
 > final**. C'est la brique qui fait passer Openview de « projet bien structuré » à
-> « quelque chose qui produit des factures ».
+> « quelque chose qui produit des documents ».
+>
+> Les critères de recette de cette brique sont énoncés sur des factures. La facture
+> est le **document de référence** du projet, c'est-à-dire le niveau d'exigence à
+> atteindre, pas le périmètre : elle concentre les contraintes les plus dures, et
+> une brique qui les tient rend les autres éditions accessibles sans lot
+> supplémentaire.
 >
 > Retour à la [vue d'ensemble](README.md).
 
@@ -96,7 +102,14 @@ pages et ce que chacune contient », sans produire le PDF.
 **Pourquoi.** Deux exécutions du même modèle sur deux machines doivent donner le
 même document, au caractère près : polices, images, et surtout **résultats de
 formules** — un montant qui varie d'un centime selon la machine ruinerait la confiance
-plus sûrement qu'un défaut de mise en page. Les arrondis déclarés par le modèle
+plus sûrement qu'un défaut de mise en page.
+
+**Conséquence non négociable : le moteur ne lit ni l'horloge, ni le fuseau, ni la
+locale de la machine.** Toute date, y compris « aujourd'hui », arrive dans le jeu de
+données sous le nom que l'intégrateur lui a donné. Un moteur qui interroge son
+environnement ne peut pas, par construction, produire deux fois le même document.
+
+Les arrondis déclarés par le modèle
 ([core](core.md) C2) doivent être honorés à la lettre. Sans ce lot, ni contrôle
 automatique, ni confiance possible.
 
@@ -105,12 +118,16 @@ fichiers équivalents.
 
 **Poids :** M — **Dépend de :** E4
 
-### E7. Le lot de factures de référence
+### E7. Le lot de documents figés de non-régression
 
 **Pourquoi.** C'est l'outil qui rend la suite tenable en solo à temps partiel : un
-petit ensemble de factures figées (une page, multi-pages, avec report, deux langues,
-cas limites) auxquelles toute évolution est comparée. Le premier filet de sécurité
-du projet.
+petit ensemble de documents figés auxquels toute évolution est comparée. Le premier
+filet de sécurité du projet.
+
+**En v1, ce lot ne contient que des factures** — une page, multi-pages, avec report,
+deux langues, cas limites — parce qu'elles concentrent les contraintes les plus
+dures et qu'un lot qu'on ne peut pas énumérer n'est pas un filet. D'autres types de
+documents s'y ajouteront quand un besoin réel le justifiera, jamais par principe.
 
 **Prêt quand** une modification volontairement fautive du moteur est signalée
 automatiquement, en désignant la facture et la page concernées.
@@ -148,6 +165,7 @@ et ce qui se passe quand ça échoue.
 ## Ce que cette brique ne fait pas
 
 - Elle ne **conserve** rien : ni modèle, ni document produit. C'est l'application hôte qui décide où tout cela vit.
+- Elle ne **cherche** aucune donnée : elle reçoit un modèle et un jeu de données de son appelant, et n'interroge aucune base, aucun référentiel, aucune horloge. Openview n'est pas une source de données. Elle charge en revanche les ressources que le modèle désigne — images, polices : ce sont des requêtes sortantes, et c'est exactement la surface que le lot E8 doit borner par une liste blanche.
 - Elle ne **corrige** pas un modèle invalide : elle le refuse, avec le message du [contrat](core.md).
 - Elle n'affiche rien à l'écran : c'est le [viewer](viewer.md).
 - Elle n'est pas un serveur : c'est le [service de rendu](service-de-rendu.md).

@@ -19,6 +19,14 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  */
 export const CURRENT_SCHEMA_VERSION = 1;
 
+/**
+ * Note what a Template does NOT carry: any description of the data it expects.
+ * The catalogue of available fields belongs to the integrating application (see
+ * `EvaluationScope`, and `dataCatalogue` on the Designer's props). A template records
+ * what it READS -- `collectDataPaths` recovers exactly that -- never what the
+ * caller must supply. Adding a data schema to the stored document would move the
+ * ownership of the data from the host application to Openview.
+ */
 export const TemplateSchema = z.object({
   schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
   id: z.string().min(1, 'A template id is required'),

@@ -106,15 +106,16 @@ Ce document définit l'identité visuelle, l'expérience utilisateur (UX) et les
 
 ## 1. Philosophie & Principes d'Interface (Shadcn/ui Aesthetics)
 
-Openview Viewer est un composant front-end léger de visualisation de documents dynamiques générés, permettant la lecture, la navigation multi-pages et la modification interactive de variables à la volée.
+Openview Viewer est un composant front-end léger qui affiche le document produit par le moteur à partir d'un modèle et du jeu de données fourni par l'application hôte : lecture, navigation multi-pages, et modification interactive des variables.
 
 ### Principes Clés
 1. **Focalisation sur le Document** :
    - Le composant est ultra-léger et sobre. L'attention est portée 100% sur le rendu du document A4.
 2. **Contrôles de Navigation Rétractables / Flottants** :
    - Barre de pagination (Page X sur Y), zoom (In/Out/Fit) et impression/téléchargement PDF.
-3. **Mode d'Interaction avec les Variables** :
-   - Volet latéral ou modale permettant aux utilisateurs finaux de remplir des champs (ex: Prénom, Adresse) pour voir le document se mettre à jour en temps réel.
+3. **Mode d'interaction avec les variables** :
+   - Volet latéral ou modale permettant de saisir les valeurs des **champs déclarés par l'application hôte** pour voir le document se mettre à jour en temps réel.
+   - Les libellés et les types affichés viennent du catalogue de l'intégrateur. Le viewer n'en connaît aucun par défaut : il rend un formulaire à partir de ce qu'on lui déclare, il n'impose aucune structure.
 
 ---
 
