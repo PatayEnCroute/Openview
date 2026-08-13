@@ -9,6 +9,10 @@
   (`collectDataPaths` sensible aux alias)
 - **Prérequis :** [ADR 0001](0001-expression-language.md) — ce document ferme deux
   conséquences de l'option C qui n'y avaient pas été traitées.
+- **Amendé par :** [ADR 0003](0003-formules-agregations-et-dates-civiles.md) (2026-08-13) —
+  deux points, et **la décision A1 + B1 n'en fait pas partie** : l'argument de rejet de
+  l'option A3 contre un opérateur `concat` (resserré, ci-dessous), et la conséquence
+  « `CURRENT_SCHEMA_VERSION` reste à 1 » (révisée, ci-dessous).
 
 ---
 
@@ -114,6 +118,20 @@ Un texte statique s'écrit `{ kind: 'literal', value: 'Facture' }`.
 - ❌ Ajouter un opérateur `concat` à l'algèbre d'expressions pour compenser
   reviendrait à réimplémenter un moteur de gabarit dans le langage d'expression,
   précisément ce que l'ADR 0001 refuse.
+
+  > ⚠️ **Argument resserré le 2026-08-13 par l'[ADR 0003](0003-formules-agregations-et-dates-civiles.md).**
+  > Tel qu'il est écrit ci-dessus, il est **sans borne** — et l'ADR 0003 ajoute précisément un
+  > `concat` à l'algèbre, ce qui le rendrait faux dans un document au statut « Accepté ». La
+  > **décision** de cette ADR (A1 + B1) n'est pas touchée ; c'est la généralité de cet argument
+  > de rejet qui l'est, et voici le critère opposable qui la remplace :
+  >
+  > > **Un opérateur de l'algèbre ne remplace jamais une *structure* du document.**
+  >
+  > `concat` compose deux **valeurs** à l'intérieur d'une liaison ; il ne prétend pas remplacer
+  > `TextSegment[]`, qui reste la structure inline d'un paragraphe. C'est exactement ce que A3
+  > proposait et que cette ADR refuse : faire porter le flux inline par l'algèbre. Le rejet de
+  > A3 tient donc entier, et pour la raison qui compte — un paragraphe mixte redeviendrait N
+  > nœuds frères — pas pour une interdiction générale de la concaténation.
 
 ---
 
@@ -291,6 +309,16 @@ s'écrire.
   soustrait les alias en portée ; c'est la correction du bug décrit en contexte.
 - **`index.ts`** : exports des nouveaux types, schémas et de `childScope`.
 - **`CURRENT_SCHEMA_VERSION` reste à 1, aucune migration** : le projet étant en phase pré-v1.0 (aucun template client en stockage), le schéma v1 évolue directement sans créer de migration fantôme `1 -> 2`. Dès la publication v1.0, toute évolution incrémentera la version du schéma avec migration obligatoire dans `TEMPLATE_MIGRATIONS`.
+
+  > 🔄 **Révisé le 2026-08-13 par l'[ADR 0003](0003-formules-agregations-et-dates-civiles.md).**
+  > La phrase reste ici telle qu'elle a été écrite — une ADR est un journal, elle ne se réécrit
+  > pas — mais elle ne décrit plus le dépôt : `CURRENT_SCHEMA_VERSION` vaut **2**, et
+  > `TEMPLATE_MIGRATIONS` porte l'entrée `1 → 2`. Deux prémisses sont tombées à la mesure. Une
+  > migration qui n'estampille que la version n'est **pas** fantôme : c'est l'estampille, et elle
+  > seule, qui fait dire à un build antérieur « écrit par une version plus récente ; mettez à jour
+  > avant d'ouvrir » au lieu de « Invalid input » sur un discriminant. Et la dérogation pré-v1.0
+  > ne s'applique pas au **versionnement** : elle s'applique aux **rétrécissements**, qu'aucune
+  > migration ne peut rattraper. `AGENTS.md` §1.2 fait foi, et il ne porte aucune réserve.
 - **Tests, dans le même commit** (AGENTS.md §4) : suite de tests unitaires et de typage exhaustive, dont un texte mêlant
   littéral et liaison ; une liaison malformée refusée au parsing ; sept formes
   d'alias refusées (vide, pointé, espacé, commençant par un chiffre, et les trois

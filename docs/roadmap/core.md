@@ -104,11 +104,15 @@ qu'une formule fautive est refusée avec un message qui désigne l'erreur.
 
 > Le langage d'expressions actuel et ses limites sont consignés dans
 > [ADR 0001](../adr/0001-expression-language.md). Ce lot l'élargit franchement :
-> l'ADR devra être amendé dans le même mouvement, sinon la décision écrite et le code
-> divergent dès le premier lot.
+> l'ADR devait être amendé dans le même mouvement, sinon la décision écrite et le code
+> divergeaient dès le premier lot. ✅ **Fait le 2026-08-13** — l'ADR 0001 porte sa ligne
+> « Amendé par », et l'[ADR 0003](../adr/0003-formules-agregations-et-dates-civiles.md)
+> énonce les dix décisions du lot : l'algèbre passe à 18 kinds, l'arithmétique est en
+> IEEE-754 sans arrondi implicite, les dates sont bornées à la « date civile pure », et
+> le versionnement du schéma passe à 2 avec sa migration.
 >
-> Le *comment* de ce lot — découpage en dix incréments, contrat définitif, plan de
-> test, arbitrages restants — vit dans
+> Le *comment* de ce lot — découpage en incréments, contrat définitif, plan de
+> test, arbitrages tranchés — vit dans
 > [docs/plans/c1-formules-et-agregations.md](../plans/c1-formules-et-agregations.md).
 
 ### C2. Les arrondis, déclarés par le modèle

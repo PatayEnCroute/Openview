@@ -118,6 +118,30 @@ discriminant, et toute évolution s'accompagne d'une migration `migrate(from, to
 Un template enregistré en v1 doit pouvoir être rendu en v12. Cette décision est
 irréversible dès le premier template client : ne la reportez pas.
 
+« Toute évolution » se lit au sens large, et deux formes d'incompatibilité l'exigent —
+la seconde a été découverte à l'ADR 0003, et aucune des deux ne produit d'erreur
+lisible sans l'incrément :
+
+- **La perte silencieuse.** `z.object` **supprime** les clés qu'il ne connaît pas. Un
+  champ ajouté, même purement **optionnel**, est donc effacé par un build antérieur
+  qui ouvre le document — sans erreur, puisque la version n'a pas bougé — et un
+  `onSave` persiste la perte.
+- **Le refus illisible.** Une union **élargie** (un kind de plus) rend, sur un build
+  antérieur, un `ZodError` « No matching discriminator » / « Invalid input » sur un
+  chemin de discriminant : ni erreur typée, ni mention de version, aucun remède.
+  Avec l'incrément, le même document rend `TemplateMigrationError: … written by a
+  newer release of Openview; upgrade before opening it.`
+
+**Une migration qui ne transforme rien n'est pas une migration fantôme.** Elle
+estampille, et l'estampille est *tout* ce qui produit le second message ci-dessus.
+Écrire `migrate: (input) => ({ ...input, schemaVersion: n })` est un travail complet.
+
+**Il n'y a pas de dérogation pré-v1.0 au versionnement.** La dérogation pré-v1.0
+porte sur les **rétrécissements** — une borne nouvelle qui refuse un document
+auparavant valide, qu'aucune migration ne peut rattraper sans corrompre le document.
+Le versionnement, lui, n'a pas de coût qui justifierait de l'ajourner. Ce fichier
+fait foi : une ADR qui entend l'amender doit le dire explicitement.
+
 ### 1.3 Gestion des erreurs
 
 **Aucun `catch` vide, dans aucune écriture.** Les trois formes suivantes sont

@@ -4,6 +4,10 @@
 - **Date :** 2026-08-11
 - **Impact :** `@openview/core` (contrat de données), `@openview/engine` (évaluation), `@openview/designer` (édition)
 - **Implémentation :** [`src/expression/expression.ts`](../../packages/core/src/expression/expression.ts) (représentation) et [`src/expression/evaluate.ts`](../../packages/core/src/expression/evaluate.ts) (évaluateur)
+- **Amendé par :** [ADR 0003](0003-formules-agregations-et-dates-civiles.md) (2026-08-13) — le
+  paragraphe « Rien d'autre » ci-dessous. L'arithmétique et un jeu fermé d'opérations nommées
+  entrent dans l'algèbre ; **le refus du parseur, de l'appel de fonction générique et de l'accès
+  indexé dynamique reste entier.**
 
 ---
 
@@ -84,9 +88,33 @@ reste de l'arbre :
 **Option C**, avec un jeu d'opérateurs délibérément minimal en v1 : `path`,
 `literal`, `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `and`, `or`, `not`, `isEmpty`.
 
-Rien d'autre. Pas d'arithmétique, pas d'appel de fonction, pas d'accès indexé
-dynamique tant qu'un cas d'usage réel ne l'exige pas — c'est la règle
+Rien d'autre tant qu'un cas d'usage réel ne l'exige pas — c'est la règle
 anti-sur-ingénierie d'[AGENTS.md](../../AGENTS.md) §3 appliquée ici.
+
+> **Amendement du 2026-08-13 ([ADR 0003](0003-formules-agregations-et-dates-civiles.md)).** Le
+> cas d'usage est arrivé : le lot C1 de la [roadmap du contrat](../roadmap/core.md) — un modèle
+> qui ne sait pas dire « total = somme des lignes » ne peut pas décrire une facture. L'algèbre
+> passe donc à **18 kinds** et gagne l'arithmétique, les agrégations, une condition interne, la
+> concaténation, la mise en majuscules et trois opérations de date civile.
+>
+> **Ce que l'amendement ne touche pas, et qui reste la substance de cette décision :**
+>
+> - **pas de parseur** — l'expression reste un arbre validé par Zod, donc il n'y a toujours rien
+>   à échapper ;
+> - **pas d'appel de fonction générique** — aucun `{ kind: 'call'; fn: string; args: [] }`. Chaque
+>   opération est un kind à **champs nommés** et arité fixe, ce qui garde l'arbre fini et
+>   terminant par construction, garde le message de refus lisible (« champ `days` manquant »
+>   plutôt que « 2 éléments attendus, 1 reçu ») et ferme la place où `tva()` finirait par
+>   s'écrire ;
+> - **pas de fonctions définies par l'utilisateur**, pas de référence par nom ;
+> - **pas d'accès indexé dynamique** ;
+> - **pas de coercion**, et l'amendement l'*étend* au lieu de l'éroder : `concat` refuse un
+>   nombre, et la mise en chaîne s'écrit explicitement `text(valeur)` ;
+> - **pas d'horloge, pas de lecture d'environnement** — voir la troisième décision
+>   d'implémentation ci-dessous, que l'ADR 0003 outille au lieu de la relâcher.
+>
+> La distinction qui porte tout l'amendement : *élargir un jeu fermé d'opérations nommées n'est
+> pas ouvrir un espace de noms.* Le premier se relit ; le second se remplit et ne se vide jamais.
 
 L'option B reste ouverte **par-dessus** : une syntaxe textuelle pourra plus tard
 compiler *vers* l'AST structuré, comme sucre syntaxique pour développeurs. C'est
@@ -132,7 +160,15 @@ pas une convention de nommage qu'Openview imposerait — c'est la conséquence d
 déterminisme exigé par le lot E6 du [moteur](../roadmap/engine.md) : deux
 exécutions du même modèle doivent donner le même document au caractère près, ce
 qu'un évaluateur qui lit l'horloge ne peut pas garantir. La règle vaut d'avance
-pour l'ADR 0003 (formatage) : une date se **formate**, elle ne se fabrique pas.
+pour le formatage (lot C6) : une date se **formate**, elle ne se fabrique pas.
+
+> **Tenue, et désormais outillée.** L'[ADR 0003](0003-formules-agregations-et-dates-civiles.md)
+> ajoute trois opérations de date **sans** ajouter d'horloge : `dateAdd`, `dateDiff` et
+> `endOfMonth` sont des fonctions pures de leurs arguments, calculées par arithmétique entière
+> dans `civil-date.ts` — sans un seul `Date`, sans un seul `Intl`. « Aujourd'hui » reste une
+> donnée que l'intégrateur nomme. Et la règle cesse de reposer sur la seule vigilance d'un
+> relecteur : un `override` Biome et un plugin GritQL refusent désormais la lecture
+> d'environnement dans `core` et `engine`.
 
 ---
 

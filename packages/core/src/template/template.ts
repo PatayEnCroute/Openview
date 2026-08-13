@@ -10,12 +10,25 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  * older release must stay renderable: this is the one decision that cannot be
  * revisited once a real user has saved a document.
  *
- * "Whenever" includes adding a purely OPTIONAL field, which needs no migration
- * step but still needs the bump. Zod strips unknown keys, so a document written by
- * a newer release and opened by an older one loses the new field silently -- and
- * an editor then re-saves the loss. The version is what makes migrateToCurrent
- * refuse the document instead ("written by a newer release; upgrade before
- * opening it").
+ * "Whenever" covers two incompatibilities, and NEITHER of them produces a legible
+ * error without the bump. Both are measured, not supposed.
+ *
+ * SILENT LOSS -- adding a purely OPTIONAL field. Zod strips unknown keys, so a
+ * document written by a newer release and opened by an older one loses the new
+ * field with no error at all, and an editor then re-saves the loss.
+ *
+ * ILLEGIBLE REFUSAL -- WIDENING a union, which is what ADR 0003 did to the
+ * expression algebra. An older build meets a kind it has no member for, and Zod
+ * reports `"note": "No matching discriminator"`, `"message": "Invalid input"` on a
+ * path like `root.children.0.content.1.value.kind`: not an OpenviewError, not a
+ * TemplateMigrationError, no mention of a version, and no remedy for whoever reads
+ * it. With the bump, the same document yields
+ * `TemplateMigrationError: Template uses schema version 2 but this build
+ * understands at most 1. It was written by a newer release of Openview; upgrade
+ * before opening it.` -- which is the message lot C8 is being built to produce.
+ *
+ * A migration that only stamps the version is therefore NOT a phantom migration:
+ * the stamp is the entire mechanism behind that second message.
  */
 export const CURRENT_SCHEMA_VERSION = 1;
 
