@@ -14,7 +14,19 @@ export interface OpenviewDesignerOptions {
 
 export interface OpenviewDesignerProps {
   initialTemplate?: Partial<Template> | undefined;
-  dataSchema?: Record<string, unknown> | undefined;
+  /**
+   * The integrating application's data catalogue, so the field picker can offer
+   * paths instead of asking the author to type them.
+   *
+   * Named a catalogue, not a schema, on purpose: a schema would be something
+   * Openview REQUIRES of the caller, and it requires nothing. Its shape and its
+   * field names belong entirely to the host application; Openview displays it and
+   * reserves no key in it.
+   *
+   * Optional by design -- with no catalogue the Designer still works, the author
+   * types paths by hand and nothing checks them. Never make it required.
+   */
+  dataCatalogue?: Record<string, unknown> | undefined;
   options?: OpenviewDesignerOptions | undefined;
   onChange?: ((template: Template) => void) | undefined;
   onSave?: ((template: Template) => Promise<void> | void) | undefined;

@@ -1,5 +1,5 @@
 /**
- * @openview/core -- data contracts, AST, expressions and ports.
+ * @openview/core -- template contracts, AST, expressions and ports.
  *
  * Pure TypeScript and Zod: no React, no Node, no browser API. That constraint is
  * enforced by this package's `lib`/`types` and by `noRestrictedImports`, not by
