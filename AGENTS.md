@@ -46,11 +46,31 @@ La colonne de droite dit ce qui vous arrêtera réellement.
 | DOM interdit dans `core`/`engine`, Node interdit dans les paquets navigateur | **tsc** (`lib`/`types` par paquet) |
 | Extensions `.js` sur les imports relatifs de `core`/`engine` | **tsc** (`NodeNext`) |
 | Couverture ≥ 90 %, tests type-checkés | **Vitest** + `tsconfig.typecheck.json` |
+| Aucune lecture d'environnement dans `core`/`engine` : constructeur `Date` à toute arité, `Date.now`, `Date.parse`, `Math.random`, `process.env`, `performance.*`, `globalThis.*`, `toLocale*`, les neuf getters locaux de `Date`, `Intl.*` sans locale, `Intl.DateTimeFormat` sans `timeZone` | **Biome** (`noJsRestrictedProperties` + plugin `no-environment-read`) — *sauf les cinq contournements ci-dessous* |
 | Assertion `<X>v`, promesses non attendues, patrons de conception, Zod-first | **Revue humaine uniquement** |
-| Aucune lecture d'environnement dans `core`/`engine` : `Date.now()`, `new Date()` sans argument, `Intl.*` sans locale explicite, `Math.random`, `process.env` | **Revue humaine uniquement** — *à outiller* |
 
-Les deux dernières lignes du tableau sont votre responsabilité directe : rien ne
-vous rattrapera.
+La dernière ligne du tableau est votre responsabilité directe : rien ne vous
+rattrapera.
+
+**Et la ligne « lecture d'environnement » n'est couverte qu'en partie — il faut le
+dire, sinon le tableau fait exactement ce qu'il existe pour empêcher.** Cinq
+contournements restent muets et le resteront : un **alias**
+(`const C = Date; new C()`), une **locale `undefined` explicite**
+(`Intl.NumberFormat(undefined, opts)`), une **diffusion d'arguments**
+(`Intl.NumberFormat(...args)`), un **`timeZone` porté par une variable** plutôt que
+par un littéral, et **toute indirection par une valeur** que le motif ne peut pas
+suivre. Ceux-là sont barrés par la revue.
+
+Ce qui **passe** délibérément, parce que C6 et E4 en ont besoin :
+`Intl.NumberFormat('fr-FR')`, `Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`,
+leurs homologues `new`, et `Date.UTC(…)`. Formater dans une locale que le **modèle**
+déclare est permis ; lire celle de la **machine** ne l'est pas.
+
+> ⚠️ `noJsRestrictedProperties` est une règle **nursery**, hors versionnement
+> sémantique : une montée de Biome peut la renommer ou la retirer **en silence**. La
+> sonde jetable décrite dans l'ADR 0003 doit être rejouée à chaque montée ; si la
+> règle disparaît, le repli est de rapatrier ses entrées dans le plugin, qui
+> appartient au dépôt.
 
 ---
 

@@ -1,0 +1,66 @@
+// Enforces AGENTS.md, "Ce qu'Openview n'est pas": core and engine never read the machine.
+//
+// Everything that depends on the ARGUMENT LIST lives here, because no Biome rule reasons
+// about arguments. Verified on 2.5.8:
+//   - `noRestrictedGlobals` knows names only, so denying `Intl` also denies
+//     `Intl.NumberFormat('fr-FR')`, which lot C6 and lot E4 need.
+//   - `noJsRestrictedProperties` matches an object/property pair and never an argument
+//     list, so an `{ "object": "Intl", "property": "DateTimeFormat" }` entry fires on the
+//     one correct spelling, `Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`, too.
+//
+// Everything that is a plain property ban -- Date.now, Date.parse, Math.random,
+// process.env, performance.*, globalThis.*, toLocale*, the nine local Date getters --
+// stays in biome.jsonc. That rule, not this plugin, catches the computed spelling
+// Date['now']() and the destructured spelling const { now } = Date.
+//
+// TWO DISTINCTIONS THIS FILE EXISTS FOR:
+//   1. LOCALE. `Intl.X()` with no argument falls back to the host locale.
+//   2. TIME ZONE. A locale is NOT enough for a date: `Intl.DateTimeFormat('fr-FR')`
+//      formats in the host zone, and resolvedOptions().timeZone hands it back. A civil
+//      date YYYY-MM-DD has no stable rendering in any zone but an explicit one.
+// The `Date` constructor is refused at EVERY arity, not just the empty one: `new Date()`
+// reads the clock and `new Date(2026, 0, 1)` reads the zone. core and engine need none
+// of it -- civil-date.ts covers the calendar, `Date.UTC(...)` stays available (verified
+// not refused), and Intl formatters accept an epoch number with no Date in sight.
+//
+// GRITQL BEHAVIOUR, VERIFIED, because none of it is obvious:
+//   - ONE metavariable in an argument list matches THE WHOLE LIST, empty included:
+//     `new Date($args)` fires on `new Date()` and on `new Date(2026, 0, 1)` alike.
+//   - TWO OR MORE metavariables pin the arity exactly: `new Date($a, $b)` skips a
+//     three-argument call. That is why the whole-list form is the one used here.
+//   - An EMPTY list in the pattern pins arity zero: `Intl.$f()` leaves
+//     `Intl.NumberFormat('fr-FR')` alone.
+//   - `new Date` without parentheses is a DISTINCT node; `new Date($args)` does not
+//     cover it, hence its own branch.
+//
+// KNOWN GAPS, barred by review and not by this plugin, all verified silent:
+//   - aliasing: `const Clock = Date; new Clock();`
+//   - an explicitly undefined locale: `Intl.NumberFormat(undefined, options)`
+//   - a spread argument list: `Intl.NumberFormat(...args)`
+//   - a timeZone passed through a variable: `Intl.DateTimeFormat(l, opts)` where `opts`
+//     is built elsewhere. The matcher sees the identifier, not its value.
+//   - any indirection through a value the matcher cannot follow.
+language js(typescript)
+
+or {
+  `new Date($args)` as $clock where {
+    register_diagnostic(span=$clock, message="The `Date` constructor reads the machine in core/engine: `new Date()` reads the clock, and `new Date(2026, 0, 1)` reads the host time zone -- so two renders of one template cannot produce the same document (AGENTS.md: no environment read in core/engine, roadmap E6). Use civil-date.ts for calendar work, take the render date from the scope, and `Date.UTC(...)` if you need an instant.", severity="error")
+  },
+  `new Date` as $clock where {
+    register_diagnostic(span=$clock, message="`new Date` reads the host clock, so two renders of one template cannot produce the same document (AGENTS.md: no environment read in core/engine, roadmap E6). Take the date from the render scope; use civil-date.ts for calendar work.", severity="error")
+  },
+  `Intl.$formatter()` as $icu where {
+    register_diagnostic(span=$icu, message="`Intl.*` called with no argument falls back to the host locale, which is an environment read (AGENTS.md). Pass the locale the template declares: `Intl.NumberFormat('fr-FR')` stays allowed.", severity="error")
+  },
+  `new Intl.$formatter()` as $icu where {
+    register_diagnostic(span=$icu, message="`new Intl.*` called with no argument falls back to the host locale, which is an environment read (AGENTS.md). Pass the locale the template declares: `new Intl.NumberFormat('fr-FR')` stays allowed.", severity="error")
+  },
+  `Intl.DateTimeFormat($args)` as $zone where {
+    $args <: not contains `timeZone`,
+    register_diagnostic(span=$zone, message="`Intl.DateTimeFormat` without an explicit `timeZone` formats in the HOST time zone, even when the locale is explicit: the same instant prints two different civil dates in Auckland and in Los Angeles (roadmap E6). A locale says how to spell it, not which day it is. Pass both: `Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`.", severity="error")
+  },
+  `new Intl.DateTimeFormat($args)` as $zone where {
+    $args <: not contains `timeZone`,
+    register_diagnostic(span=$zone, message="`new Intl.DateTimeFormat` without an explicit `timeZone` formats in the HOST time zone, even when the locale is explicit (roadmap E6). Pass both: `new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`.", severity="error")
+  }
+}

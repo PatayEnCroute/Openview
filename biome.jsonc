@@ -171,6 +171,129 @@
           }
         }
       }
+    },
+    {
+      /* Enforces AGENTS.md, "Ce qu'Openview n'est pas": core and engine never read the
+         machine. This is not the manoeuvre AGENTS.md 7 forbids -- 7 refuses LOOSENING a
+         constraint to unblock a build, and this ADDS one (ADR 0003, decision 8).
+
+         Verified: `plugins` declared in an override ADDS to the root `plugins`, so
+         `no-double-cast` and `no-silent-catch` keep applying here. Verified too: this
+         fourth override does NOT reset the `noRestrictedImports` of the first three, so the
+         architecture guards stay alive.
+
+         Declared in the OVERRIDE and not at the root on purpose: `designer`, `viewer` and
+         `apps/playground` keep the right to call `new Date()`, which the playground needs.
+
+         `noJsRestrictedProperties` is a NURSERY rule -- outside semantic versioning, so a
+         Biome upgrade may rename or drop it silently. Replay the disposable probe at every
+         upgrade; if the rule disappears, move these entries into the plugin, which belongs
+         to this repository.
+
+         The two pieces are COMPLEMENTARY, not redundant. This rule sees a computed
+         `Date['now']()` and a destructured `const { now } = Date`, but never an ARGUMENT
+         LIST. Everything that turns on arguments lives in the plugin, because no Biome rule
+         reasons about them: `noRestrictedGlobals` knows names only, so banning `Intl` would
+         also ban `Intl.NumberFormat('fr-FR')`, which lots C6 and E4 need. */
+      "includes": ["packages/core/**", "packages/engine/**"],
+      "plugins": ["./tools/biome/no-environment-read.grit"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noJsRestrictedProperties": {
+              "level": "error",
+              "options": {
+                "entries": [
+                  {
+                    "object": "Date",
+                    "property": "now",
+                    "message": "Date.now() reads the host clock, so two renders of one template cannot produce the same document (E6). The render date is data the integrator supplies, under whatever name it chooses."
+                  },
+                  {
+                    "object": "Date",
+                    "property": "parse",
+                    "message": "Date.parse() is only specified for the ISO form; anywhere else its result is engine-dependent. Use civil-date.ts."
+                  },
+                  {
+                    "object": "Math",
+                    "property": "random",
+                    "message": "Math.random() makes a render irreproducible (E6)."
+                  },
+                  {
+                    "object": "process",
+                    "property": "env",
+                    "message": "process.env makes the render depend on the execution environment (E6)."
+                  },
+                  {
+                    "object": "performance",
+                    "message": "performance.now() is a clock, exactly like Date.now()."
+                  },
+                  {
+                    "object": "globalThis",
+                    "message": "globalThis.* is the back door to every global refused above. Deliberately broader than it needs to be: core and engine reference no global through it today, so the entry costs nothing. If a deterministic use ever appears, name it in the PR rather than widening the rule."
+                  },
+                  {
+                    "property": "getFullYear",
+                    "message": "The local Date getters read the host time zone: the same instant yields a different civil date in Auckland and in Los Angeles (E6). Use getUTC*, or civil-date.ts, which needs no Date at all."
+                  },
+                  {
+                    "property": "getMonth",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getDate",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getDay",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getHours",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getMinutes",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getSeconds",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getMilliseconds",
+                    "message": "The local Date getters read the host time zone (E6). Use getUTC*, or civil-date.ts."
+                  },
+                  {
+                    "property": "getTimezoneOffset",
+                    "message": "getTimezoneOffset() IS the host time zone (E6)."
+                  },
+                  {
+                    "property": "toLocaleString",
+                    "message": "toLocale* falls back to the host locale, and for a date to the host time zone as well. This ban is an over-approximation: it also refuses value.toLocaleString('fr-FR'), which does carry a locale -- the rule cannot see an argument list. Nothing is lost, because C6 formats through Intl.NumberFormat(locale) and Intl.DateTimeFormat(locale, { timeZone }), both of which stay allowed and say what they read."
+                  },
+                  {
+                    "property": "toLocaleDateString",
+                    "message": "toLocale* falls back to the host locale and, for a date, to the host time zone. Over-approximated on purpose: use Intl.DateTimeFormat(locale, { timeZone: 'UTC' }), which the plugin lets through."
+                  },
+                  {
+                    "property": "toLocaleTimeString",
+                    "message": "toLocale* falls back to the host locale and, for a date, to the host time zone. Over-approximated on purpose: use Intl.DateTimeFormat(locale, { timeZone: 'UTC' }), which the plugin lets through."
+                  },
+                  {
+                    "property": "toLocaleUpperCase",
+                    "message": "toLocale* reads the host locale, and toUpperCase() is what the algebra mandates instead."
+                  },
+                  {
+                    "property": "toLocaleLowerCase",
+                    "message": "toLocale* reads the host locale, and toLowerCase() is what the algebra mandates instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }
