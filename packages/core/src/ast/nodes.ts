@@ -1,12 +1,10 @@
 import { z } from 'zod/v4';
 import {
+  aliasSchema,
   type Expression,
   ExpressionSchema,
-  isIdentifier,
-  type LiteralExpression,
-  LiteralExpressionSchema,
-  type PathExpression,
-  PathExpressionSchema,
+  type PrintableExpression,
+  PrintableExpressionSchema,
 } from '../expression/expression.js';
 
 /**
@@ -45,15 +43,19 @@ export interface TextLiteralSegment {
 export interface TextBindingSegment {
   readonly kind: 'binding';
   /**
-   * A literal or a path, not the full expression algebra. Those two are the only
-   * kinds that yield something printable: `compare`, `logical`, `not` and
+   * The printable sub-algebra, not the whole of it. `compare`, `logical`, `not` and
    * `isEmpty` are predicates, and a print position that accepted them would let a
-   * template print `true` into an invoice. The two sibling expression positions
-   * each enforce their own result kind at evaluation (`evaluatePredicate` refuses
-   * a non-boolean, `evaluateSequence` a non-list); this one enforces it at save
-   * time, where the narrowing costs no migration.
+   * template print `true` into an invoice. The two sibling expression positions each
+   * enforce their own result kind at evaluation (`evaluatePredicate` refuses a
+   * non-boolean, `evaluateSequence` a non-list); this one enforces it at save time,
+   * where the narrowing costs no migration.
+   *
+   * ADR 0003 WIDENED this position from `literal | path` to every printable kind, so a
+   * binding can now carry a computed amount. What it refuses is unchanged -- see
+   * {@link PrintableExpression} for the guarantee, and for the reason a boolean
+   * *literal* was never covered by it.
    */
-  readonly value: LiteralExpression | PathExpression;
+  readonly value: PrintableExpression;
 }
 
 export type TextSegment = TextLiteralSegment | TextBindingSegment;
@@ -109,32 +111,14 @@ export type DocumentNodeType = DocumentNode['type'];
 
 const nodeIdSchema = z.string().min(1, 'A node id is required');
 
-/**
- * The alias binds as a key of the evaluation scope, so it has to be a single
- * identifier under exactly the rule paths obey -- otherwise a template could
- * declare a name that no path is allowed to read back.
- */
-const loopAliasSchema = z
-  .string()
-  .refine(
-    isIdentifier,
-    'A loop alias must be a single identifier, and may not be __proto__, constructor or prototype',
-  );
-
 export const TextLiteralSegmentSchema = z.object({
   kind: z.literal('literal'),
   text: z.string(),
 });
 
-/** The kinds that yield a printable value -- see {@link TextBindingSegment.value}. */
-const printableExpressionSchema = z.discriminatedUnion('kind', [
-  LiteralExpressionSchema,
-  PathExpressionSchema,
-]);
-
 export const TextBindingSegmentSchema = z.object({
   kind: z.literal('binding'),
-  value: printableExpressionSchema,
+  value: PrintableExpressionSchema,
 });
 
 /**
@@ -190,7 +174,7 @@ export const LoopNodeSchema = z.object({
   type: z.literal('loop'),
   id: nodeIdSchema,
   each: ExpressionSchema,
-  as: loopAliasSchema,
+  as: aliasSchema,
   children: z.array(DocumentNodeSchema),
 });
 

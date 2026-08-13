@@ -74,6 +74,8 @@ export type {
   LogicalExpression,
   NotExpression,
   PathExpression,
+  PredicateExpression,
+  PrintableExpression,
 } from './expression/expression.js';
 export {
   CompareExpressionSchema,
@@ -83,6 +85,7 @@ export {
   LogicalExpressionSchema,
   NotExpressionSchema,
   PathExpressionSchema,
+  PrintableExpressionSchema,
   pathsOf,
 } from './expression/expression.js';
 export type { ExpressionValueType } from './expression/value-type.js';

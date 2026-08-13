@@ -1,4 +1,4 @@
-import { type Expression, pathsOf } from '../expression/expression.js';
+import { type Expression, pathsOf, rootSegment } from '../expression/expression.js';
 import type {
   ConditionNode,
   ContainerNode,
@@ -184,11 +184,12 @@ function addCallerPaths(
     return;
   }
   for (const dataPath of pathsOf(expression)) {
-    // indexOf/slice rather than split: only the root segment decides, and this
-    // runs once per expression of the whole tree.
-    const dot = dataPath.indexOf('.');
-    const rootSegment = dot === -1 ? dataPath : dataPath.slice(0, dot);
-    if (!aliases.has(rootSegment)) {
+    // `rootSegment` now lives in expression.ts, because the expression-level filter
+    // there applies the same rule to an alias bound inside an expression. Note the
+    // rename trap this removes: the local was already called `rootSegment`, so adding
+    // the import without deleting the local would have shadowed it -- and
+    // `noUnusedImports` plus `noUnusedLocals` both refuse that.
+    if (!aliases.has(rootSegment(dataPath))) {
       into.add(dataPath);
     }
   }
