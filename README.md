@@ -13,6 +13,45 @@ Pensée sous une approche *Headless & Embeddable*, la solution offre une flexibi
 * **Utilisateurs finaux :** Non-développeurs (création et édition visuelle de modèles par blocs).
 * **Intégrateurs :** Développeurs cherchant une brique logicielle modulaire et robuste à intégrer dans leurs applications web.
 
+## ⚖️ Calculs, conformité et responsabilité
+
+Openview **calcule ce que le modèle lui demande de calculer, et rien d'autre**. Un
+modèle peut additionner, agréger les lignes d'un tableau, poser des conditions,
+calculer une échéance : c'est une capacité de calcul et de mise en page. **Ce n'est pas
+un moteur fiscal.**
+
+**Openview ne décide d'aucune règle fiscale, comptable ou légale.** Il ne détermine
+jamais, notamment :
+
+* un **taux de TVA** ou de toute autre taxe, ni le régime applicable, ni une exonération ;
+* une règle d'**exigibilité**, de prorata ou de calcul d'assiette ;
+* une règle d'**arrondi légal** — l'arrondi est déclaré par le modèle, donc choisi par son auteur ;
+* un **taux de change** : afficher « $ » ne convertit rien ;
+* les **mentions obligatoires** d'un document, qui sont du contenu de modèle ;
+* la conformité à un **format de facturation électronique** ou à une obligation déclarative, dans quelque pays que ce soit.
+
+**L'exactitude et la conformité des documents produits relèvent de l'application
+intégratrice et de l'auteur du modèle.** L'application intégratrice est la source de
+vérité : c'est elle qui connaît ses taux, ses règles et ses obligations, et c'est elle
+qui fournit les données. Openview les met en page et exécute les formules écrites dans
+le modèle — fidèlement, mais sans les juger.
+
+Ce partage n'est pas une précaution de circonstance, c'est une décision de conception.
+Un générateur de documents qui recalculerait une TVA deviendrait une **seconde source
+de vérité** à côté du logiciel de gestion : le jour où les deux divergent d'un centime,
+la facture est fausse et plus personne ne sait laquelle avait raison. Openview refuse
+délibérément ce rôle.
+
+Rien ne vous empêche d'exprimer ces règles dans vos données ou dans vos formules :
+c'est même prévu pour. Mais c'est alors **votre** règle, sous votre responsabilité.
+
+**Avant toute mise en production, faites vérifier les documents produits par les
+personnes qui en répondent.** Un document généré par Openview n'est pas une preuve de
+conformité.
+
+Cette clause précise le périmètre fonctionnel du projet. Elle s'ajoute à l'exclusion
+de garantie de la licence [Apache 2.0](LICENSE) et ne la remplace pas.
+
 ## 🏛️ Architecture et Rôles
 
 La solution s'articule autour de quatre briques fondamentales :
@@ -62,11 +101,21 @@ openview/
 
 ## 🗺️ Feuille de route (Roadmap)
 
-- [ ] Étape 1 : Définition du contrat de données et structuration du cœur (`@openview/core`)
-- [ ] Étape 2 : Implémentation du moteur de fusion et de rendu (`@openview/engine`)
-- [ ] Étape 3 : Développement du composant de lecture et d'interaction (`@openview/viewer`)
-- [ ] Étape 4 : Conception de l'éditeur visuel de templates (`@openview/designer`)
-- [ ] Étape 5 : Mise en place du Playground pour les tests d'intégration locaux
+Le document de référence est **la facture**, au niveau d'exigence d'un logiciel de
+gestion. Les cinq briques sont publiées **d'un seul bloc** : rien n'est mis à
+disposition avant que la chaîne complète produise un document.
+
+- [ ] **J1** — Une facture comptable est entièrement *décrite* par un modèle (`@openview/core`)
+- [ ] **J2** — Un modèle et des données produisent une facture d'une page en PDF (`@openview/engine`)
+- [ ] **J3** — La facture comptable sort : multi-pages, totaux reportés, deux langues (`@openview/engine`)
+- [ ] **J4** — On voit la facture avant de la produire, à l'identique (`@openview/viewer`)
+- [ ] **J5** — Une application tierce obtient son PDF sans installer le moteur (service de rendu)
+- [ ] **J6** — Un gestionnaire non développeur produit sa facture et écrit une formule, seul (`@openview/designer`)
+- [ ] **J7** — Publication : documentation par brique, exemples, démo en ligne
+
+Le détail — décisions produit, périmètre de chaque brique, hors-périmètre assumé,
+risques et ordre de sacrifice en cas de retard — vit dans
+[`docs/roadmap/`](docs/roadmap/README.md), avec une feuille de route par brique.
 
 ## 🤝 Contribuer
 
