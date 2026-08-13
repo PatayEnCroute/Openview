@@ -126,6 +126,35 @@ export interface PercentOfExpression {
 }
 
 /**
+ * "If ... then ... else" INSIDE a formula, rather than only around a block.
+ *
+ * It earns its place from the absence policy: `sub(total, discount)` with no discount
+ * yields nothing, which is honest and sometimes not what an author wants. The fallback is
+ * then theirs to write -- `sub(total, if(isEmpty(discount), 0, discount))` -- and never a
+ * fallback the evaluator guessed.
+ *
+ * ## Two field names, and one of them is not the obvious one
+ *
+ * `whenTrue`/`whenFalse`, **not** `then`. Verified by running the real gate: `biome check`
+ * reports `This object defines a then property` on any object LITERAL carrying that
+ * field -- so on the Zod schema, on every test sample and on every playground formula.
+ * `lint/suspicious/noThenProperty` is an error in the `recommended` preset this repo
+ * enables, so `pnpm run lint` fails and the CI with it. A `biome-ignore` is no way out:
+ * AGENTS.md 1.1 forbids it without written justification, and it would have to be placed
+ * at every literal site. The rename costs nothing today -- and a migration after v1.0.
+ *
+ * Both branches are REQUIRED. An optional `whenFalse` would decide the absence policy on
+ * the author's behalf, which is the one thing this kind exists to avoid.
+ */
+export interface ConditionalExpression {
+  readonly kind: 'if';
+  /** The full algebra, like every other predicate position: nothing is narrowed here. */
+  readonly when: Expression;
+  readonly whenTrue: PrintableExpression;
+  readonly whenFalse: PrintableExpression;
+}
+
+/**
  * What yields a value a document can print, and therefore what a text binding
  * accepts.
  *
@@ -140,7 +169,8 @@ export type PrintableExpression =
   | LiteralExpression
   | PathExpression
   | ArithmeticExpression
-  | PercentOfExpression;
+  | PercentOfExpression
+  | ConditionalExpression;
 
 /**
  * What yields a boolean. Refused in a print position AT PARSE TIME, where the refusal
@@ -260,6 +290,7 @@ function printableMembers() {
     PathExpressionSchema,
     ArithmeticExpressionSchema,
     PercentOfExpressionSchema,
+    ConditionalExpressionSchema,
   ] as const;
 }
 
@@ -321,6 +352,13 @@ export const PercentOfExpressionSchema = z.object({
   kind: z.literal('percentOf'),
   base: PrintableExpressionSchema,
   rate: PrintableExpressionSchema,
+});
+
+export const ConditionalExpressionSchema = z.object({
+  kind: z.literal('if'),
+  when: ExpressionSchema,
+  whenTrue: PrintableExpressionSchema,
+  whenFalse: PrintableExpressionSchema,
 });
 
 export const CompareExpressionSchema = z.object({
@@ -392,6 +430,13 @@ function collectPaths(
     case 'percentOf':
       collectPaths(expression.base, aliases, into);
       collectPaths(expression.rate, aliases, into);
+      break;
+    case 'if':
+      // Both branches are collected even though only one will be evaluated: the analysis
+      // reports what a template MAY read, and which branch runs depends on the data.
+      collectPaths(expression.when, aliases, into);
+      collectPaths(expression.whenTrue, aliases, into);
+      collectPaths(expression.whenFalse, aliases, into);
       break;
     case 'logical':
       for (const operand of expression.operands) {

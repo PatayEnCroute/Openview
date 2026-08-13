@@ -14,6 +14,7 @@ import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } f
 import type {
   ArithmeticExpression,
   ArithmeticOperator,
+  ConditionalExpression,
   Expression,
   LiteralExpression,
   PathExpression,
@@ -328,6 +329,88 @@ describe('percentOf', () => {
     expect(expectEvaluationError(() => percent(path('broken.huge'), literal(1e10))).code).toBe(
       'not-finite',
     );
+  });
+});
+
+describe('the conditional inside a formula', () => {
+  const conditional = (
+    when: Expression,
+    whenTrue: PrintableExpression,
+    whenFalse: PrintableExpression,
+  ): ConditionalExpression => ({ kind: 'if', when, whenTrue, whenFalse });
+
+  it('picks a branch by its condition', () => {
+    const guarded = conditional(
+      { kind: 'compare', op: 'gt', left: path('total'), right: literal(0) },
+      literal('positive'),
+      literal('zero'),
+    );
+    expect(evaluateExpression(guarded, numeric)).toBe('positive');
+    expect(evaluateExpression(guarded, { total: 0 })).toBe('zero');
+  });
+
+  it('does NOT evaluate the branch it did not take', () => {
+    // The one test of the lot that fails if the implementation is written "naturally" --
+    // evaluate both branches, then choose. The short circuit is a correctness rule: `and`
+    // and `or` already short-circuit, so an author assumes the "if" does too, and the
+    // surprise would be paid in a division by zero on an untaken branch.
+    const safe = conditional(
+      { kind: 'compare', op: 'gt', left: path('qty'), right: literal(0) },
+      arithmetic('div', path('total'), path('qty')),
+      literal(0),
+    );
+
+    expect(evaluateExpression(safe, numeric)).toBe(0);
+    expect(evaluateExpression(safe, { total: 100, qty: 4 })).toBe(25);
+  });
+
+  it('is what lets an author write their own fallback for absence', () => {
+    // `sub(total, discount)` with no discount yields nothing, which is honest. The policy
+    // belongs to the template's author, never to a fallback the evaluator guessed.
+    const withFallback = arithmetic(
+      'sub',
+      path('total'),
+      conditional(
+        { kind: 'isEmpty', operand: path('line.rebate') },
+        literal(0),
+        path('line.rebate'),
+      ),
+    );
+
+    expect(evaluateExpression(withFallback, numeric)).toBe(100);
+    expect(evaluateExpression(withFallback, { total: 100, line: { rebate: 15 } })).toBe(85);
+  });
+
+  it('refuses truthiness in its condition, like every other predicate position', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(conditional(path('total'), literal(1), literal(2)), numeric),
+      ),
+    ).toStrictEqual({
+      code: 'not-a-boolean',
+      site: 'if',
+      at: ['when'],
+      actualType: 'number',
+    });
+  });
+
+  it('names the branch it failed in', () => {
+    const broken = conditional(
+      literal(true),
+      arithmetic('mul', path('broken.text'), literal(1)),
+      literal(0),
+    );
+
+    expect(expectEvaluationError(() => evaluateExpression(broken, numeric)).at).toStrictEqual([
+      'whenTrue',
+      'left',
+    ]);
+  });
+
+  it('treats an absent condition as false, so the else branch runs', () => {
+    expect(
+      evaluateExpression(conditional(path('nothing'), literal('yes'), literal('no')), numeric),
+    ).toBe('no');
   });
 });
 

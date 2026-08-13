@@ -485,6 +485,21 @@ export function evaluateExpression(
           evaluateWithin(expression.rate, ['rate'], scope, budget),
           'percentOf',
         );
+      case 'if': {
+        // The short circuit is a CORRECTNESS rule, not an optimisation: `and`/`or` already
+        // short-circuit, so an author legitimately assumes the "if" does too -- and the
+        // surprise would be paid in a division by zero on a branch that was not taken.
+        // Written "naturally" (evaluate both, then choose), this is the one test of the lot
+        // that fails.
+        const taken = requireBoolean(
+          evaluateWithin(expression.when, ['when'], scope, budget),
+          'if',
+          ['when'],
+        );
+        return taken
+          ? evaluateWithin(expression.whenTrue, ['whenTrue'], scope, budget)
+          : evaluateWithin(expression.whenFalse, ['whenFalse'], scope, budget);
+      }
       case 'compare':
         return compare(
           expression.op,

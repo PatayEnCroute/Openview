@@ -3,6 +3,7 @@ import type { z } from 'zod/v4';
 import {
   type ArithmeticExpressionSchema,
   type CompareExpressionSchema,
+  type ConditionalExpressionSchema,
   type Expression,
   type ExpressionKind,
   ExpressionSchema,
@@ -42,6 +43,7 @@ type EnumeratedMembers =
   | z.infer<typeof PathExpressionSchema>
   | z.infer<typeof ArithmeticExpressionSchema>
   | z.infer<typeof PercentOfExpressionSchema>
+  | z.infer<typeof ConditionalExpressionSchema>
   | z.infer<typeof CompareExpressionSchema>
   | z.infer<typeof LogicalExpressionSchema>
   | z.infer<typeof NotExpressionSchema>
@@ -69,6 +71,12 @@ const SAMPLES: { readonly [K in ExpressionKind]: Extract<Expression, { kind: K }
     base: { kind: 'path', path: 'invoice.total' },
     rate: { kind: 'literal', value: 20 },
   },
+  if: {
+    kind: 'if',
+    when: { kind: 'isEmpty', operand: { kind: 'path', path: 'invoice.discount' } },
+    whenTrue: { kind: 'literal', value: 0 },
+    whenFalse: { kind: 'path', path: 'invoice.discount' },
+  },
   compare: {
     kind: 'compare',
     op: 'gt',
@@ -92,6 +100,7 @@ const PRINTABLE_KINDS: { readonly [K in PrintableExpression['kind']]: true } = {
   path: true,
   arithmetic: true,
   percentOf: true,
+  if: true,
 };
 
 describe('ExpressionSchema', () => {
@@ -283,6 +292,19 @@ describe('pathsOf', () => {
     };
 
     expect([...pathsOf(computed)]).toStrictEqual(['invoice.total', 'invoice.discountRate']);
+  });
+
+  it('collects BOTH branches of a conditional', () => {
+    // The analysis reports what a template MAY read; which branch runs depends on the data,
+    // so reporting only one would tell an integrator a key is unnecessary when it is.
+    const guarded: Expression = {
+      kind: 'if',
+      when: { kind: 'isEmpty', operand: { kind: 'path', path: 'invoice.rebate' } },
+      whenTrue: { kind: 'literal', value: 0 },
+      whenFalse: { kind: 'path', path: 'invoice.rebate' },
+    };
+
+    expect([...pathsOf(guarded)]).toStrictEqual(['invoice.rebate']);
   });
 
   it('throws on an expression kind it does not know', () => {
