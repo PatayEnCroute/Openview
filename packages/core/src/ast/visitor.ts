@@ -227,7 +227,7 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
  * 0001), the engine can tell a caller which keys a template needs before
  * rendering anything.
  *
- * Two limits, both deliberate, and both narrower than an earlier version of this
+ * THREE limits, all deliberate, and all narrower than an earlier version of this
  * docstring claimed.
  *
  * Paths rooted at a loop alias are excluded, because they are internal
@@ -240,6 +240,20 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
  * a child reading `invoice.total` -- silently changes what that child means, and
  * this function reports nothing at all rather than a collision. Detecting it needs
  * the same scope-qualified output, and is open for the same reason.
+ *
+ * ADR 0003 adds the third, and it is the second one at two new sites: an EXPRESSION can
+ * now bind an alias too. `sum(invoice.lines, invoice, invoice.total)` shadows a caller key
+ * from inside a formula, and produces the same silent hole as a loop alias does. Left
+ * documented and not fixed, for the same reason as the other two -- but leaving it
+ * unwritten would restart exactly the defect ADR 0002 reproached the old docstring for:
+ * *it promised, and it lied.*
+ *
+ * What is NOT a limit, and cost nothing: an alias bound inside an expression never leaks
+ * out of it. `pathsOf` carries its own alias context, so `line` in
+ * `sum(invoice.lines, line, line.total)` is filtered there rather than being demanded from
+ * an integrator who will never supply it. `NodeReads.binds` stays a single name for that
+ * reason -- widening it to a list would leak an expression's alias to children that have
+ * no business reading it.
  */
 export function collectDataPaths(root: DocumentNode): readonly string[] {
   const found = new Set<string>();

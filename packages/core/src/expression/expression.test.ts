@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import {
+  type AggregateExpressionSchema,
   type ArithmeticExpressionSchema,
   type CompareExpressionSchema,
   type ConditionalExpressionSchema,
+  type CountExpressionSchema,
   type Expression,
   type ExpressionKind,
   ExpressionSchema,
+  type FilterExpressionSchema,
   type IsEmptyExpressionSchema,
   isIdentifier,
   type LiteralExpressionSchema,
@@ -43,11 +46,14 @@ type EnumeratedMembers =
   | z.infer<typeof PathExpressionSchema>
   | z.infer<typeof ArithmeticExpressionSchema>
   | z.infer<typeof PercentOfExpressionSchema>
+  | z.infer<typeof AggregateExpressionSchema>
+  | z.infer<typeof CountExpressionSchema>
   | z.infer<typeof ConditionalExpressionSchema>
   | z.infer<typeof CompareExpressionSchema>
   | z.infer<typeof LogicalExpressionSchema>
   | z.infer<typeof NotExpressionSchema>
-  | z.infer<typeof IsEmptyExpressionSchema>;
+  | z.infer<typeof IsEmptyExpressionSchema>
+  | z.infer<typeof FilterExpressionSchema>;
 
 /**
  * One sample per kind, in a MAPPED type rather than a `Record<ExpressionKind, Expression>`.
@@ -70,6 +76,25 @@ const SAMPLES: { readonly [K in ExpressionKind]: Extract<Expression, { kind: K }
     kind: 'percentOf',
     base: { kind: 'path', path: 'invoice.total' },
     rate: { kind: 'literal', value: 20 },
+  },
+  aggregate: {
+    kind: 'aggregate',
+    op: 'sum',
+    source: { kind: 'path', path: 'invoice.lines' },
+    as: 'line',
+    value: { kind: 'path', path: 'line.total' },
+  },
+  count: { kind: 'count', source: { kind: 'path', path: 'invoice.lines' } },
+  filter: {
+    kind: 'filter',
+    source: { kind: 'path', path: 'invoice.lines' },
+    as: 'line',
+    where: {
+      kind: 'compare',
+      op: 'gt',
+      left: { kind: 'path', path: 'line.discount' },
+      right: { kind: 'literal', value: 0 },
+    },
   },
   if: {
     kind: 'if',
@@ -100,6 +125,8 @@ const PRINTABLE_KINDS: { readonly [K in PrintableExpression['kind']]: true } = {
   path: true,
   arithmetic: true,
   percentOf: true,
+  aggregate: true,
+  count: true,
   if: true,
 };
 
@@ -292,6 +319,64 @@ describe('pathsOf', () => {
     };
 
     expect([...pathsOf(computed)]).toStrictEqual(['invoice.total', 'invoice.discountRate']);
+  });
+
+  it('never reports an alias an expression bound for itself', () => {
+    // The bug ADR 0002 fixed for loops, which aggregations would have reintroduced: without
+    // an alias context here, `sum(invoice.lines, l, l.total)` would make an integrator
+    // handing over { invoice } be told a key `l` is missing when nothing is.
+    const summed: Expression = {
+      kind: 'aggregate',
+      op: 'sum',
+      source: { kind: 'path', path: 'invoice.lines' },
+      as: 'l',
+      value: {
+        kind: 'arithmetic',
+        op: 'mul',
+        left: { kind: 'path', path: 'l.quantity' },
+        right: { kind: 'path', path: 'company.rate' },
+      },
+    };
+
+    expect([...pathsOf(summed)]).toStrictEqual(['invoice.lines', 'company.rate']);
+  });
+
+  it('confines an alias to the sub-tree that declared it', () => {
+    // A copy per descent, not a mutation: `l` is invisible to the sibling below, so the
+    // caller key `l.after` is still reported.
+    const siblings: Expression = {
+      kind: 'arithmetic',
+      op: 'add',
+      left: {
+        kind: 'aggregate',
+        op: 'sum',
+        source: { kind: 'path', path: 'invoice.lines' },
+        as: 'l',
+        value: { kind: 'path', path: 'l.total' },
+      },
+      right: { kind: 'path', path: 'l.after' },
+    };
+
+    expect([...pathsOf(siblings)]).toStrictEqual(['invoice.lines', 'l.after']);
+  });
+
+  it('walks a filter through its own field names', () => {
+    const discounted: Expression = {
+      kind: 'count',
+      source: {
+        kind: 'filter',
+        source: { kind: 'path', path: 'invoice.lines' },
+        as: 'line',
+        where: {
+          kind: 'compare',
+          op: 'gt',
+          left: { kind: 'path', path: 'line.discount' },
+          right: { kind: 'path', path: 'company.threshold' },
+        },
+      },
+    };
+
+    expect([...pathsOf(discounted)]).toStrictEqual(['invoice.lines', 'company.threshold']);
   });
 
   it('collects BOTH branches of a conditional', () => {

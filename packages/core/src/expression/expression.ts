@@ -28,7 +28,7 @@ import { kindOf } from './value-type.js';
  * - {@link PrintableExpression} yields something a document can print, and is what a
  *   text binding accepts;
  * - {@link PredicateExpression} yields a boolean, refused in a print position;
- * - a list-valued sub-algebra joins them when `filter` lands.
+ * - {@link FilterExpression} yields a list, refused in a print position too.
  *
  * No position of the contract accepts LESS than it did before ADR 0003:
  * `compare.left/right`, `logical.operands`, `not.operand`, `isEmpty.operand`,
@@ -54,6 +54,21 @@ export type ComparisonOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte';
 export const ARITHMETIC_OPERATORS = ['add', 'sub', 'mul', 'div'] as const;
 
 export type ArithmeticOperator = (typeof ARITHMETIC_OPERATORS)[number];
+
+/**
+ * The four reductions, all homogeneous in return type: a number, or nothing.
+ *
+ * `count` is deliberately NOT one of them. It is a kind of its own with a single field,
+ * because "how many discounted lines" is `count(filter(...))` and adding it here would
+ * make the operator list inhomogeneous -- a `count` needs no `value` expression, and a
+ * `sum` cannot do without one.
+ *
+ * `min`/`max` are NUMERIC. Letting them order strings would put a lexicographic order on
+ * dates, which `civil-date.ts` exists precisely to make unreachable.
+ */
+export const AGGREGATE_OPERATORS = ['sum', 'avg', 'min', 'max'] as const;
+
+export type AggregateOperator = (typeof AGGREGATE_OPERATORS)[number];
 
 export interface LiteralExpression {
   readonly kind: 'literal';
@@ -155,6 +170,63 @@ export interface ConditionalExpression {
 }
 
 /**
+ * A reduction over a list: `sum(invoice.lines, line, line.total)`.
+ *
+ * ## Exactly the shape of a LoopNode
+ *
+ * `source`/`as`/`value` against `each`/`as`/`children`, and that is the most important
+ * result of this lot rather than a coincidence. The Designer reuses the loop widget, the
+ * scope is explicit so a formula bar can SHOW where it applies (lot D7), and the
+ * evaluation reuses `evaluateSequence` and `childScope` **without modifying either**: the
+ * machinery ADR 0002 delivered turns out to be exactly what the heaviest lot of the
+ * contract needed. No second scope primitive, no reserved name, and no new shadowing
+ * *mechanism*.
+ *
+ * The formula is "no new mechanism", not "no new shadowing": `aggregate.as` and
+ * `filter.as` are two new SITES where an alias can shadow a caller key, and
+ * `sum(invoice.lines, invoice, invoice.total)` is writable. What does not change is the
+ * resolution RULE, which `childScope` already carried for `LoopNode.as`. The consequence
+ * is documented as a third limit on `collectDataPaths` -- writing "no new shadowing" would
+ * do exactly what ADR 0002 reproached the old docstring for: promise, and lie.
+ */
+export interface AggregateExpression {
+  readonly kind: 'aggregate';
+  readonly op: AggregateOperator;
+  /** A path, or a `filter` -- anything list-valued. Evaluated in the ENCLOSING scope. */
+  readonly source: Expression;
+  readonly as: string;
+  readonly value: PrintableExpression;
+}
+
+/** How many elements a list has. One field, because `count(filter(...))` is the composition. */
+export interface CountExpression {
+  readonly kind: 'count';
+  readonly source: Expression;
+}
+
+/**
+ * The elements of a list that satisfy a predicate. LIST-VALUED, therefore outside the
+ * printable sub-algebra and refused in a print position.
+ *
+ * ## Why a kind, and not a `where?` on the aggregate
+ *
+ * A `where?` drags an `as?` along with it -- a `count` without a `where` needs no alias,
+ * with one it does -- which is two-storey conditional optionality under
+ * `exactOptionalPropertyTypes`, and a Zod message of the form "required unless..." that
+ * lot C8 could not render legibly. Composition replaces optionality, and **every field
+ * stays required everywhere**.
+ *
+ * An unbilled benefit: `LoopNode.each` is already typed `Expression`, so "repeat only the
+ * lines that were not cancelled" becomes expressible **without touching the loop node**.
+ */
+export interface FilterExpression {
+  readonly kind: 'filter';
+  readonly source: Expression;
+  readonly as: string;
+  readonly where: Expression;
+}
+
+/**
  * What yields a value a document can print, and therefore what a text binding
  * accepts.
  *
@@ -170,6 +242,8 @@ export type PrintableExpression =
   | PathExpression
   | ArithmeticExpression
   | PercentOfExpression
+  | AggregateExpression
+  | CountExpression
   | ConditionalExpression;
 
 /**
@@ -186,10 +260,10 @@ export type PredicateExpression =
 
 /**
  * Written as the union of the sub-algebras rather than a flat list, so the partition
- * is structural: a kind added to neither side fails to compile here instead of
+ * is structural: a kind added to none of them fails to compile here instead of
  * quietly belonging to nothing.
  */
-export type Expression = PrintableExpression | PredicateExpression;
+export type Expression = PrintableExpression | PredicateExpression | FilterExpression;
 
 export type ExpressionKind = Expression['kind'];
 
@@ -290,6 +364,8 @@ function printableMembers() {
     PathExpressionSchema,
     ArithmeticExpressionSchema,
     PercentOfExpressionSchema,
+    AggregateExpressionSchema,
+    CountExpressionSchema,
     ConditionalExpressionSchema,
   ] as const;
 }
@@ -303,8 +379,13 @@ function predicateMembers() {
   ] as const;
 }
 
+/** List-valued, so refused wherever a document prints. One member so far. */
+function listMembers() {
+  return [FilterExpressionSchema] as const;
+}
+
 export const ExpressionSchema: z.ZodType<Expression> = z.lazy(() =>
-  z.discriminatedUnion('kind', [...printableMembers(), ...predicateMembers()]),
+  z.discriminatedUnion('kind', [...printableMembers(), ...predicateMembers(), ...listMembers()]),
 );
 
 /**
@@ -354,6 +435,26 @@ export const PercentOfExpressionSchema = z.object({
   rate: PrintableExpressionSchema,
 });
 
+export const AggregateExpressionSchema = z.object({
+  kind: z.literal('aggregate'),
+  op: z.enum(AGGREGATE_OPERATORS),
+  source: ExpressionSchema,
+  as: aliasSchema,
+  value: PrintableExpressionSchema,
+});
+
+export const CountExpressionSchema = z.object({
+  kind: z.literal('count'),
+  source: ExpressionSchema,
+});
+
+export const FilterExpressionSchema = z.object({
+  kind: z.literal('filter'),
+  source: ExpressionSchema,
+  as: aliasSchema,
+  where: ExpressionSchema,
+});
+
 export const ConditionalExpressionSchema = z.object({
   kind: z.literal('if'),
   when: ExpressionSchema,
@@ -400,6 +501,15 @@ export function rootSegment(dataPath: string): string {
 const NO_ALIASES: ReadonlySet<string> = new Set<string>();
 
 /**
+ * A copy with one more alias in it. A copy, not a mutation: an alias is confined to the
+ * sub-tree that declares it, and leaking it to a sibling would silently drop a caller key
+ * from the analysis.
+ */
+function withAlias(aliases: ReadonlySet<string>, alias: string): ReadonlySet<string> {
+  return new Set(aliases).add(alias);
+}
+
+/**
  * Records the paths an expression reads, skipping those rooted at an alias the
  * expression itself binds.
  *
@@ -437,6 +547,20 @@ function collectPaths(
       collectPaths(expression.when, aliases, into);
       collectPaths(expression.whenTrue, aliases, into);
       collectPaths(expression.whenFalse, aliases, into);
+      break;
+    case 'count':
+      collectPaths(expression.source, aliases, into);
+      break;
+    case 'aggregate':
+      // `source` is evaluated in the ENCLOSING scope, before the alias binds, so it does
+      // not see it. `value` does. Getting that order wrong would either hide a caller key
+      // or demand an alias from the integrator.
+      collectPaths(expression.source, aliases, into);
+      collectPaths(expression.value, withAlias(aliases, expression.as), into);
+      break;
+    case 'filter':
+      collectPaths(expression.source, aliases, into);
+      collectPaths(expression.where, withAlias(aliases, expression.as), into);
       break;
     case 'logical':
       for (const operand of expression.operands) {

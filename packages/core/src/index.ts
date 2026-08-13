@@ -73,13 +73,17 @@ export {
   evaluateSequence,
 } from './expression/evaluate.js';
 export type {
+  AggregateExpression,
+  AggregateOperator,
   ArithmeticExpression,
   ArithmeticOperator,
   CompareExpression,
   ComparisonOperator,
   ConditionalExpression,
+  CountExpression,
   Expression,
   ExpressionKind,
+  FilterExpression,
   IsEmptyExpression,
   LiteralExpression,
   LiteralValue,
@@ -91,11 +95,15 @@ export type {
   PrintableExpression,
 } from './expression/expression.js';
 export {
+  AGGREGATE_OPERATORS,
+  AggregateExpressionSchema,
   ARITHMETIC_OPERATORS,
   ArithmeticExpressionSchema,
   CompareExpressionSchema,
   ConditionalExpressionSchema,
+  CountExpressionSchema,
   ExpressionSchema,
+  FilterExpressionSchema,
   IsEmptyExpressionSchema,
   LiteralExpressionSchema,
   LogicalExpressionSchema,

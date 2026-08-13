@@ -12,10 +12,13 @@ import { parseTemplate } from '../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../template/template.js';
 import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
 import type {
+  AggregateExpression,
+  AggregateOperator,
   ArithmeticExpression,
   ArithmeticOperator,
   ConditionalExpression,
   Expression,
+  FilterExpression,
   LiteralExpression,
   PathExpression,
   PrintableExpression,
@@ -329,6 +332,235 @@ describe('percentOf', () => {
     expect(expectEvaluationError(() => percent(path('broken.huge'), literal(1e10))).code).toBe(
       'not-finite',
     );
+  });
+});
+
+describe('aggregations, filter and count', () => {
+  const lines = {
+    invoice: {
+      lines: [
+        { sku: 'A', quantity: 2, unitPrice: 10, discount: 0 },
+        { sku: 'B', quantity: 1, unitPrice: 30, discount: 15 },
+        { sku: 'C', quantity: 4, unitPrice: 2.5, discount: 5 },
+      ],
+      empty: [],
+      total: 70,
+    },
+  };
+
+  const lineAmount: PrintableExpression = arithmetic(
+    'mul',
+    path('line.quantity'),
+    path('line.unitPrice'),
+  );
+
+  const reduce = (
+    op: AggregateOperator,
+    source: Expression,
+    value: PrintableExpression,
+  ): AggregateExpression => ({ kind: 'aggregate', op, source, as: 'line', value });
+
+  const discounted: FilterExpression = {
+    kind: 'filter',
+    source: path('invoice.lines'),
+    as: 'line',
+    where: { kind: 'compare', op: 'gt', left: path('line.discount'), right: literal(0) },
+  };
+
+  it('reduces lines whose amount is ITSELF a calculation', () => {
+    // The point of the lot: no amount is supplied by the render data. 2*10 + 1*30 + 4*2.5.
+    expect(evaluateExpression(reduce('sum', path('invoice.lines'), lineAmount), lines)).toBe(60);
+    expect(evaluateExpression(reduce('avg', path('invoice.lines'), lineAmount), lines)).toBe(20);
+    expect(evaluateExpression(reduce('min', path('invoice.lines'), lineAmount), lines)).toBe(10);
+    expect(evaluateExpression(reduce('max', path('invoice.lines'), lineAmount), lines)).toBe(30);
+  });
+
+  it('treats an empty list as no fault, and each operator answers in its own way', () => {
+    // `sum` has an additive identity, `count` has zero, and min/max/avg have neither.
+    expect(evaluateExpression(reduce('sum', path('invoice.empty'), lineAmount), lines)).toBe(0);
+    expect(evaluateExpression({ kind: 'count', source: path('invoice.empty') }, lines)).toBe(0);
+    expect(
+      evaluateExpression(reduce('avg', path('invoice.empty'), lineAmount), lines),
+    ).toBeUndefined();
+    expect(
+      evaluateExpression(reduce('min', path('invoice.empty'), lineAmount), lines),
+    ).toBeUndefined();
+    expect(
+      evaluateExpression(reduce('max', path('invoice.empty'), lineAmount), lines),
+    ).toBeUndefined();
+  });
+
+  it('treats an absent source as an empty list', () => {
+    expect(evaluateExpression(reduce('sum', path('invoice.missing'), lineAmount), lines)).toBe(0);
+    expect(evaluateExpression({ kind: 'count', source: path('invoice.missing') }, lines)).toBe(0);
+  });
+
+  it('ignores an element whose value is absent, and avg divides by the PRESENT ones', () => {
+    // The aggregate policy differs from the scalar one on purpose: in a scalar operation the
+    // author named two operands, so one missing says the premise fails; here they named ONE
+    // expression applied to N elements, and dropping the total of 60 lines because one has
+    // no discount would be the maximum of surprise.
+    const partial = {
+      invoice: { lines: [{ rebate: 10 }, { sku: 'no rebate' }, { rebate: 20 }] },
+    };
+
+    expect(
+      evaluateExpression(reduce('sum', path('invoice.lines'), path('line.rebate')), partial),
+    ).toBe(30);
+    // 30 / 2, not 30 / 3: `avg` does NOT avoid the division by zero by construction -- that
+    // is only true of the empty list, and a list of 60 lines where none carries a discount
+    // gives 0/0.
+    expect(
+      evaluateExpression(reduce('avg', path('invoice.lines'), path('line.rebate')), partial),
+    ).toBe(15);
+    expect(
+      evaluateExpression(reduce('avg', path('invoice.lines'), path('line.absent')), partial),
+    ).toBeUndefined();
+  });
+
+  it('refuses a source that is present but not a list, IN THE CALLER VOCABULARY', () => {
+    // The hard-coded `A loop needs a list` would have said **loop** to whoever wrote a sum.
+    expect(() =>
+      evaluateExpression(reduce('sum', path('invoice.total'), lineAmount), lines),
+    ).toThrow(/An aggregation needs a list/);
+    expect(() =>
+      evaluateExpression({ kind: 'count', source: path('invoice.total') }, lines),
+    ).toThrow(/A count needs a list/);
+    expect(() =>
+      evaluateExpression({ ...discounted, source: path('invoice.total') }, lines),
+    ).toThrow(/A filter needs a list/);
+
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(reduce('sum', path('invoice.total'), lineAmount), lines),
+      ),
+    ).toStrictEqual({
+      code: 'not-a-list',
+      site: 'aggregate',
+      at: ['source'],
+      actualType: 'number',
+    });
+  });
+
+  it('points at the offending element by INDEX, as a number and from the root', () => {
+    const mistyped = { invoice: { lines: [{ total: 1 }, { total: 'two' }] } };
+
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(reduce('sum', path('invoice.lines'), path('line.total')), mistyped),
+      ),
+    ).toStrictEqual({
+      code: 'operand-type',
+      site: 'aggregate',
+      at: ['value', 1],
+      actualType: 'string',
+    });
+  });
+
+  it('refuses a non-finite element value, and a non-finite total', () => {
+    const broken = { invoice: { lines: [{ total: Number.NaN }] } };
+    const huge = { invoice: { lines: [{ total: 1e308 }, { total: 1e308 }] } };
+
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(reduce('sum', path('invoice.lines'), path('line.total')), broken),
+      ),
+    ).toStrictEqual({
+      code: 'not-finite',
+      site: 'aggregate',
+      at: ['value', 0],
+      actualType: 'not-finite',
+    });
+    // At the exit too: 60 000 lines at 1e307 must not print Infinity into a document.
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(reduce('sum', path('invoice.lines'), path('line.total')), huge),
+      ),
+    ).toStrictEqual({
+      code: 'not-finite',
+      site: 'aggregate',
+      at: [],
+      actualType: 'not-finite',
+    });
+  });
+
+  it('accumulates POSITIONALLY, and never reorders', () => {
+    // Part of the contract, not an implementation detail: binary64 addition is not
+    // associative, so "the same bit on two machines" holds for a sum ONLY if nothing
+    // reorders. Summed left to right this is 0; in any other order it is 1.
+    const unstable = { invoice: { lines: [{ v: 1e16 }, { v: 1 }, { v: -1e16 }] } };
+
+    expect(evaluateExpression(reduce('sum', path('invoice.lines'), path('line.v')), unstable)).toBe(
+      0,
+    );
+  });
+
+  it('counts a filtered list, which is how "how many discounted lines" is written', () => {
+    expect(evaluateExpression({ kind: 'count', source: discounted }, lines)).toBe(2);
+    expect(evaluateExpression(reduce('sum', discounted, path('line.discount')), lines)).toBe(20);
+  });
+
+  it('refuses truthiness in a filter, like every other predicate position', () => {
+    const truthy: FilterExpression = { ...discounted, where: path('line.discount') };
+
+    expect(expectEvaluationError(() => evaluateExpression(truthy, lines))).toStrictEqual({
+      code: 'not-a-boolean',
+      site: 'filter',
+      at: ['where', 0],
+      actualType: 'number',
+    });
+  });
+
+  it('drives a loop node from a filter, without the node having been retyped', () => {
+    // Unbilled benefit of composition over an optional `where`: `LoopNode.each` was already
+    // typed `Expression`, so "repeat only the discounted lines" needed no change to the node.
+    expect(evaluateSequence(discounted, lines)).toHaveLength(2);
+  });
+
+  it('handles 60 000 elements without a RangeError', () => {
+    // min/max fold rather than spread: `Math.min(...values)` overflows the stack here, and
+    // 60 000 lines is a realistic accounting invoice rather than a stress test.
+    const many = { rows: Array.from({ length: 60_000 }, (_unused, index) => ({ v: index })) };
+
+    expect(evaluateExpression(reduce('max', path('rows'), path('line.v')), many)).toBe(59_999);
+    expect(evaluateExpression(reduce('min', path('rows'), path('line.v')), many)).toBe(0);
+    expect(evaluateExpression({ kind: 'count', source: path('rows') }, many)).toBe(60_000);
+  });
+
+  it('bounds a triply nested aggregate in bounded TIME', () => {
+    // Measured: the cost is O(n^k) where k is chosen by the template author -- 200 lines at
+    // three nesting levels is 8 080 402 steps and 17.5 seconds, at four about 58 minutes, at
+    // six centuries. No field, no length and no depth is abnormal; it is the product of the
+    // cardinalities that explodes, and nothing in the contract looks at that. The bound is
+    // what makes this refuse instead of run.
+    const rows = { rows: Array.from({ length: 30 }, (_unused, index) => ({ v: index })) };
+    const innermost = reduce('sum', path('rows'), path('line.v'));
+    const middle = reduce('sum', path('rows'), innermost);
+    const outermost = reduce('sum', path('rows'), middle);
+
+    const details = expectEvaluationError(() =>
+      evaluateExpression(outermost, rows, { budget: createBudget({ maxItemsVisited: 5_000 }) }),
+    );
+
+    expect(details.code).toBe('item-limit-exceeded');
+    if (details.code === 'item-limit-exceeded') {
+      expect(details.limit).toBe(5_000);
+    }
+  });
+
+  it('lets an alias shadow a caller key, which is a defined outcome and a documented hole', () => {
+    // Writable, and worth pinning rather than pretending otherwise: the resolution rule is
+    // the one `childScope` already carried for a loop alias. What changes is that there are
+    // two new SITES for it, which is why collectDataPaths grew a third documented limit.
+    const shadowing: AggregateExpression = {
+      kind: 'aggregate',
+      op: 'sum',
+      source: path('invoice.lines'),
+      as: 'invoice',
+      value: path('invoice.quantity'),
+    };
+
+    expect(evaluateExpression(shadowing, lines)).toBe(7);
   });
 });
 

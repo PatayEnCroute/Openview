@@ -3,7 +3,13 @@ import {
   type ExpressionErrorSite,
   ExpressionEvaluationError,
 } from '../errors.js';
-import type { ArithmeticOperator, ComparisonOperator, Expression } from './expression.js';
+import type {
+  AggregateExpression,
+  ArithmeticOperator,
+  ComparisonOperator,
+  Expression,
+  FilterExpression,
+} from './expression.js';
 import { createBudget, type EvaluationBudget } from './limits.js';
 import { type ExpressionValueType, kindOf, valueTypeOf } from './value-type.js';
 
@@ -338,6 +344,104 @@ function percentOf(base: unknown, rate: unknown, site: ExpressionErrorSite): num
   return requireFiniteResult((amount * points) / 100, site, []);
 }
 
+/**
+ * The elements of a list source, with the error path anchored on the `source` field.
+ *
+ * Shared by the three list-reducing kinds, so `evaluateSequence` and `childScope` are
+ * reused exactly as ADR 0002 delivered them -- no second scope primitive.
+ */
+function sourceItems(
+  source: Expression,
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+  caller: ExpressionErrorSite,
+): readonly unknown[] {
+  return prefixing(['source'], () => evaluateSequence(source, scope, { budget, caller }));
+}
+
+/**
+ * A reduction over a list.
+ *
+ * ## Where the aggregate policy differs from the scalar one, and why that is deliberate
+ *
+ * An element whose value is ABSENT is **ignored**, and `avg` divides by the number of
+ * values PRESENT. In a scalar operation the author named two operands, so one missing says
+ * the premise does not hold; in an aggregation they named ONE expression applied to N
+ * elements -- dropping the total of 60 lines because one line has no discount would be the
+ * maximum of surprise.
+ *
+ * `avg` does NOT avoid the division by zero by construction, which an earlier version of
+ * this design claimed. That is only true of the *empty* list: 60 lines of which none
+ * carries a discount give zero present values, hence 0/0. The exact rule is **absence as
+ * soon as the number of present values is nil**, whatever the list's length.
+ *
+ * The accumulation order is part of the contract: positional, never reordered. Binary64
+ * addition is not associative, so "the same bit on two machines" holds for a sum only if
+ * nothing reorders -- a property pinned by a test, not an implementation detail.
+ *
+ * `min`/`max` fold rather than spread: `Math.min(...values)` overflows the stack on 60 000
+ * elements, which is a realistic invoice and not a stress test.
+ */
+function aggregate(
+  expression: AggregateExpression,
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+): number | undefined {
+  const items = sourceItems(expression.source, scope, budget, 'aggregate');
+  let total = 0;
+  let present = 0;
+  let extremum: number | undefined;
+
+  for (const [index, item] of items.entries()) {
+    const itemScope = childScope(scope, expression.as, item);
+    const raw = prefixing(['value', index], () =>
+      evaluateExpression(expression.value, itemScope, { budget }),
+    );
+    const value = requireNumber(raw, 'aggregate', ['value', index]);
+    if (value === undefined) {
+      continue;
+    }
+    present += 1;
+    total += value;
+    if (extremum === undefined || (expression.op === 'min' ? value < extremum : value > extremum)) {
+      extremum = value;
+    }
+  }
+
+  if (expression.op === 'sum') {
+    // The additive identity, so an empty list sums to 0 -- an empty list is not a fault.
+    // The result is still checked: 60 000 lines at 1e307 must not print Infinity.
+    return requireFiniteResult(total, 'aggregate', []);
+  }
+  if (expression.op === 'avg') {
+    return present === 0 ? undefined : requireFiniteResult(total / present, 'aggregate', []);
+  }
+  // min and max have no identity element, so no present value means no result.
+  return extremum;
+}
+
+function filterItems(
+  expression: FilterExpression,
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+): readonly unknown[] {
+  const items = sourceItems(expression.source, scope, budget, 'filter');
+  const kept: unknown[] = [];
+
+  for (const [index, item] of items.entries()) {
+    const itemScope = childScope(scope, expression.as, item);
+    // Through `evaluatePredicate`, so there is no truthiness in a filter either: a
+    // `where` of `{ path: 'line.total' }` must not silently drop the zero lines.
+    const keep = prefixing(['where', index], () =>
+      evaluatePredicate(expression.where, itemScope, { budget, caller: 'filter' }),
+    );
+    if (keep) {
+      kept.push(item);
+    }
+  }
+  return kept;
+}
+
 function compare(
   op: ComparisonOperator,
   left: unknown,
@@ -485,6 +589,12 @@ export function evaluateExpression(
           evaluateWithin(expression.rate, ['rate'], scope, budget),
           'percentOf',
         );
+      case 'aggregate':
+        return aggregate(expression, scope, budget);
+      case 'count':
+        return sourceItems(expression.source, scope, budget, 'count').length;
+      case 'filter':
+        return filterItems(expression, scope, budget);
       case 'if': {
         // The short circuit is a CORRECTNESS rule, not an optimisation: `and`/`or` already
         // short-circuit, so an author legitimately assumes the "if" does too -- and the
@@ -576,6 +686,9 @@ export function evaluatePredicate(
  */
 const LIST_CALLER_SUBJECTS: Readonly<Partial<Record<ExpressionErrorSite, string>>> = {
   loop: 'A loop',
+  aggregate: 'An aggregation',
+  count: 'A count',
+  filter: 'A filter',
 };
 
 /**
