@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import {
+  type ArithmeticExpressionSchema,
   type CompareExpressionSchema,
   type Expression,
   type ExpressionKind,
@@ -11,6 +12,7 @@ import {
   type LogicalExpressionSchema,
   type NotExpressionSchema,
   type PathExpressionSchema,
+  type PercentOfExpressionSchema,
   type PrintableExpression,
   PrintableExpressionSchema,
   pathsOf,
@@ -38,6 +40,8 @@ type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
 type EnumeratedMembers =
   | z.infer<typeof LiteralExpressionSchema>
   | z.infer<typeof PathExpressionSchema>
+  | z.infer<typeof ArithmeticExpressionSchema>
+  | z.infer<typeof PercentOfExpressionSchema>
   | z.infer<typeof CompareExpressionSchema>
   | z.infer<typeof LogicalExpressionSchema>
   | z.infer<typeof NotExpressionSchema>
@@ -54,6 +58,17 @@ type EnumeratedMembers =
 const SAMPLES: { readonly [K in ExpressionKind]: Extract<Expression, { kind: K }> } = {
   literal: { kind: 'literal', value: 1 },
   path: { kind: 'path', path: 'invoice.total' },
+  arithmetic: {
+    kind: 'arithmetic',
+    op: 'add',
+    left: { kind: 'path', path: 'invoice.total' },
+    right: { kind: 'literal', value: 1 },
+  },
+  percentOf: {
+    kind: 'percentOf',
+    base: { kind: 'path', path: 'invoice.total' },
+    rate: { kind: 'literal', value: 20 },
+  },
   compare: {
     kind: 'compare',
     op: 'gt',
@@ -75,6 +90,8 @@ const SAMPLES: { readonly [K in ExpressionKind]: Extract<Expression, { kind: K }
 const PRINTABLE_KINDS: { readonly [K in PrintableExpression['kind']]: true } = {
   literal: true,
   path: true,
+  arithmetic: true,
+  percentOf: true,
 };
 
 describe('ExpressionSchema', () => {
@@ -251,6 +268,21 @@ describe('pathsOf', () => {
 
   it('reports nothing for an expression built only from literals', () => {
     expect([...pathsOf({ kind: 'literal', value: 1 })]).toStrictEqual([]);
+  });
+
+  it('walks a calculation, at each operator its own field names', () => {
+    const computed: Expression = {
+      kind: 'arithmetic',
+      op: 'sub',
+      left: { kind: 'path', path: 'invoice.total' },
+      right: {
+        kind: 'percentOf',
+        base: { kind: 'path', path: 'invoice.total' },
+        rate: { kind: 'path', path: 'invoice.discountRate' },
+      },
+    };
+
+    expect([...pathsOf(computed)]).toStrictEqual(['invoice.total', 'invoice.discountRate']);
   });
 
   it('throws on an expression kind it does not know', () => {

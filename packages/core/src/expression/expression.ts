@@ -42,6 +42,19 @@ export type LiteralValue = string | number | boolean | null;
 /** Strict comparisons only: see ./evaluate.ts for why coercion is refused. */
 export type ComparisonOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte';
 
+/**
+ * The four operations, and nothing else.
+ *
+ * `Math.pow`, `Math.sqrt` and the transcendental functions are deliberately absent, and
+ * the reason is determinism rather than taste: the four operations are *correctly
+ * rounded* by IEEE-754 and their result is imposed by ECMA-262, so `a + b` yields the
+ * same bit on two machines. The transcendentals are under no such obligation. None is in
+ * scope, and that is one more reason not to put them there (ADR 0003, decision 4).
+ */
+export const ARITHMETIC_OPERATORS = ['add', 'sub', 'mul', 'div'] as const;
+
+export type ArithmeticOperator = (typeof ARITHMETIC_OPERATORS)[number];
+
 export interface LiteralExpression {
   readonly kind: 'literal';
   readonly value: LiteralValue;
@@ -81,6 +94,38 @@ export interface IsEmptyExpression {
 }
 
 /**
+ * Binary, like `compare`, and for the same two reasons: `sub` and `div` are not
+ * associative, so a flat operand list would not say what it means; and two NAMED fields
+ * need no guard under `noUncheckedIndexedAccess`, where `args[0]` would.
+ *
+ * **Parentheses are free.** Nesting *is* the parenthesis -- there is no precedence and no
+ * parser, so `(a + b) * c` is a `mul` whose left operand is an `add`, and nothing about
+ * that can be misread.
+ */
+export interface ArithmeticExpression {
+  readonly kind: 'arithmetic';
+  readonly op: ArithmeticOperator;
+  readonly left: PrintableExpression;
+  readonly right: PrintableExpression;
+}
+
+/**
+ * `base * rate / 100`, with the rate expressed in POINTS: `percentOf(1500, 20)` is 300.
+ *
+ * No rounding, here or anywhere: a default rounding would be a rounding position *de
+ * facto*, therefore a rule, and Openview answers for no rule. `div(1, 3)` yields
+ * `0.3333333333333333`, and a test pins that so nobody "tidies up" the division later.
+ * How an amount rounds is declared by the template, in lot C2, through a `round` wrapper
+ * kind -- not through a `precision?` field on every intermediate node that nobody fills
+ * in.
+ */
+export interface PercentOfExpression {
+  readonly kind: 'percentOf';
+  readonly base: PrintableExpression;
+  readonly rate: PrintableExpression;
+}
+
+/**
  * What yields a value a document can print, and therefore what a text binding
  * accepts.
  *
@@ -91,7 +136,11 @@ export interface IsEmptyExpression {
  * `{ kind: 'binding', value: { kind: 'literal', value: true } }` parses, and a test
  * pins that, so the next reading of this docstring does not restate the wrong claim.
  */
-export type PrintableExpression = LiteralExpression | PathExpression;
+export type PrintableExpression =
+  | LiteralExpression
+  | PathExpression
+  | ArithmeticExpression
+  | PercentOfExpression;
 
 /**
  * What yields a boolean. Refused in a print position AT PARSE TIME, where the refusal
@@ -191,28 +240,48 @@ export const aliasSchema = z
  * The guard is a runtime one, in expression.test.ts: a sample per kind, held in a
  * MAPPED type so that a wrong sample for the right key cannot pass either.
  */
-export const ExpressionSchema: z.ZodType<Expression> = z.lazy(() =>
-  z.discriminatedUnion('kind', [
+/**
+ * The member schemas of each sub-algebra.
+ *
+ * Functions rather than arrays, so nothing here is read at module-initialisation time --
+ * they are called from inside a `z.lazy` body, which is exactly where the temporal dead
+ * zone has already closed. Function declarations are hoisted, so their position in the
+ * file does not matter.
+ *
+ * One list per sub-algebra, and the two unions below are BUILT from them: that is what
+ * keeps `PrintableExpressionSchema` and `ExpressionSchema` from drifting apart. Drift
+ * against the hand-written types is what the tests catch; drift between the two bodies is
+ * now impossible by construction, and it mirrors the type level, where `Expression` is
+ * written as the union of its sub-algebras.
+ */
+function printableMembers() {
+  return [
     LiteralExpressionSchema,
     PathExpressionSchema,
+    ArithmeticExpressionSchema,
+    PercentOfExpressionSchema,
+  ] as const;
+}
+
+function predicateMembers() {
+  return [
     CompareExpressionSchema,
     LogicalExpressionSchema,
     NotExpressionSchema,
     IsEmptyExpressionSchema,
-  ]),
+  ] as const;
+}
+
+export const ExpressionSchema: z.ZodType<Expression> = z.lazy(() =>
+  z.discriminatedUnion('kind', [...printableMembers(), ...predicateMembers()]),
 );
 
 /**
  * The printable sub-algebra, and the only position of the stored contract that accepts
  * a subset of {@link ExpressionSchema}.
- *
- * Lazy from the start even though today's two members are leaves: the arithmetic and
- * aggregation kinds take printable operands, so this binding becomes genuinely
- * recursive the moment they land. Making it lazy now is what keeps those increments
- * additive.
  */
 export const PrintableExpressionSchema: z.ZodType<PrintableExpression> = z.lazy(() =>
-  z.discriminatedUnion('kind', [LiteralExpressionSchema, PathExpressionSchema]),
+  z.discriminatedUnion('kind', printableMembers()),
 );
 
 export const LiteralExpressionSchema = z.object({
@@ -239,6 +308,19 @@ export const PathExpressionSchema = z.object({
       (path) => path.split('.').every((segment) => !FORBIDDEN_IDENTIFIERS.has(segment)),
       'A path segment may not name an inherited member such as __proto__, constructor or toString',
     ),
+});
+
+export const ArithmeticExpressionSchema = z.object({
+  kind: z.literal('arithmetic'),
+  op: z.enum(ARITHMETIC_OPERATORS),
+  left: PrintableExpressionSchema,
+  right: PrintableExpressionSchema,
+});
+
+export const PercentOfExpressionSchema = z.object({
+  kind: z.literal('percentOf'),
+  base: PrintableExpressionSchema,
+  rate: PrintableExpressionSchema,
 });
 
 export const CompareExpressionSchema = z.object({
@@ -303,8 +385,13 @@ function collectPaths(
       }
       break;
     case 'compare':
+    case 'arithmetic':
       collectPaths(expression.left, aliases, into);
       collectPaths(expression.right, aliases, into);
+      break;
+    case 'percentOf':
+      collectPaths(expression.base, aliases, into);
+      collectPaths(expression.rate, aliases, into);
       break;
     case 'logical':
       for (const operand of expression.operands) {

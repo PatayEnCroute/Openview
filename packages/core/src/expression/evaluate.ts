@@ -3,7 +3,7 @@ import {
   type ExpressionErrorSite,
   ExpressionEvaluationError,
 } from '../errors.js';
-import type { ComparisonOperator, Expression } from './expression.js';
+import type { ArithmeticOperator, ComparisonOperator, Expression } from './expression.js';
 import { createBudget, type EvaluationBudget } from './limits.js';
 import { type ExpressionValueType, kindOf, valueTypeOf } from './value-type.js';
 
@@ -226,6 +226,118 @@ function requireBoolean(
   );
 }
 
+/**
+ * A finite number, or `undefined` for absence. Everything else raises (ADR 0003,
+ * decision 6).
+ *
+ * Three policies meet here, and the third is the one an earlier design got wrong:
+ *
+ * - **Absent data propagates.** Choosing `0` would be core deciding, on
+ *   `DataBindingStep`'s behalf, the question ADR 0001 left open -- and `0` is right for a
+ *   sum and wrong for a division.
+ * - **A value that is PRESENT and of the wrong type raises `operand-type`.** No coercion:
+ *   the ADR 0001 rule is extended here, not eroded, so `1 * '2'` raises where JavaScript
+ *   would have yielded 2.
+ * - **A value that is present and NOT FINITE raises `not-finite`,** which is a distinct
+ *   code and not a flavour of `operand-type`. One rule, stated once: *`operand-type`
+ *   answers for a value's SHAPE, `not-finite` for its FINITENESS.* Two codes for one
+ *   situation would have forced lot C8 to write two messages for the same fault.
+ */
+function requireNumber(
+  value: unknown,
+  site: ExpressionErrorSite,
+  at: readonly (string | number)[],
+): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'number') {
+    return fail(
+      { code: 'operand-type', site, at, actualType: valueTypeOf(value) },
+      `A calculation operates on numbers, got ${describe(valueTypeOf(value))}. The algebra refuses coercion, so turn the value into what you need explicitly.`,
+    );
+  }
+  if (!Number.isFinite(value)) {
+    // Sealed UPSTREAM: `Number.isFinite` rather than `typeof === 'number'`, because a NaN
+    // that came in with the data would otherwise travel through three levels of formula
+    // and print into a document.
+    return fail(
+      { code: 'not-finite', site, at, actualType: 'not-finite' },
+      'A calculation needs a finite number. NaN and the infinities are numbers to JavaScript and faults to a document.',
+    );
+  }
+  return value;
+}
+
+/**
+ * The same rule at the OTHER end, and the same code.
+ *
+ * An accumulation overflow -- 60 000 lines at 1e307 -- must not print `Infinity` into a
+ * document. `not-finite` at the entry and at the exit, so the policy cannot re-fracture at
+ * the first copy-paste.
+ */
+function requireFiniteResult(
+  value: number,
+  site: ExpressionErrorSite,
+  at: readonly (string | number)[],
+): number {
+  if (!Number.isFinite(value)) {
+    return fail(
+      { code: 'not-finite', site, at, actualType: 'not-finite' },
+      'This calculation overflowed to a number that is not finite. A document must never print Infinity or NaN.',
+    );
+  }
+  return value;
+}
+
+function apply(op: ArithmeticOperator, left: number, right: number): number {
+  switch (op) {
+    case 'add':
+      return left + right;
+    case 'sub':
+      return left - right;
+    case 'mul':
+      return left * right;
+    default:
+      return left / right;
+  }
+}
+
+function arithmetic(
+  op: ArithmeticOperator,
+  left: unknown,
+  right: unknown,
+  site: ExpressionErrorSite,
+): number | undefined {
+  // Both operands are shape-checked before absence is considered, so a present-but-wrong
+  // operand still raises when its sibling is missing.
+  const first = requireNumber(left, site, ['left']);
+  const second = requireNumber(right, site, ['right']);
+  if (first === undefined || second === undefined) {
+    return undefined;
+  }
+  if (op === 'div' && second === 0) {
+    // Not missing data -- a WRONG FORMULA. Never Infinity, never NaN. The absent divisor
+    // is the other case entirely, and it propagates.
+    return fail(
+      { code: 'division-by-zero', site, at: ['right'], actualType: 'number' },
+      'This formula divides by zero. A divisor that is present and equal to zero is a wrong formula, not missing data: guard it with an `if`, or the document would carry Infinity.',
+    );
+  }
+  return requireFiniteResult(apply(op, first, second), site, []);
+}
+
+function percentOf(base: unknown, rate: unknown, site: ExpressionErrorSite): number | undefined {
+  const amount = requireNumber(base, site, ['base']);
+  const points = requireNumber(rate, site, ['rate']);
+  if (amount === undefined || points === undefined) {
+    return undefined;
+  }
+  // `(base * rate) / 100`, in that order and with no rounding: the order is part of the
+  // result under binary64, and a default rounding would be a rounding position de facto.
+  return requireFiniteResult((amount * points) / 100, site, []);
+}
+
 function compare(
   op: ComparisonOperator,
   left: unknown,
@@ -360,6 +472,19 @@ export function evaluateExpression(
         return expression.value;
       case 'path':
         return resolvePath(expression.path, scope);
+      case 'arithmetic':
+        return arithmetic(
+          expression.op,
+          evaluateWithin(expression.left, ['left'], scope, budget),
+          evaluateWithin(expression.right, ['right'], scope, budget),
+          'arithmetic',
+        );
+      case 'percentOf':
+        return percentOf(
+          evaluateWithin(expression.base, ['base'], scope, budget),
+          evaluateWithin(expression.rate, ['rate'], scope, budget),
+          'percentOf',
+        );
       case 'compare':
         return compare(
           expression.op,

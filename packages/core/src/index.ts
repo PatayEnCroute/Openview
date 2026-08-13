@@ -73,6 +73,8 @@ export {
   evaluateSequence,
 } from './expression/evaluate.js';
 export type {
+  ArithmeticExpression,
+  ArithmeticOperator,
   CompareExpression,
   ComparisonOperator,
   Expression,
@@ -83,10 +85,13 @@ export type {
   LogicalExpression,
   NotExpression,
   PathExpression,
+  PercentOfExpression,
   PredicateExpression,
   PrintableExpression,
 } from './expression/expression.js';
 export {
+  ARITHMETIC_OPERATORS,
+  ArithmeticExpressionSchema,
   CompareExpressionSchema,
   ExpressionSchema,
   IsEmptyExpressionSchema,
@@ -94,6 +99,7 @@ export {
   LogicalExpressionSchema,
   NotExpressionSchema,
   PathExpressionSchema,
+  PercentOfExpressionSchema,
   PrintableExpressionSchema,
   pathsOf,
 } from './expression/expression.js';
