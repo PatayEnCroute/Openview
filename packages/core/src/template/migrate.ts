@@ -17,12 +17,48 @@ export interface TemplateMigration {
   readonly migrate: (input: Record<string, unknown>) => Record<string, unknown>;
 }
 
-/**
- * Empty by design: schema version 1 is the first published shape, so nothing
- * predates it. The mechanism is built now rather than later because retrofitting
- * migrations after users have saved documents is not possible.
- */
-export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [];
+export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
+  {
+    from: 1,
+    to: 2,
+    /**
+     * Identity, except for the stamp -- and the stamp is the entire point.
+     *
+     * A v1 document is STRUCTURALLY a v2 document: ADR 0003 only WIDENED unions, so there is
+     * nothing to transform. What the stamp buys is at the other end. Measured, on a document
+     * carrying a C1 kind opened by an earlier build:
+     *
+     * - version 1 kept: a `ZodError` -- `"note": "No matching discriminator"`, `"message":
+     *   "Invalid input"`, on a path like `root.children.0.content.1.value.kind`. Not an
+     *   `OpenviewError`, not a `TemplateMigrationError`, no mention of a version, and no
+     *   remedy for whoever reads it.
+     * - version 2: `TemplateMigrationError: Template uses schema version 2 but this build
+     *   understands at most 1. It was written by a newer release of Openview; upgrade before
+     *   opening it.`
+     *
+     * That second message is produced by code that was ALREADY in the repository -- the guard
+     * in `migrateToCurrent` -- so no coordination was required. It is exactly the message lot
+     * C8 is being built to produce, and C1 is the lot C8 depends on.
+     *
+     * A migration that only stamps is therefore not a phantom migration. Two further beliefs
+     * fell to measurement: that such an increment would pass the four gates in silence (it
+     * does not -- `migrate.test.ts` reddens, in both cases, so the versioning was already
+     * tooled), and that C1 was purely additive (it is not: three value bounds narrow it).
+     *
+     * ## What this does NOT catch, and it belongs to C8
+     *
+     * The version guard reads the STAMP, not the content. A document stamped `1` but carrying
+     * a C1 kind -- hand-made, or written by a third-party tool -- still falls back to `Invalid
+     * input`, even from a v2 build. The migration stamps; it does not validate.
+     *
+     * And the three narrowings of ADR 0003 decision 2 are NOT retrofitted here: truncating a
+     * 591-character path or flattening a 101-level tree would corrupt the document. They rest
+     * on the pre-v1.0 assumption, which is the one place in this lot where that argument is
+     * the right one.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 2 }),
+  },
+];
 
 const recordSchema = z.record(z.string(), z.unknown());
 const versionedSchema = z.object({ schemaVersion: z.number().int().nonnegative() });

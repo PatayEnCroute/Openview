@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { TemplateMigrationError, TemplateShapeError } from '../errors.js';
 import { DEFAULT_SHAPE_LIMITS } from './guard.js';
-import { migrateToCurrent, parseTemplate, type TemplateMigration } from './migrate.js';
+import {
+  migrateToCurrent,
+  parseTemplate,
+  TEMPLATE_MIGRATIONS,
+  type TemplateMigration,
+} from './migrate.js';
 import { CURRENT_SCHEMA_VERSION } from './template.js';
 
 const validTemplate = {
@@ -88,25 +93,134 @@ describe('parseTemplate', () => {
       TemplateShapeError,
     );
   });
+
+  it('brings a template written before C1 up to version 2', () => {
+    // The promise of lot C9, made concrete: a model written before this lot still parses --
+    // now THROUGH the 1 -> 2 migration, and not "with no migration at all" as an earlier plan
+    // for this lot claimed.
+    const beforeC1 = {
+      schemaVersion: 1,
+      id: 'tpl_legacy',
+      name: 'Invoice',
+      version: '1.0.0',
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'loop',
+            id: 'lines',
+            each: { kind: 'path', path: 'invoice.lines' },
+            as: 'line',
+            children: [
+              {
+                type: 'text',
+                id: 'label',
+                content: [
+                  { kind: 'literal', text: 'Total: ' },
+                  { kind: 'binding', value: { kind: 'path', path: 'line.total' } },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseTemplate(beforeC1);
+
+    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.root.children).toHaveLength(1);
+  });
+
+  it('parses a v2 document carrying a C1 kind', () => {
+    const computed = {
+      ...validTemplate,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'text',
+            id: 'total',
+            content: [
+              {
+                kind: 'binding',
+                value: {
+                  kind: 'aggregate',
+                  op: 'sum',
+                  source: { kind: 'path', path: 'invoice.lines' },
+                  as: 'line',
+                  value: {
+                    kind: 'arithmetic',
+                    op: 'mul',
+                    left: { kind: 'path', path: 'line.quantity' },
+                    right: { kind: 'path', path: 'line.unitPrice' },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(parseTemplate(computed).schemaVersion).toBe(2);
+  });
+
+  it('refuses a document written by a newer release, naming both versions', () => {
+    // The message this whole bump exists to produce, and the reason a stamping migration is
+    // not a phantom one. Without the bump an earlier build answers `Invalid input` on a
+    // discriminant path, with no mention of a version and no remedy.
+    try {
+      parseTemplate({ ...validTemplate, schemaVersion: 3 });
+      expect.unreachable('parseTemplate should have refused a newer document');
+    } catch (error) {
+      expect(error).toBeInstanceOf(TemplateMigrationError);
+      if (error instanceof TemplateMigrationError) {
+        expect(error.message).toContain('schema version 3');
+        expect(error.message).toContain('at most 2');
+        expect(error.message).toContain('upgrade before opening it');
+        expect(error.fromVersion).toBe(3);
+      }
+    }
+  });
 });
 
 describe('migrateToCurrent', () => {
   it('walks a document up the chain one step at a time', () => {
-    // Synthetic chain: the real registry is empty because v1 is the first
-    // published shape. The mechanism still has to be proven before anyone
-    // depends on it.
+    // The synthetic step is COMPOSED WITH THE REAL REGISTRY, and that composition is not a
+    // detail: with the synthetic chain alone this test reddens with `No migration registered
+    // from schema version 1. The upgrade chain to 2 is broken.` -- measured, and in both
+    // cases, with the real migration and without. That is not collateral damage, it is the
+    // proof that the versioning was already tooled; the test does its job, it just has to be
+    // given the real chain.
     const chain: readonly TemplateMigration[] = [
       {
         from: 0,
         to: 1,
         migrate: (input) => ({ ...input, schemaVersion: 1, name: `${String(input.name)} (v1)` }),
       },
+      ...TEMPLATE_MIGRATIONS,
     ];
 
     const migrated = migrateToCurrent({ ...validTemplate, schemaVersion: 0 }, chain);
 
-    expect(migrated.schemaVersion).toBe(1);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(migrated.name).toBe('Invoice (v1)');
+  });
+
+  it('stamps a v1 document as v2 and changes nothing else', () => {
+    const stored = { ...validTemplate, schemaVersion: 1 };
+
+    const migrated = migrateToCurrent(stored);
+
+    expect(migrated.schemaVersion).toBe(2);
+    // Pinned by exclusion: the stamp is the ONLY difference. A migration that quietly
+    // reshaped a document would be the hardest kind of bug to notice.
+    const { schemaVersion: _stamped, ...restOfMigrated } = migrated;
+    const { schemaVersion: _stored, ...restOfStored } = stored;
+    expect(restOfMigrated).toStrictEqual(restOfStored);
   });
 
   it('leaves an up-to-date document untouched', () => {

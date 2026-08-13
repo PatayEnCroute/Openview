@@ -5,6 +5,21 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  * Format version of the template document, distinct from {@link Template.version}
  * which is the author-facing revision of a given template.
  *
+ * ## What version 2 means
+ *
+ * Version 2 is **the complete C1 algebra**: the 18 expression kinds of ADR 0003 --
+ * arithmetic and percentage, aggregation, count and filter, the in-formula conditional,
+ * concatenation, explicit stringification, case folding, and the three civil-date
+ * operations -- plus `TextBindingSegment.value` widened from `literal | path` to the whole
+ * printable sub-algebra.
+ *
+ * It is stamped ONCE, after the last persisted shape of the lot, and not once per
+ * increment. Four stamps and four identity migrations for one functional lot would make the
+ * number designate a commit rather than a contract. The consequence was a rule of conduct
+ * while the lot was in flight: no commit before this one was publishable, because a build
+ * taken mid-lot reads a lower version and would answer `Invalid input` to a document written
+ * by a later one -- exactly the defect the bump exists to fix.
+ *
  * Bump this whenever the stored shape changes, and add the matching entry to
  * TEMPLATE_MIGRATIONS in ./migrate.ts in the same commit. A template saved by an
  * older release must stay renderable: this is the one decision that cannot be
@@ -30,7 +45,7 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  * A migration that only stamps the version is therefore NOT a phantom migration:
  * the stamp is the entire mechanism behind that second message.
  */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /**
  * Note what a Template does NOT carry: any description of the data it expects.
