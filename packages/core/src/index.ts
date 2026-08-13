@@ -40,13 +40,23 @@ export {
   walk,
 } from './ast/visitor.js';
 
+export type {
+  ExpressionErrorCode,
+  ExpressionErrorDetails,
+  ExpressionErrorSite,
+  LimitErrorCode,
+  OperandErrorCode,
+} from './errors.js';
 export {
+  EXPRESSION_ERROR_CODES,
   ExpressionEvaluationError,
+  LIMIT_ERROR_CODES,
+  OPERAND_ERROR_CODES,
   OpenviewError,
   TemplateMigrationError,
 } from './errors.js';
 
-export type { EvaluationScope } from './expression/evaluate.js';
+export type { EvaluationOptions, EvaluationScope } from './expression/evaluate.js';
 export {
   childScope,
   evaluateExpression,
@@ -75,6 +85,8 @@ export {
   PathExpressionSchema,
   pathsOf,
 } from './expression/expression.js';
+export type { ExpressionValueType } from './expression/value-type.js';
+export { EXPRESSION_VALUE_TYPES, valueTypeOf } from './expression/value-type.js';
 
 export type { RenderFormat, RenderPort, RenderRequest, RenderResult } from './ports/render.js';
 export type { TemplateStoragePort } from './ports/storage.js';

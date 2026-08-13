@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { findNodeById } from '../ast/visitor.js';
-import { ExpressionEvaluationError } from '../errors.js';
+import {
+  EXPRESSION_ERROR_CODES,
+  type ExpressionErrorCode,
+  type ExpressionErrorDetails,
+  ExpressionEvaluationError,
+  LIMIT_ERROR_CODES,
+  OPERAND_ERROR_CODES,
+} from '../errors.js';
 import { parseTemplate } from '../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../template/template.js';
 import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
@@ -22,6 +29,23 @@ const literal = (value: string | number | boolean | null): Expression => ({
   kind: 'literal',
   value,
 });
+
+/**
+ * Narrows by `instanceof` rather than casting: the rule AGENTS.md 1.1 states applies
+ * to the tests too, and the `no-double-cast` plugin plus `noExplicitAny` leave no
+ * alternative anyway.
+ */
+function expectEvaluationError(run: () => unknown): ExpressionErrorDetails {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof ExpressionEvaluationError) {
+      return error.details;
+    }
+    throw error;
+  }
+  return expect.unreachable('the expression should have failed');
+}
 
 describe('evaluateExpression', () => {
   it('resolves a deep path', () => {
@@ -170,6 +194,265 @@ describe('evaluateSequence', () => {
 
   it('refuses a value that is present but not a list', () => {
     expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(/needs a list/);
+  });
+
+  it('keeps the loop wording verbatim when no caller is named', () => {
+    // The message lot C8 will own, unchanged: this increment adds the machine payload
+    // beside it, not a new sentence.
+    expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(
+      'A loop needs a list to iterate over, got a number.',
+    );
+  });
+
+  it('falls back to a neutral subject for a caller that has no wording', () => {
+    // The wording table is deliberately partial and grows with the algebra, so the
+    // fallback is reachable rather than dead -- and it must not say "loop" to a caller
+    // that is not one. The list-reducing kinds get their own wording in INC-6.
+    expect(() => evaluateSequence(path('invoice.total'), scope, { caller: 'condition' })).toThrow(
+      /An expression needs a list/,
+    );
+  });
+});
+
+/**
+ * Codes the catalogue declares whose producer arrives in a later increment.
+ *
+ * The catalogue is complete from the start, because lot C8 has to enumerate it and
+ * adding a required field to a public interface mid-lot would be the only real cost.
+ * A naive "every code has a producer" test would therefore be red at the commit that
+ * writes it -- so the assertion is a PARTITION against this dated constant instead.
+ * The last increment to empty it deletes the constant, and the exhaustive test appears
+ * by subtraction.
+ */
+const PENDING_CODES = {
+  'operand-type': 'INC-4',
+  'division-by-zero': 'INC-4',
+  'not-finite': 'INC-4',
+  'not-a-date': 'INC-8',
+  'step-limit-exceeded': 'INC-3',
+  'depth-limit-exceeded': 'INC-3',
+  'item-limit-exceeded': 'INC-6',
+  'string-limit-exceeded': 'INC-8',
+} as const;
+
+/**
+ * One producer per code that exists today, so the partition below is proven rather
+ * than declared: each thunk is executed and its code asserted.
+ */
+const PRODUCED_CODES: Readonly<Partial<Record<ExpressionErrorCode, () => unknown>>> = {
+  'not-comparable': () =>
+    evaluateExpression(
+      { kind: 'compare', op: 'eq', left: path('invoice.lines'), right: path('invoice.lines') },
+      scope,
+    ),
+  'not-orderable': () =>
+    evaluateExpression(
+      { kind: 'compare', op: 'gt', left: path('invoice.label'), right: literal(1) },
+      scope,
+    ),
+  'not-a-boolean': () => evaluatePredicate(path('invoice.total'), scope),
+  'not-a-list': () => evaluateSequence(path('invoice.total'), scope),
+};
+
+describe('expression error payload', () => {
+  it('reports every declared code as produced or as an explicit debt', () => {
+    // Two assertions, and it is their CONJUNCTION that does the work: no orphan code
+    // (C8 would promise a message for an impossible situation) and no stale debt (a
+    // throw with no label, which C8 would have nothing to hang a message on).
+    const produced = Object.keys(PRODUCED_CODES);
+    const pending = Object.keys(PENDING_CODES);
+
+    expect([...produced, ...pending].sort()).toStrictEqual([...EXPRESSION_ERROR_CODES].sort());
+    expect(produced.filter((code) => pending.includes(code))).toStrictEqual([]);
+  });
+
+  it.each(Object.entries(PRODUCED_CODES))('produces %s from a real evaluation', (code, run) => {
+    expect(expectEvaluationError(run).code).toBe(code);
+  });
+
+  it('keeps the two catalogues disjoint and their union whole', () => {
+    const operand: readonly string[] = OPERAND_ERROR_CODES;
+    const limit: readonly string[] = LIMIT_ERROR_CODES;
+
+    expect(operand.filter((code) => limit.includes(code))).toStrictEqual([]);
+    expect(EXPRESSION_ERROR_CODES).toHaveLength(operand.length + limit.length);
+  });
+
+  it('names the culprit operand of an incomparable pair', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          { kind: 'compare', op: 'eq', left: path('invoice.lines'), right: literal('x') },
+          scope,
+        ),
+      ),
+    ).toStrictEqual({
+      code: 'not-comparable',
+      site: 'compare',
+      at: ['left'],
+      actualType: 'list',
+    });
+
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          { kind: 'compare', op: 'neq', left: literal('x'), right: path('invoice.lines') },
+          scope,
+        ),
+      ),
+    ).toStrictEqual({
+      code: 'not-comparable',
+      site: 'compare',
+      at: ['right'],
+      actualType: 'list',
+    });
+  });
+
+  it('anchors an unorderable pair on the left operand', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          { kind: 'compare', op: 'gt', left: path('invoice.label'), right: literal(1) },
+          scope,
+        ),
+      ),
+    ).toStrictEqual({
+      code: 'not-orderable',
+      site: 'compare',
+      at: ['left'],
+      actualType: 'string',
+    });
+  });
+
+  it('reports the site of a predicate position that is not an expression', () => {
+    // `ExpressionKind` alone could not say this: `ConditionNode.when` carries an
+    // expression without being one, which is why the field is `site` and not `kind`.
+    expect(
+      expectEvaluationError(() => evaluatePredicate(path('invoice.total'), scope)),
+    ).toStrictEqual({ code: 'not-a-boolean', site: 'condition', at: [], actualType: 'number' });
+
+    expect(
+      expectEvaluationError(() =>
+        evaluateSequence(path('invoice.total'), scope, { caller: 'loop' }),
+      ),
+    ).toStrictEqual({ code: 'not-a-list', site: 'loop', at: [], actualType: 'number' });
+  });
+
+  it('points at the operand index of a logical, as a number and not a string', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          { kind: 'logical', op: 'and', operands: [literal(true), path('invoice.total')] },
+          scope,
+        ),
+      ),
+    ).toStrictEqual({
+      code: 'not-a-boolean',
+      site: 'logical',
+      at: ['operands', 1],
+      actualType: 'number',
+    });
+  });
+
+  it('points at the operand of a not', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression({ kind: 'not', operand: path('invoice.total') }, scope),
+      ),
+    ).toStrictEqual({
+      code: 'not-a-boolean',
+      site: 'not',
+      at: ['operand'],
+      actualType: 'number',
+    });
+  });
+
+  it('builds the path from the root, and root-to-leaf', () => {
+    // The property no gate can see: `fail()` writes a LOCAL path and every descent
+    // prefixes its own segment on the way out. If the order were reversed, this reads
+    // ['left', 1, 'operands'].
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          {
+            kind: 'logical',
+            op: 'and',
+            operands: [
+              literal(true),
+              { kind: 'compare', op: 'gt', left: path('invoice.label'), right: literal(1) },
+            ],
+          },
+          scope,
+        ),
+      ).at,
+    ).toStrictEqual(['operands', 1, 'left']);
+  });
+
+  it('reaches inside an isEmpty operand as well', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          {
+            kind: 'isEmpty',
+            operand: { kind: 'compare', op: 'lt', left: literal(true), right: literal(false) },
+          },
+          scope,
+        ),
+      ).at,
+    ).toStrictEqual(['operand', 'left']);
+  });
+
+  it('hands out the same path on every read, and a copy that a later prefix cannot touch', () => {
+    // The two remaining properties of the private reversed path. Nothing in the four
+    // gates sees either of them.
+    let caught: ExpressionEvaluationError | undefined;
+    try {
+      evaluateExpression({ kind: 'not', operand: path('invoice.total') }, scope);
+    } catch (error) {
+      if (!(error instanceof ExpressionEvaluationError)) {
+        throw error;
+      }
+      caught = error;
+    }
+    if (caught === undefined) {
+      throw new Error('the expression should have failed');
+    }
+
+    const first = caught.details.at;
+    expect(caught.details.at).toStrictEqual(first);
+
+    caught.prefix('value');
+    expect(first).toStrictEqual(['operand']);
+    expect(caught.details.at).toStrictEqual(['value', 'operand']);
+  });
+
+  it('lets a foreign error through the descent untouched', () => {
+    // The descent wrapper prefixes paths; it must not catch anything else. A kind that
+    // bypassed Zod raises a TypeError, and enriching or absorbing it here would hide
+    // the one failure that means "this value never went through validation".
+    const smuggled: Expression = JSON.parse('{"kind":"regex"}');
+
+    expect(() => evaluateExpression({ kind: 'not', operand: smuggled }, scope)).toThrow(TypeError);
+  });
+
+  it('carries a ceiling rather than a shape on the bound branch', () => {
+    // Declared from INC-1 so C8 can enumerate the catalogue, and constructible now
+    // even though the evaluator has no producer for it until INC-3.
+    const error = new ExpressionEvaluationError('bounded', {
+      code: 'step-limit-exceeded',
+      site: 'logical',
+      at: ['operands', 0],
+      limit: 5,
+    });
+
+    const details = error.details;
+    expect(details.code).toBe('step-limit-exceeded');
+    if (details.code === 'step-limit-exceeded') {
+      // Narrowing by the discriminant, no cast: the bound branch has `limit` and no
+      // `actualType` to invent.
+      expect(details.limit).toBe(5);
+    }
+    expect(details.at).toStrictEqual(['operands', 0]);
   });
 });
 
