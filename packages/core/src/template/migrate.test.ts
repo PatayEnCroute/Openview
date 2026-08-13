@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TemplateMigrationError } from '../errors.js';
+import { TemplateMigrationError, TemplateShapeError } from '../errors.js';
+import { DEFAULT_SHAPE_LIMITS } from './guard.js';
 import { migrateToCurrent, parseTemplate, type TemplateMigration } from './migrate.js';
 import { CURRENT_SCHEMA_VERSION } from './template.js';
 
@@ -33,6 +34,59 @@ describe('parseTemplate', () => {
 
   it('rejects an empty template id', () => {
     expect(() => parseTemplate({ ...validTemplate, id: '' })).toThrow();
+  });
+
+  it('bounds the raw input before anything reads it', () => {
+    let deep: unknown = 'leaf';
+    for (let level = 0; level < DEFAULT_SHAPE_LIMITS.maxDepth + 5; level += 1) {
+      deep = { child: deep };
+    }
+
+    // Without the guard the first failure is a RangeError from Zod at ~1 874 levels,
+    // crossing parseTemplate unwrapped: not an OpenviewError, no mention of a version, no
+    // remedy. "Maximum call stack size exceeded" is not a message a gestionnaire corrects.
+    expect(() => parseTemplate({ ...validTemplate, root: deep })).toThrow(TemplateShapeError);
+  });
+
+  it('bounds the CHAIN OUTPUT when a migration ran, not just the input', () => {
+    // A migration transforms -- wrapping a node, splitting a field -- so it can PRODUCE an
+    // out-of-bounds shape from a conforming input, and then it is Zod that meets the
+    // over-deep tree. The guard therefore runs again whenever at least one step applied,
+    // and the counterpart is a rule this repository owes itself: a migration never yields
+    // an out-of-bounds shape.
+    const deepening: readonly TemplateMigration[] = [
+      {
+        from: 0,
+        to: CURRENT_SCHEMA_VERSION,
+        migrate: (input) => {
+          let deep: unknown = input.root;
+          for (let level = 0; level < DEFAULT_SHAPE_LIMITS.maxDepth + 5; level += 1) {
+            deep = { child: deep };
+          }
+          return { ...input, schemaVersion: CURRENT_SCHEMA_VERSION, root: deep };
+        },
+      },
+    ];
+
+    expect(() => parseTemplate({ ...validTemplate, schemaVersion: 0 }, deepening)).toThrow(
+      TemplateShapeError,
+    );
+  });
+
+  it('scans only once when nothing migrated', () => {
+    // The cost of the second pass is nil in the common case: a document already stamped at
+    // the current version migrates through nothing. Proven by the accessor refusal, which
+    // fires on the first pass -- the second would never be reached.
+    const alive = { ...validTemplate };
+    Object.defineProperty(alive, 'name', { get: () => 'Invoice', enumerable: true });
+
+    expect(() => parseTemplate(alive)).toThrow(TemplateShapeError);
+  });
+
+  it('honours injected shape limits', () => {
+    expect(() => parseTemplate(validTemplate, undefined, { maxDepth: 2 })).toThrow(
+      TemplateShapeError,
+    );
   });
 });
 

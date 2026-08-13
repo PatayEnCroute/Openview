@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { TemplateMigrationError } from '../errors.js';
+import { assertBoundedShape, type ShapeLimits } from './guard.js';
 import { CURRENT_SCHEMA_VERSION, type Template, TemplateSchema } from './template.js';
 
 /**
@@ -38,6 +39,12 @@ function readSchemaVersion(candidate: unknown, context: string): number {
   return parsed.data.schemaVersion;
 }
 
+/** What the chain produced, and whether it produced it by running anything. */
+interface MigrationRun {
+  readonly current: Record<string, unknown>;
+  readonly applied: number;
+}
+
 /**
  * Walks a stored document up to the current schema version. Returns the raw
  * object: validation is {@link parseTemplate}'s job, because a mid-chain document
@@ -47,6 +54,10 @@ export function migrateToCurrent(
   raw: unknown,
   migrations: readonly TemplateMigration[] = TEMPLATE_MIGRATIONS,
 ): Record<string, unknown> {
+  return runMigrations(raw, migrations).current;
+}
+
+function runMigrations(raw: unknown, migrations: readonly TemplateMigration[]): MigrationRun {
   const asRecord = recordSchema.safeParse(raw);
   if (!asRecord.success) {
     throw new TemplateMigrationError(
@@ -57,6 +68,7 @@ export function migrateToCurrent(
   }
 
   let current: Record<string, unknown> = asRecord.data;
+  let applied = 0;
   let version = readSchemaVersion(current, 'Stored template');
 
   if (version > CURRENT_SCHEMA_VERSION) {
@@ -76,6 +88,7 @@ export function migrateToCurrent(
     }
 
     current = step.migrate(current);
+    applied += 1;
     const next = readSchemaVersion(current, `Migration ${step.from} -> ${step.to}`);
     if (next <= version) {
       // Without this the loop would spin forever on a migration that forgets to
@@ -88,16 +101,35 @@ export function migrateToCurrent(
     version = next;
   }
 
-  return current;
+  return { current, applied };
 }
 
 /**
- * The entry point every consumer should use: migrate, then validate. Never trust
- * a stored document straight from disk (AGENTS.md 1.2).
+ * The entry point every consumer should use: bound the shape, migrate, then validate.
+ * Never trust a stored document straight from disk (AGENTS.md 1.2).
+ *
+ * ## Why the guard runs twice
+ *
+ * The first call protects `migrateToCurrent` **and** Zod, for as long as the chain is
+ * empty or identity-only. But a future migration TRANSFORMS -- wrapping a node, splitting
+ * a field -- so it can PRODUCE an out-of-bounds shape from a conforming input, and it
+ * would be Zod that met the over-deep tree, with the bare `RangeError` this whole guard
+ * exists to prevent. Hence: guard the raw input, then guard the chain's output whenever at
+ * least one step ran.
+ *
+ * The cost is nil in the common case -- a document already stamped at the current version
+ * migrates through nothing, so it is scanned once -- and the counterpart is a rule this
+ * repository now owes itself: **a migration never yields an out-of-bounds shape.**
  */
 export function parseTemplate(
   raw: unknown,
   migrations: readonly TemplateMigration[] = TEMPLATE_MIGRATIONS,
+  limits?: Partial<ShapeLimits>,
 ): Template {
-  return TemplateSchema.parse(migrateToCurrent(raw, migrations));
+  assertBoundedShape(raw, limits);
+  const { current, applied } = runMigrations(raw, migrations);
+  if (applied > 0) {
+    assertBoundedShape(current, limits);
+  }
+  return TemplateSchema.parse(current);
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { kindOf } from './value-type.js';
 
 /**
  * Structured expressions (ADR 0001, option C; widened by ADR 0003).
@@ -316,7 +317,10 @@ function collectPaths(
       break;
     default: {
       const exhaustive: never = expression;
-      throw new TypeError(`Unhandled expression: ${JSON.stringify(exhaustive)}`);
+      // `kindOf` rather than `JSON.stringify`: stringifying overflows the stack around
+      // 8 000 levels of nesting, which would turn the exhaustiveness guard into a second
+      // crash on exactly the payloads it exists to report.
+      throw new TypeError(`Unhandled expression: ${kindOf(exhaustive, 'kind')}`);
     }
   }
 }

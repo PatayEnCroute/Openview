@@ -12,6 +12,7 @@ import { parseTemplate } from '../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../template/template.js';
 import { childScope, evaluateExpression, evaluatePredicate, evaluateSequence } from './evaluate.js';
 import type { Expression } from './expression.js';
+import { createBudget, DEFAULT_EVALUATION_LIMITS } from './limits.js';
 
 const scope = {
   invoice: {
@@ -229,11 +230,17 @@ const PENDING_CODES = {
   'division-by-zero': 'INC-4',
   'not-finite': 'INC-4',
   'not-a-date': 'INC-8',
-  'step-limit-exceeded': 'INC-3',
-  'depth-limit-exceeded': 'INC-3',
-  'item-limit-exceeded': 'INC-6',
   'string-limit-exceeded': 'INC-8',
 } as const;
+
+/** A chain of `levels` nested `not` nodes -- built in a loop, so it passes no guard. */
+function nestedNot(levels: number): Expression {
+  let built: Expression = literal(true);
+  for (let remaining = 0; remaining < levels; remaining += 1) {
+    built = { kind: 'not', operand: built };
+  }
+  return built;
+}
 
 /**
  * One producer per code that exists today, so the partition below is proven rather
@@ -252,6 +259,17 @@ const PRODUCED_CODES: Readonly<Partial<Record<ExpressionErrorCode, () => unknown
     ),
   'not-a-boolean': () => evaluatePredicate(path('invoice.total'), scope),
   'not-a-list': () => evaluateSequence(path('invoice.total'), scope),
+  'step-limit-exceeded': () =>
+    evaluateExpression(nestedNot(10), scope, { budget: createBudget({ maxSteps: 4 }) }),
+  'depth-limit-exceeded': () =>
+    evaluateExpression(nestedNot(10), scope, { budget: createBudget({ maxDepth: 4 }) }),
+  // Earlier than the plan assigned it: the element counter lives in the shared list
+  // primitive rather than in each list-reducing operator, so a loop source already
+  // exercises it.
+  'item-limit-exceeded': () =>
+    evaluateSequence(path('invoice.lines'), scope, {
+      budget: createBudget({ maxItemsVisited: 1 }),
+    }),
 };
 
 describe('expression error payload', () => {
@@ -433,6 +451,80 @@ describe('expression error payload', () => {
     const smuggled: Expression = JSON.parse('{"kind":"regex"}');
 
     expect(() => evaluateExpression({ kind: 'not', operand: smuggled }, scope)).toThrow(TypeError);
+  });
+
+  it('carries the configured ceiling on a bound failure, not a shape', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(nestedNot(10), scope, { budget: createBudget({ maxSteps: 4 }) }),
+      ),
+    ).toStrictEqual({
+      code: 'step-limit-exceeded',
+      site: 'not',
+      at: ['operand', 'operand', 'operand', 'operand'],
+      limit: 4,
+    });
+  });
+
+  it('carries a hand-built deep tree as depth-limit-exceeded, not a RangeError', () => {
+    // The hole this closes: `evaluateExpression` is public and takes an Expression from
+    // wherever. A tree built in a loop by an integrator, never passed through
+    // parseTemplate, overflows the stack around 20 000 levels and raises a bare
+    // RangeError -- the very unwrapped error the shape guard refuses at parse time.
+    const details = expectEvaluationError(() =>
+      evaluateExpression(nestedNot(200), scope, { budget: createBudget({ maxDepth: 8 }) }),
+    );
+
+    expect(details.code).toBe('depth-limit-exceeded');
+    if (details.code === 'depth-limit-exceeded') {
+      expect(details.limit).toBe(8);
+    }
+  });
+
+  it('accumulates one budget across two top-level calls', () => {
+    // The reason a budget and a configuration are two different types. A counter local to
+    // evaluateExpression resets on every top-level call, so a document with 500 bindings
+    // would get 500 separate allowances and the bound would be decorative.
+    const budget = createBudget({ maxSteps: 6 });
+
+    expect(evaluateExpression(nestedNot(3), scope, { budget })).toBe(false);
+    expect(budget.spent.steps).toBe(4);
+    expect(() => evaluateExpression(nestedNot(3), scope, { budget })).toThrow(
+      /more than 6 operations/,
+    );
+  });
+
+  it('bounds a call that was given no budget at all', () => {
+    // Defaults are active, never opt-in. A caller who omits the budget still gets bounded
+    // -- just per call, which is the residual risk ADR 0003 names out loud.
+    expect(() =>
+      evaluateExpression(nestedNot(DEFAULT_EVALUATION_LIMITS.maxDepth + 5), scope),
+    ).toThrow(/nests more than 64 levels/);
+  });
+
+  it('counts the root node too', () => {
+    // The counters sit at the head of evaluateExpression rather than in the descent
+    // wrapper, precisely so the root is not free: a wrapper by definition never sees it.
+    const budget = createBudget();
+    evaluateExpression(literal(1), scope, { budget });
+
+    expect(budget.spent.steps).toBe(1);
+    expect(budget.spent.depth).toBe(0);
+  });
+
+  it('reports the traversal ceiling from the list primitive', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateSequence(path('invoice.lines'), scope, {
+          budget: createBudget({ maxItemsVisited: 1 }),
+        }),
+      ),
+    ).toStrictEqual({
+      code: 'item-limit-exceeded',
+      site: 'loop',
+      at: [],
+      limit: 1,
+    });
   });
 
   it('carries a ceiling rather than a shape on the bound branch', () => {

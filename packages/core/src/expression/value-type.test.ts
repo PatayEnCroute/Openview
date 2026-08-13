@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { EXPRESSION_VALUE_TYPES, type ExpressionValueType, valueTypeOf } from './value-type.js';
+import {
+  EXPRESSION_VALUE_TYPES,
+  type ExpressionValueType,
+  kindOf,
+  valueTypeOf,
+} from './value-type.js';
 
 describe('valueTypeOf', () => {
   it.each<readonly [unknown, ExpressionValueType]>([
@@ -55,5 +60,53 @@ describe('valueTypeOf', () => {
   it('declares nine tags, all distinct', () => {
     expect(EXPRESSION_VALUE_TYPES).toHaveLength(9);
     expect(new Set(EXPRESSION_VALUE_TYPES).size).toBe(9);
+  });
+});
+
+describe('kindOf', () => {
+  it('names the discriminant of a smuggled member', () => {
+    expect(kindOf({ kind: 'regex', pattern: '.*' }, 'kind')).toBe('regex');
+    expect(kindOf({ type: 'barcode', id: 'b1' }, 'type')).toBe('barcode');
+  });
+
+  it('describes a payload that has no such property, rather than saying undefined', () => {
+    expect(kindOf({ id: 'b1' }, 'kind')).toBe('object');
+    expect(kindOf([1, 2], 'kind')).toBe('list');
+    expect(kindOf('bare', 'kind')).toBe('string');
+    expect(kindOf(null, 'kind')).toBe('absent');
+  });
+
+  it('describes a discriminant that is not a string', () => {
+    expect(kindOf({ kind: 7 }, 'kind')).toBe('number');
+    expect(kindOf({ kind: null }, 'kind')).toBe('absent');
+  });
+
+  it('does not invoke a discriminant defined by a getter', () => {
+    // The same rule as the shape guard: describing a failure must not run the caller's
+    // code. A payload that reached an exhaustiveness branch is by definition one that
+    // bypassed validation, so nothing about it can be trusted.
+    let reads = 0;
+    const alive = {
+      get kind(): string {
+        reads += 1;
+        return 'regex';
+      },
+    };
+
+    expect(kindOf(alive, 'kind')).toBe('object');
+    expect(reads).toBe(0);
+  });
+
+  it('survives a payload too deep for JSON.stringify', () => {
+    // The reason this function exists. `JSON.stringify` overflows the stack around 8 000
+    // levels, so describing the payload used to crash the exhaustiveness guard on exactly
+    // the inputs it was written to report.
+    let deep: Record<string, unknown> = { kind: 'regex' };
+    for (let level = 0; level < 20_000; level += 1) {
+      deep = { child: deep, kind: 'regex' };
+    }
+
+    expect(() => JSON.stringify(deep)).toThrow(RangeError);
+    expect(kindOf(deep, 'kind')).toBe('regex');
   });
 });

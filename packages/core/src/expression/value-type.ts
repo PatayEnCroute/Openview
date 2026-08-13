@@ -79,3 +79,32 @@ export function valueTypeOf(value: unknown): ExpressionValueType {
       return 'unsupported';
   }
 }
+
+/**
+ * Names the discriminant of a value that reached an exhaustiveness branch, for the
+ * `TypeError` those branches raise.
+ *
+ * It replaces `JSON.stringify(exhaustive)`, which turned the exhaustiveness guard into a
+ * SECOND crash: measured, `JSON.stringify` overflows the stack around 8 000 levels of
+ * nesting, so the deep payload that reached the branch would blow up while being
+ * described.
+ *
+ * This one function is allowed to read a property where {@link valueTypeOf} is not, and
+ * the distinction is worth stating. `valueTypeOf` feeds an error payload that travels to
+ * logs, so it must never touch render data. This reads exactly one property -- the
+ * discriminant of a TEMPLATE node -- and feeds a `TypeError` about template structure. A
+ * kind is what the operator is called, not what the document is about.
+ */
+export function kindOf(value: unknown, discriminant: string): string {
+  if (value === null || typeof value !== 'object') {
+    return valueTypeOf(value);
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, discriminant);
+  if (descriptor === undefined || !('value' in descriptor)) {
+    // No own data property under that name -- including the accessor case, which must not
+    // be invoked here any more than in the shape guard.
+    return valueTypeOf(value);
+  }
+  const found: unknown = descriptor.value;
+  return typeof found === 'string' ? found : valueTypeOf(found);
+}

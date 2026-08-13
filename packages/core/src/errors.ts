@@ -179,3 +179,63 @@ export class TemplateMigrationError extends OpenviewError {
     this.name = 'TemplateMigrationError';
   }
 }
+
+/**
+ * Why a raw payload was refused before any schema looked at it.
+ *
+ * A separate catalogue from {@link EXPRESSION_ERROR_CODES}, and separate because the
+ * shape guard runs at PARSE time on plain `unknown`: no node exists yet, so there is no
+ * `ExpressionErrorSite` to report and nothing an `at` path could point into.
+ */
+export const SHAPE_ERROR_CODES = ['too-deep', 'too-many-nodes', 'not-plain-data'] as const;
+
+export type ShapeErrorCode = (typeof SHAPE_ERROR_CODES)[number];
+
+/**
+ * A raw payload was refused for its SHAPE, before validation.
+ *
+ * On the pattern of {@link TemplateMigrationError}: the machine facts sit as readonly
+ * fields rather than in a nested payload, because there are three codes and no consumer
+ * has to branch further. `limit` is `undefined` for `not-plain-data`, which genuinely has
+ * no ceiling -- an explicit "there is none" rather than an invented number.
+ */
+export class TemplateShapeError extends OpenviewError {
+  constructor(
+    message: string,
+    readonly code: ShapeErrorCode,
+    readonly limit: number | undefined,
+    options?: ErrorOptions | undefined,
+  ) {
+    super(message, options);
+    this.name = 'TemplateShapeError';
+  }
+}
+
+/**
+ * A caller supplied an evaluation limit that cannot bound anything.
+ *
+ * Loud on purpose, and never a silent fallback: `createBudget({ maxSteps: 0 })` would
+ * otherwise disable the protection by accident, and a caller who passed `NaN` would get
+ * a budget that never refuses.
+ */
+export class InvalidEvaluationLimitsError extends OpenviewError {
+  constructor(message: string, options?: ErrorOptions | undefined) {
+    super(message, options);
+    this.name = 'InvalidEvaluationLimitsError';
+  }
+}
+
+/**
+ * A caller supplied a shape limit that cannot bound anything.
+ *
+ * The symmetric counterpart of {@link InvalidEvaluationLimitsError}, and the asymmetry
+ * had no justification: `{ maxDepth: 0 }` neutralises the shape guard in silence, and
+ * `{ maxNodes: NaN }` makes it never terminate -- the exact failure `maxNodes` exists to
+ * prevent.
+ */
+export class InvalidShapeLimitsError extends OpenviewError {
+  constructor(message: string, options?: ErrorOptions | undefined) {
+    super(message, options);
+    this.name = 'InvalidShapeLimitsError';
+  }
+}

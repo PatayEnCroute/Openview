@@ -1,4 +1,5 @@
 import { type Expression, pathsOf, rootSegment } from '../expression/expression.js';
+import { kindOf } from '../expression/value-type.js';
 import type {
   ConditionNode,
   ContainerNode,
@@ -47,7 +48,10 @@ export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TRes
       // Adding a member to DocumentNode without handling it here fails to
       // compile: `node` is only assignable to `never` when every case is covered.
       const exhaustive: never = node;
-      throw new TypeError(`Unhandled document node: ${JSON.stringify(exhaustive)}`);
+      // `kindOf` rather than `JSON.stringify`, for the same reason as in the expression
+      // traversals: stringifying a deep payload overflows the stack around 8 000 levels,
+      // so the guard would crash while describing what reached it.
+      throw new TypeError(`Unhandled document node: ${kindOf(exhaustive, 'type')}`);
     }
   }
 }
@@ -110,7 +114,7 @@ export function visitSegment<TResult>(
       return visitor.binding(segment);
     default: {
       const exhaustive: never = segment;
-      throw new TypeError(`Unhandled text segment: ${JSON.stringify(exhaustive)}`);
+      throw new TypeError(`Unhandled text segment: ${kindOf(exhaustive, 'kind')}`);
     }
   }
 }

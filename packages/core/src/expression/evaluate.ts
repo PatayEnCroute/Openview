@@ -4,7 +4,8 @@ import {
   ExpressionEvaluationError,
 } from '../errors.js';
 import type { ComparisonOperator, Expression } from './expression.js';
-import { type ExpressionValueType, valueTypeOf } from './value-type.js';
+import { createBudget, type EvaluationBudget } from './limits.js';
+import { type ExpressionValueType, kindOf, valueTypeOf } from './value-type.js';
 
 /**
  * The data a template is rendered against: the integrating application's own
@@ -29,17 +30,36 @@ export type EvaluationScope = Readonly<Record<string, unknown>>;
 /**
  * Options every entry point accepts.
  *
- * An options bag rather than a third positional parameter, because `evaluatePredicate`
- * and `evaluateSequence` need a second thing (`caller`) and three functions whose
- * third parameter has three different shapes is the asymmetry a caller fills in wrong.
- * Both fields are optional, so existing two-argument calls keep compiling.
+ * An options bag rather than a third positional parameter, because two of the three entry
+ * points need a second thing and three functions whose third parameter has three
+ * different shapes is the asymmetry a caller fills in wrong. Every field is optional, so
+ * existing two-argument calls keep compiling.
  */
 export interface EvaluationOptions {
   /**
-   * The site to report when this call itself fails, for the two positions that carry
-   * an expression without being one. Defaults to `'condition'` for a predicate and
-   * `'loop'` for a sequence -- the node positions those entry points were written
-   * for.
+   * The work budget for the WHOLE render, created once by the pipeline and shared by
+   * every expression in the document (ADR 0003, decision 8).
+   *
+   * Optional, and the residual risk is named rather than hidden: a caller who omits it
+   * falls back to a per-call budget, so a document with 500 bindings gets 500 separate
+   * allowances. Two counterweights -- a budget-REQUIRED helper on the engine side, and a
+   * test pinning that two top-level calls sharing one budget do accumulate.
+   */
+  readonly budget?: EvaluationBudget | undefined;
+}
+
+/**
+ * Options for the two entry points that something else calls on an expression's behalf.
+ *
+ * Separate from {@link EvaluationOptions} so `caller` cannot be passed to
+ * `evaluateExpression`, where it would be silently ignored: an expression already knows
+ * its own kind.
+ */
+export interface AttributedEvaluationOptions extends EvaluationOptions {
+  /**
+   * The site to report when this call itself fails, for the positions that carry an
+   * expression without being one. Defaults to `'condition'` for a predicate and `'loop'`
+   * for a sequence -- the node positions those entry points were written for.
    */
   readonly caller?: ExpressionErrorSite | undefined;
 }
@@ -161,18 +181,21 @@ function prefixing<TResult>(at: readonly (string | number)[], descend: () => TRe
 }
 
 /**
- * The single point every descent into a sub-expression goes through.
+ * The single point every descent into a sub-expression goes through: it names the
+ * position for the error path, and threads the shared budget down.
  *
- * One wrapper rather than a `try` per branch, and it is also where the evaluation
- * budget will be spent (ADR 0003, decision 8): a depth that rises on the way in and
- * falls on the way out has to be counted somewhere that every descent passes.
+ * The counters themselves live at the head of {@link evaluateExpression} rather than
+ * here, and that is one step better than putting them in this wrapper: every node passes
+ * through `evaluateExpression` exactly once INCLUDING THE ROOT, which a descent wrapper
+ * by definition never sees. `at` stays local, and ancestors prefix on the way out.
  */
 function evaluateWithin(
   expression: Expression,
   at: readonly (string | number)[],
   scope: EvaluationScope,
+  budget: EvaluationBudget,
 ): unknown {
-  return prefixing(at, () => evaluateExpression(expression, scope));
+  return prefixing(at, () => evaluateExpression(expression, scope, { budget }));
 }
 
 /**
@@ -288,43 +311,93 @@ function isEmptyValue(value: unknown): boolean {
   return false;
 }
 
-/** Evaluates an expression to a raw value. */
-export function evaluateExpression(expression: Expression, scope: EvaluationScope): unknown {
-  switch (expression.kind) {
-    case 'literal':
-      return expression.value;
-    case 'path':
-      return resolvePath(expression.path, scope);
-    case 'compare':
-      return compare(
-        expression.op,
-        evaluateWithin(expression.left, ['left'], scope),
-        evaluateWithin(expression.right, ['right'], scope),
-        'compare',
-      );
-    case 'logical': {
-      // Short-circuits, so `and(hasCustomer, customer.age > 18)` never evaluates
-      // the right-hand side against missing data.
-      const decide = (operand: Expression, index: number): boolean =>
-        requireBoolean(evaluateWithin(operand, ['operands', index], scope), 'logical', [
-          'operands',
-          index,
-        ]);
-      if (expression.op === 'and') {
-        return expression.operands.every(decide);
+/**
+ * Evaluates an expression to a raw value.
+ *
+ * Every node of the tree passes through here exactly once, which is why the two work
+ * counters sit at the head: one step per node evaluated, and a depth that rises on the way
+ * in and falls on the way out.
+ */
+export function evaluateExpression(
+  expression: Expression,
+  scope: EvaluationScope,
+  options?: EvaluationOptions | undefined,
+): unknown {
+  const budget = options?.budget ?? createBudget();
+
+  if (!budget.spend(1)) {
+    return fail(
+      {
+        code: 'step-limit-exceeded',
+        site: expression.kind,
+        at: [],
+        limit: budget.limits.maxSteps,
+      },
+      `This formula asked for more than ${budget.limits.maxSteps} operations. Reduce the number of nested aggregations: the cost is the product of the list lengths, so one level more multiplies it rather than adding to it.`,
+    );
+  }
+  if (!budget.enter()) {
+    // This bound cannot fire on a tree that came through `parseTemplate` -- the shape
+    // guard caps the JSON depth well below it. It exists because `evaluateExpression` is
+    // public and takes an `Expression` from wherever: a tree built in a loop by an
+    // integrator overflows the stack around 20 000 levels and raises a bare `RangeError`.
+    // Refusing that unwrapped error at parse time and accepting it at render time would
+    // be incoherent.
+    return fail(
+      {
+        code: 'depth-limit-exceeded',
+        site: expression.kind,
+        at: [],
+        limit: budget.limits.maxDepth,
+      },
+      `This formula nests more than ${budget.limits.maxDepth} levels deep. A tree built by hand can pass that; one loaded through parseTemplate cannot.`,
+    );
+  }
+
+  try {
+    switch (expression.kind) {
+      case 'literal':
+        return expression.value;
+      case 'path':
+        return resolvePath(expression.path, scope);
+      case 'compare':
+        return compare(
+          expression.op,
+          evaluateWithin(expression.left, ['left'], scope, budget),
+          evaluateWithin(expression.right, ['right'], scope, budget),
+          'compare',
+        );
+      case 'logical': {
+        // Short-circuits, so `and(hasCustomer, customer.age > 18)` never evaluates
+        // the right-hand side against missing data.
+        const decide = (operand: Expression, index: number): boolean =>
+          requireBoolean(evaluateWithin(operand, ['operands', index], scope, budget), 'logical', [
+            'operands',
+            index,
+          ]);
+        if (expression.op === 'and') {
+          return expression.operands.every(decide);
+        }
+        return expression.operands.some(decide);
       }
-      return expression.operands.some(decide);
+      case 'not':
+        return !requireBoolean(
+          evaluateWithin(expression.operand, ['operand'], scope, budget),
+          'not',
+          ['operand'],
+        );
+      case 'isEmpty':
+        return isEmptyValue(evaluateWithin(expression.operand, ['operand'], scope, budget));
+      default: {
+        const exhaustive: never = expression;
+        // `kindOf` rather than `JSON.stringify`: stringifying overflows the stack around
+        // 8 000 levels, so the exhaustiveness guard would crash while describing the
+        // payload that reached it.
+        throw new TypeError(`Unhandled expression: ${kindOf(exhaustive, 'kind')}`);
+      }
     }
-    case 'not':
-      return !requireBoolean(evaluateWithin(expression.operand, ['operand'], scope), 'not', [
-        'operand',
-      ]);
-    case 'isEmpty':
-      return isEmptyValue(evaluateWithin(expression.operand, ['operand'], scope));
-    default: {
-      const exhaustive: never = expression;
-      throw new TypeError(`Unhandled expression: ${JSON.stringify(exhaustive)}`);
-    }
+  } finally {
+    budget.leave();
   }
 }
 
@@ -338,9 +411,13 @@ export function evaluateExpression(expression: Expression, scope: EvaluationScop
 export function evaluatePredicate(
   expression: Expression,
   scope: EvaluationScope,
-  options?: EvaluationOptions | undefined,
+  options?: AttributedEvaluationOptions | undefined,
 ): boolean {
-  return requireBoolean(evaluateExpression(expression, scope), options?.caller ?? 'condition', []);
+  return requireBoolean(
+    evaluateExpression(expression, scope, options),
+    options?.caller ?? 'condition',
+    [],
+  );
 }
 
 /**
@@ -373,9 +450,13 @@ const LIST_CALLER_SUBJECTS: Readonly<Partial<Record<ExpressionErrorSite, string>
 export function evaluateSequence(
   expression: Expression,
   scope: EvaluationScope,
-  options?: EvaluationOptions | undefined,
+  options?: AttributedEvaluationOptions | undefined,
 ): readonly unknown[] {
-  const value = evaluateExpression(expression, scope);
+  // Resolved here rather than left to `evaluateExpression`: the element count below needs
+  // the same budget the descent spent from, and a budget created deeper down would be
+  // invisible to it.
+  const budget = options?.budget ?? createBudget();
+  const value = evaluateExpression(expression, scope, { budget });
   if (value === null || value === undefined) {
     return [];
   }
@@ -384,6 +465,23 @@ export function evaluateSequence(
     return fail(
       { code: 'not-a-list', site, at: [], actualType: valueTypeOf(value) },
       `${LIST_CALLER_SUBJECTS[site] ?? 'An expression'} needs a list to iterate over, got ${describe(valueTypeOf(value))}.`,
+    );
+  }
+
+  // The one place elements are counted, rather than one site per list-reducing operator:
+  // every list in a document -- a loop's and an aggregation's alike -- comes through here,
+  // so the cumulated count is what detects the O(n^k) blow-up. A nested aggregation calls
+  // this once per element of the enclosing one, which is exactly the multiplication the
+  // bound is looking for.
+  if (!budget.visit(value.length)) {
+    return fail(
+      {
+        code: 'item-limit-exceeded',
+        site,
+        at: [],
+        limit: budget.limits.maxItemsVisited,
+      },
+      `This render traversed more than ${budget.limits.maxItemsVisited} list elements. Nested aggregations multiply the lists they walk, so removing one level of nesting usually costs far more than shortening a list.`,
     );
   }
   return value;
