@@ -60,7 +60,12 @@ export {
   TemplateMigrationError,
   TemplateShapeError,
 } from './errors.js';
-
+export {
+  civilDateOf,
+  dayNumberOf,
+  endOfMonthOf,
+  shiftDay,
+} from './expression/civil-date.js';
 export type {
   AttributedEvaluationOptions,
   EvaluationOptions,
@@ -79,8 +84,12 @@ export type {
   ArithmeticOperator,
   CompareExpression,
   ComparisonOperator,
+  ConcatExpression,
   ConditionalExpression,
   CountExpression,
+  DateAddExpression,
+  DateDiffExpression,
+  EndOfMonthExpression,
   Expression,
   ExpressionKind,
   FilterExpression,
@@ -93,6 +102,9 @@ export type {
   PercentOfExpression,
   PredicateExpression,
   PrintableExpression,
+  TextCaseExpression,
+  TextCaseOperator,
+  TextExpression,
 } from './expression/expression.js';
 export {
   AGGREGATE_OPERATORS,
@@ -100,8 +112,12 @@ export {
   ARITHMETIC_OPERATORS,
   ArithmeticExpressionSchema,
   CompareExpressionSchema,
+  ConcatExpressionSchema,
   ConditionalExpressionSchema,
   CountExpressionSchema,
+  DateAddExpressionSchema,
+  DateDiffExpressionSchema,
+  EndOfMonthExpressionSchema,
   ExpressionSchema,
   FilterExpressionSchema,
   IsEmptyExpressionSchema,
@@ -112,6 +128,9 @@ export {
   PercentOfExpressionSchema,
   PrintableExpressionSchema,
   pathsOf,
+  TEXT_CASE_OPERATORS,
+  TextCaseExpressionSchema,
+  TextExpressionSchema,
 } from './expression/expression.js';
 export type { EvaluationBudget, EvaluationLimits } from './expression/limits.js';
 export {

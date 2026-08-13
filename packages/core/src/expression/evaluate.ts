@@ -3,6 +3,7 @@ import {
   type ExpressionErrorSite,
   ExpressionEvaluationError,
 } from '../errors.js';
+import { civilDateOf, dayNumberOf, endOfMonthOf, shiftDay } from './civil-date.js';
 import type {
   AggregateExpression,
   ArithmeticOperator,
@@ -344,6 +345,103 @@ function percentOf(base: unknown, rate: unknown, site: ExpressionErrorSite): num
   return requireFiniteResult((amount * points) / 100, site, []);
 }
 
+function isAbsent(value: unknown): value is null | undefined {
+  return value === null || value === undefined;
+}
+
+/**
+ * The bound on a string an operator PRODUCED, checked after every construction.
+ *
+ * After every construction and not only at the end, because that is the only order that
+ * stops the intermediate string from existing before being refused: `concat` amplifies by
+ * 2^depth times the longest string in the data, so a depth-18 balanced tree over a 1 kB
+ * value reaches 268 MB. All three text-producing kinds come through this one door -- without
+ * that, the bound would be sidestepped by `upper(concat(...))`.
+ */
+function acceptText(
+  value: string,
+  site: ExpressionErrorSite,
+  at: readonly (string | number)[],
+  budget: EvaluationBudget,
+): string {
+  if (!budget.acceptString(value.length)) {
+    return fail(
+      { code: 'string-limit-exceeded', site, at, limit: budget.limits.maxStringLength },
+      `This formula built a text longer than ${budget.limits.maxStringLength} characters. Nested concatenations double at every level, so removing one level usually helps far more than shortening a value.`,
+    );
+  }
+  return value;
+}
+
+/** A string operand: absence propagates, anything else that is not text raises. */
+function requireText(
+  value: unknown,
+  site: ExpressionErrorSite,
+  at: readonly (string | number)[],
+): string | undefined {
+  if (isAbsent(value)) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    return fail(
+      { code: 'operand-type', site, at, actualType: valueTypeOf(value) },
+      `Joining and case folding operate on text, got ${describe(valueTypeOf(value))}. Wrap a number in text(...) rather than relying on a coercion the algebra refuses.`,
+    );
+  }
+  return value;
+}
+
+/**
+ * A date operand, as a day number.
+ *
+ * `site` comes from the CALLING node and is never hard-coded to `'dateAdd'`. That is the most
+ * likely copy-paste mistake of the lot, and it passes all four gates while naming the wrong
+ * operator to the user -- which is exactly what lot C8 exists to prevent. Hence the tests on
+ * `dateDiff` and `endOfMonth`, not only on `dateAdd`.
+ */
+function requireDate(
+  value: unknown,
+  site: ExpressionErrorSite,
+  at: readonly (string | number)[],
+): number | undefined {
+  if (isAbsent(value)) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    return fail(
+      { code: 'operand-type', site, at, actualType: valueTypeOf(value) },
+      `A date is a text in the YYYY-MM-DD form, got ${describe(valueTypeOf(value))}.`,
+    );
+  }
+  const dayNumber = dayNumberOf(value);
+  if (dayNumber === undefined) {
+    return fail(
+      { code: 'not-a-date', site, at, actualType: 'string' },
+      'A date must be written YYYY-MM-DD, between 0001-01-01 and 9999-12-31. There is no time and no time zone: a civil date has no stable rendering in any zone but an explicit one.',
+    );
+  }
+  return dayNumber;
+}
+
+/** A whole number of days. A fraction is a wrong operand shape, not a wrong date. */
+function requireDays(
+  value: unknown,
+  site: ExpressionErrorSite,
+  at: readonly (string | number)[],
+): number | undefined {
+  const days = requireNumber(value, site, at);
+  if (days === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(days)) {
+    return fail(
+      { code: 'operand-type', site, at, actualType: 'number' },
+      'A date shift is a whole number of days. Round the value first: the algebra has no rounding of its own, and inventing one here would be a rounding position by stealth.',
+    );
+  }
+  return days;
+}
+
 /**
  * The elements of a list source, with the error path anchored on the `source` field.
  *
@@ -589,6 +687,103 @@ export function evaluateExpression(
           evaluateWithin(expression.rate, ['rate'], scope, budget),
           'percentOf',
         );
+      case 'concat': {
+        let built = '';
+        for (const [index, part] of expression.parts.entries()) {
+          const piece = requireText(
+            evaluateWithin(part, ['parts', index], scope, budget),
+            'concat',
+            ['parts', index],
+          );
+          if (piece === undefined) {
+            return undefined;
+          }
+          built = acceptText(built + piece, 'concat', [], budget);
+        }
+        return built;
+      }
+      case 'text': {
+        const raw = evaluateWithin(expression.value, ['value'], scope, budget);
+        if (isAbsent(raw)) {
+          return undefined;
+        }
+        if (typeof raw === 'string') {
+          return acceptText(raw, 'text', [], budget);
+        }
+        if (typeof raw === 'number') {
+          // Same single rule as arithmetic: `not-finite` answers for finiteness wherever it
+          // comes up, so a NaN here does not get relabelled `operand-type`.
+          if (!Number.isFinite(raw)) {
+            return fail(
+              { code: 'not-finite', site: 'text', at: ['value'], actualType: 'not-finite' },
+              'A number that is not finite has no text form a document could carry.',
+            );
+          }
+          return acceptText(String(raw), 'text', [], budget);
+        }
+        // A boolean, a list and an object are refused: `text(true)` would print `true` into a
+        // document, exactly what a print position has forbidden since ADR 0002.
+        return fail(
+          { code: 'operand-type', site: 'text', at: ['value'], actualType: valueTypeOf(raw) },
+          `Only a number or a text can be turned into text, got ${describe(valueTypeOf(raw))}.`,
+        );
+      }
+      case 'textCase': {
+        const source = requireText(
+          evaluateWithin(expression.text, ['text'], scope, budget),
+          'textCase',
+          ['text'],
+        );
+        if (source === undefined) {
+          return undefined;
+        }
+        // Never `toLocaleUpperCase`: the locale variant depends on ICU and breaks the
+        // determinism the engine owes (E6). The Biome guard refuses it too.
+        const folded = expression.op === 'upper' ? source.toUpperCase() : source.toLowerCase();
+        return acceptText(folded, 'textCase', [], budget);
+      }
+      case 'dateAdd': {
+        const from = requireDate(
+          evaluateWithin(expression.date, ['date'], scope, budget),
+          'dateAdd',
+          ['date'],
+        );
+        const days = requireDays(
+          evaluateWithin(expression.days, ['days'], scope, budget),
+          'dateAdd',
+          ['days'],
+        );
+        if (from === undefined || days === undefined) {
+          return undefined;
+        }
+        const shifted = shiftDay(from, days);
+        if (shifted === undefined) {
+          return fail(
+            { code: 'not-a-date', site: 'dateAdd', at: ['days'], actualType: 'number' },
+            'This shift lands outside 0001-01-01 … 9999-12-31, which is the whole range a civil date covers here.',
+          );
+        }
+        return civilDateOf(shifted);
+      }
+      case 'dateDiff': {
+        const from = requireDate(
+          evaluateWithin(expression.from, ['from'], scope, budget),
+          'dateDiff',
+          ['from'],
+        );
+        const to = requireDate(evaluateWithin(expression.to, ['to'], scope, budget), 'dateDiff', [
+          'to',
+        ]);
+        return from === undefined || to === undefined ? undefined : to - from;
+      }
+      case 'endOfMonth': {
+        const date = requireDate(
+          evaluateWithin(expression.date, ['date'], scope, budget),
+          'endOfMonth',
+          ['date'],
+        );
+        return date === undefined ? undefined : civilDateOf(endOfMonthOf(date));
+      }
       case 'aggregate':
         return aggregate(expression, scope, budget);
       case 'count':

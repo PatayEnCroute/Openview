@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { dayNumberOf } from './civil-date.js';
 import { kindOf } from './value-type.js';
 
 /**
@@ -69,6 +70,24 @@ export type ArithmeticOperator = (typeof ARITHMETIC_OPERATORS)[number];
 export const AGGREGATE_OPERATORS = ['sum', 'avg', 'min', 'max'] as const;
 
 export type AggregateOperator = (typeof AGGREGATE_OPERATORS)[number];
+
+/**
+ * Case folding, and **the one place in this whole lot where determinism holds by convention
+ * rather than by specification** (ADR 0003).
+ *
+ * `toUpperCase`/`toLowerCase` are specified, but INDEXED ON THE ENGINE'S UNICODE VERSION.
+ * Measured: `'ß'.toUpperCase()` yields `"SS"` -- one character becomes two, **the length
+ * changes**, therefore the layout changes, therefore the pagination changes. That is not a
+ * laboratory case; one German company name is enough.
+ *
+ * The locale variants (`toLocaleUpperCase`) are refused outright: they depend on ICU and
+ * break determinism for good. The residual reserve is tooled by FROZEN TEST VECTORS -- `ß`,
+ * `ﬀ`, `İ`, plus accented Latin -- whose expectations are hard-coded, so the day a Node
+ * upgrade changes a result, it is the test that says so and not an invoice.
+ */
+export const TEXT_CASE_OPERATORS = ['upper', 'lower'] as const;
+
+export type TextCaseOperator = (typeof TEXT_CASE_OPERATORS)[number];
 
 export interface LiteralExpression {
   readonly kind: 'literal';
@@ -227,6 +246,83 @@ export interface FilterExpression {
 }
 
 /**
+ * Joins texts. At least two parts -- one part is the part itself, and zero is nothing.
+ *
+ * `concat` refuses a NUMBER, like the whole algebra has refused coercion since ADR 0001.
+ * Wrap it in {@link TextExpression} instead. It is also the only kind that PRODUCES data
+ * rather than reducing it, which is why it carries its own bound: measured on a balanced
+ * `concat(x, x)` tree over a 1 kB string, depth 12 gives a 237 kB model and a 4 MB string,
+ * and depth 18 gives a 15 MB model and a **268 MB** string with 858 MB of RSS. The
+ * amplification is 2^depth times the longest string in the data.
+ */
+export interface ConcatExpression {
+  readonly kind: 'concat';
+  readonly parts: readonly PrintableExpression[];
+}
+
+/**
+ * EXPLICIT stringification: the canonical form of a value, never a display format.
+ *
+ * The canonical case -- gluing a label to a number the integrator supplies as a number --
+ * has to stay writable: `concat('N° ', text(cmd.numero))`. One field, and it makes the exact
+ * place a value becomes text visible **in the tree**. Without it the whole "Texts" family
+ * would be unusable as soon as the datum is numeric; with implicit stringification there
+ * would be an operator that adds or concatenates depending on the data, which is
+ * uninterpretable in a formula bar.
+ *
+ * It yields `String(value)` for a finite number and the string unchanged for a string --
+ * **no thousands separator, no currency symbol, no locale**. Formatting belongs to lot C6;
+ * doing it here would be a format position *de facto*, the same mistake as the implicit
+ * rounding refused for `percentOf`. A boolean, a list and an object are REFUSED:
+ * `text(true)` would print `true` into a document, exactly what a print position has
+ * forbidden since ADR 0002. An absent value propagates absence, like everywhere else.
+ */
+export interface TextExpression {
+  readonly kind: 'text';
+  readonly value: PrintableExpression;
+}
+
+export interface TextCaseExpression {
+  readonly kind: 'textCase';
+  readonly op: TextCaseOperator;
+  readonly text: PrintableExpression;
+}
+
+/**
+ * "Due date = invoice date + 30 days". No convention to choose, so it passes the
+ * admissibility test of ADR 0003 decision 5.
+ *
+ * The date is a `YYYY-MM-DD` string and the shift a whole number of days. A literal date is
+ * validated AT PARSE TIME: a path cannot be checked when a template is saved, but a literal
+ * can, and the repository's doctrine is explicit at exactly that point.
+ */
+export interface DateAddExpression {
+  readonly kind: 'dateAdd';
+  readonly date: PrintableExpression;
+  readonly days: PrintableExpression;
+}
+
+/**
+ * The number of days between two dates the caller SUPPLIED.
+ *
+ * "Days overdue" is `dateDiff(cmd.echeance, X)` where `X` is a datum the integrator provides
+ * under whatever name it likes -- exactly like the total or the number. There is no `today`
+ * to reserve and nothing to reserve it for: the only rule left is technical, and it is that
+ * the engine does not read the clock (roadmap E6).
+ */
+export interface DateDiffExpression {
+  readonly kind: 'dateDiff';
+  readonly from: PrintableExpression;
+  readonly to: PrintableExpression;
+}
+
+/** "45 days end of month" is `endOfMonth(dateAdd(d, 45))`. See `civil-date.ts`. */
+export interface EndOfMonthExpression {
+  readonly kind: 'endOfMonth';
+  readonly date: PrintableExpression;
+}
+
+/**
  * What yields a value a document can print, and therefore what a text binding
  * accepts.
  *
@@ -244,7 +340,13 @@ export type PrintableExpression =
   | PercentOfExpression
   | AggregateExpression
   | CountExpression
-  | ConditionalExpression;
+  | ConditionalExpression
+  | ConcatExpression
+  | TextExpression
+  | TextCaseExpression
+  | DateAddExpression
+  | DateDiffExpression
+  | EndOfMonthExpression;
 
 /**
  * What yields a boolean. Refused in a print position AT PARSE TIME, where the refusal
@@ -367,6 +469,12 @@ function printableMembers() {
     AggregateExpressionSchema,
     CountExpressionSchema,
     ConditionalExpressionSchema,
+    ConcatExpressionSchema,
+    TextExpressionSchema,
+    TextCaseExpressionSchema,
+    DateAddExpressionSchema,
+    DateDiffExpressionSchema,
+    EndOfMonthExpressionSchema,
   ] as const;
 }
 
@@ -433,6 +541,57 @@ export const PercentOfExpressionSchema = z.object({
   kind: z.literal('percentOf'),
   base: PrintableExpressionSchema,
   rate: PrintableExpressionSchema,
+});
+
+/**
+ * A date operand, checked at SAVE TIME when it is written as a literal string.
+ *
+ * "Shape validation cannot move up to parse time" was a non-sequitur: that a `path` cannot
+ * be verified when a template is saved says nothing about a `literal`, and the repository's
+ * doctrine is explicit at exactly this point -- `PathExpressionSchema` exists so that "a
+ * malformed path fails when the template is saved instead of when a document renders". So
+ * the refinement says something about a literal string and stays silent about everything
+ * else.
+ */
+const dateOperandSchema: z.ZodType<PrintableExpression> = PrintableExpressionSchema.refine(
+  (operand) =>
+    operand.kind !== 'literal' ||
+    typeof operand.value !== 'string' ||
+    dayNumberOf(operand.value) !== undefined,
+  'A literal date must be written YYYY-MM-DD, between 0001-01-01 and 9999-12-31',
+);
+
+export const ConcatExpressionSchema = z.object({
+  kind: z.literal('concat'),
+  parts: z.array(PrintableExpressionSchema).min(2, 'A concat needs at least two parts'),
+});
+
+export const TextExpressionSchema = z.object({
+  kind: z.literal('text'),
+  value: PrintableExpressionSchema,
+});
+
+export const TextCaseExpressionSchema = z.object({
+  kind: z.literal('textCase'),
+  op: z.enum(TEXT_CASE_OPERATORS),
+  text: PrintableExpressionSchema,
+});
+
+export const DateAddExpressionSchema = z.object({
+  kind: z.literal('dateAdd'),
+  date: dateOperandSchema,
+  days: PrintableExpressionSchema,
+});
+
+export const DateDiffExpressionSchema = z.object({
+  kind: z.literal('dateDiff'),
+  from: dateOperandSchema,
+  to: dateOperandSchema,
+});
+
+export const EndOfMonthExpressionSchema = z.object({
+  kind: z.literal('endOfMonth'),
+  date: dateOperandSchema,
 });
 
 export const AggregateExpressionSchema = z.object({
@@ -561,6 +720,28 @@ function collectPaths(
     case 'filter':
       collectPaths(expression.source, aliases, into);
       collectPaths(expression.where, withAlias(aliases, expression.as), into);
+      break;
+    case 'concat':
+      for (const part of expression.parts) {
+        collectPaths(part, aliases, into);
+      }
+      break;
+    case 'text':
+      collectPaths(expression.value, aliases, into);
+      break;
+    case 'textCase':
+      collectPaths(expression.text, aliases, into);
+      break;
+    case 'dateAdd':
+      collectPaths(expression.date, aliases, into);
+      collectPaths(expression.days, aliases, into);
+      break;
+    case 'dateDiff':
+      collectPaths(expression.from, aliases, into);
+      collectPaths(expression.to, aliases, into);
+      break;
+    case 'endOfMonth':
+      collectPaths(expression.date, aliases, into);
       break;
     case 'logical':
       for (const operand of expression.operands) {

@@ -17,11 +17,15 @@ import type {
   ArithmeticExpression,
   ArithmeticOperator,
   ConditionalExpression,
+  DateAddExpression,
+  DateDiffExpression,
+  EndOfMonthExpression,
   Expression,
   FilterExpression,
   LiteralExpression,
   PathExpression,
   PrintableExpression,
+  TextExpression,
 } from './expression.js';
 import { createBudget, DEFAULT_EVALUATION_LIMITS } from './limits.js';
 
@@ -646,6 +650,312 @@ describe('the conditional inside a formula', () => {
   });
 });
 
+describe('texts', () => {
+  const texts = {
+    invoice: { number: 4711, label: 'acme sàrl', notes: '', flag: true, lines: [1, 2] },
+  };
+  const concat = (...parts: PrintableExpression[]): Expression => ({ kind: 'concat', parts });
+  const asText = (value: PrintableExpression): TextExpression => ({ kind: 'text', value });
+
+  it('joins two and three parts', () => {
+    expect(evaluateExpression(concat(literal('a'), literal('b')), texts)).toBe('ab');
+    expect(evaluateExpression(concat(literal('a'), literal('b'), literal('c')), texts)).toBe('abc');
+  });
+
+  it('refuses a NUMBER, because the algebra refuses coercion', () => {
+    // The join is not an overloaded `+`. With implicit stringification there would be an
+    // operator that adds or concatenates depending on the data, which is uninterpretable in a
+    // formula bar.
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(concat(literal('N° '), path('invoice.number')), texts),
+      ),
+    ).toStrictEqual({
+      code: 'operand-type',
+      site: 'concat',
+      at: ['parts', 1],
+      actualType: 'number',
+    });
+  });
+
+  it('makes the canonical case writable through text(), with no format', () => {
+    // The whole reason `text()` exists: gluing a label to a number the integrator supplies as
+    // a number. And 4711 comes back as "4711" -- NO THOUSANDS SEPARATOR, which is the proof
+    // that no format slipped into this lot. Formatting belongs to lot C6.
+    expect(evaluateExpression(concat(literal('N° '), asText(path('invoice.number'))), texts)).toBe(
+      'N° 4711',
+    );
+    expect(evaluateExpression(asText(literal(1234)), texts)).toBe('1234');
+    expect(evaluateExpression(asText(literal(1234.5)), texts)).toBe('1234.5');
+  });
+
+  it('leaves text that is already text alone', () => {
+    expect(evaluateExpression(asText(literal('déjà du texte')), texts)).toBe('déjà du texte');
+    expect(evaluateExpression(asText(path('invoice.notes')), texts)).toBe('');
+  });
+
+  it('refuses a boolean, a list and an object in text()', () => {
+    // `text(true)` would print `true` into a document, exactly what a print position has
+    // forbidden since ADR 0002.
+    expect(
+      expectEvaluationError(() => evaluateExpression(asText(literal(true)), texts)),
+    ).toStrictEqual({ code: 'operand-type', site: 'text', at: ['value'], actualType: 'boolean' });
+    expect(
+      expectEvaluationError(() => evaluateExpression(asText(path('invoice.lines')), texts)),
+    ).toStrictEqual({ code: 'operand-type', site: 'text', at: ['value'], actualType: 'list' });
+    expect(
+      expectEvaluationError(() => evaluateExpression(asText(path('invoice')), texts)),
+    ).toStrictEqual({ code: 'operand-type', site: 'text', at: ['value'], actualType: 'object' });
+  });
+
+  it('refuses a non-finite number in text(), with the finiteness code', () => {
+    expect(
+      expectEvaluationError(() => evaluateExpression(asText(path('broken.nan')), numeric)),
+    ).toStrictEqual({
+      code: 'not-finite',
+      site: 'text',
+      at: ['value'],
+      actualType: 'not-finite',
+    });
+  });
+
+  it('propagates absence through text(), a join and a case fold', () => {
+    expect(evaluateExpression(asText(path('invoice.missing')), texts)).toBeUndefined();
+    expect(
+      evaluateExpression(concat(literal('a'), path('invoice.missing')), texts),
+    ).toBeUndefined();
+    expect(
+      evaluateExpression({ kind: 'textCase', op: 'upper', text: path('invoice.missing') }, texts),
+    ).toBeUndefined();
+  });
+
+  it('refuses a number in a case fold, at its own field name', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression({ kind: 'textCase', op: 'lower', text: path('invoice.number') }, texts),
+      ),
+    ).toStrictEqual({
+      code: 'operand-type',
+      site: 'textCase',
+      at: ['text'],
+      actualType: 'number',
+    });
+  });
+
+  it('folds case on accented text', () => {
+    expect(
+      evaluateExpression({ kind: 'textCase', op: 'upper', text: path('invoice.label') }, texts),
+    ).toBe('ACME SÀRL');
+    expect(evaluateExpression({ kind: 'textCase', op: 'lower', text: literal('ÉTÉ') }, texts)).toBe(
+      'été',
+    );
+  });
+
+  it.each([
+    ['upper' as const, 'ß', 'SS'],
+    ['upper' as const, 'ﬀ', 'FF'],
+    ['lower' as const, 'İ', 'i̇'],
+    ['upper' as const, 'éàç', 'ÉÀÇ'],
+    ['lower' as const, 'ÉÀÇ', 'éàç'],
+  ])('pins the frozen Unicode vector %s(%o)', (op, input, expected) => {
+    // The one place in this lot where determinism holds by convention rather than by
+    // specification: `toUpperCase` is specified but INDEXED ON THE ENGINE'S UNICODE VERSION.
+    // `'ß'.toUpperCase()` is "SS" -- one character becomes two, THE LENGTH CHANGES, therefore
+    // the layout and the pagination change. One German company name is enough. These
+    // expectations are hard-coded so a Node upgrade that changes a result is reported by a
+    // test rather than by an invoice.
+    expect(evaluateExpression({ kind: 'textCase', op, text: literal(input) }, texts)).toBe(
+      expected,
+    );
+    if (input === 'ß' || input === 'ﬀ') {
+      expect(input).toHaveLength(1);
+      expect(expected).toHaveLength(2);
+    }
+  });
+
+  it('handles 100 000 characters', () => {
+    const long = 'x'.repeat(100_000);
+    expect(evaluateExpression(concat(literal(long), literal(long)), texts)).toHaveLength(200_000);
+  });
+
+  it('refuses a stair-shaped concat by the BOUND, in bounded memory', () => {
+    // Measured on a balanced `concat(x, x)` tree over a 1 kB value: depth 12 gives a 4 MB
+    // string, depth 18 gives 268 MB and 858 MB of RSS. The bound is checked after EVERY
+    // construction, which is the only order that keeps the intermediate string from existing
+    // before being refused -- so this is a verification by refusal, not by crash.
+    let stair: PrintableExpression = literal('x'.repeat(64));
+    for (let level = 0; level < 18; level += 1) {
+      stair = { kind: 'concat', parts: [stair, stair] };
+    }
+
+    const details = expectEvaluationError(() =>
+      evaluateExpression(stair, texts, { budget: createBudget({ maxStringLength: 1_000 }) }),
+    );
+
+    expect(details.code).toBe('string-limit-exceeded');
+    if (details.code === 'string-limit-exceeded') {
+      expect(details.limit).toBe(1_000);
+    }
+  });
+
+  it('closes the same bound for the other two text-producing kinds', () => {
+    // Without this, `upper(concat(...))` and `text(...)` would each be a way around it.
+    const tight = () => createBudget({ maxStringLength: 4 });
+
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression({ kind: 'textCase', op: 'upper', text: literal('abcdefgh') }, texts, {
+          budget: tight(),
+        }),
+      ).code,
+    ).toBe('string-limit-exceeded');
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(asText(literal(123_456_789)), texts, { budget: tight() }),
+      ).code,
+    ).toBe('string-limit-exceeded');
+  });
+});
+
+describe('civil dates in the algebra', () => {
+  const dates = {
+    invoice: { issuedOn: '2026-01-31', dueOn: '2026-03-02', bad: '2026-02-30', term: 30 },
+    // The render date is DATA, under a name the integrator chose. Openview reserves none.
+    company: { processedOn: '2026-03-10' },
+  };
+  const dateAdd = (date: PrintableExpression, days: PrintableExpression): DateAddExpression => ({
+    kind: 'dateAdd',
+    date,
+    days,
+  });
+  const dateDiff = (from: PrintableExpression, to: PrintableExpression): DateDiffExpression => ({
+    kind: 'dateDiff',
+    from,
+    to,
+  });
+  const endOfMonth = (date: PrintableExpression): EndOfMonthExpression => ({
+    kind: 'endOfMonth',
+    date,
+  });
+
+  it('adds days without inventing a month convention', () => {
+    expect(evaluateExpression(dateAdd(literal('2026-01-31'), literal(30)), dates)).toBe(
+      '2026-03-02',
+    );
+    expect(evaluateExpression(dateAdd(literal('2024-01-31'), literal(30)), dates)).toBe(
+      '2024-03-01',
+    );
+    expect(evaluateExpression(dateAdd(path('invoice.issuedOn'), path('invoice.term')), dates)).toBe(
+      '2026-03-02',
+    );
+  });
+
+  it('counts days in both directions', () => {
+    expect(evaluateExpression(dateDiff(literal('2026-01-01'), literal('2026-03-01')), dates)).toBe(
+      59,
+    );
+    expect(evaluateExpression(dateDiff(literal('2026-03-01'), literal('2026-01-01')), dates)).toBe(
+      -59,
+    );
+    expect(evaluateExpression(dateDiff(literal('2026-01-01'), literal('2026-01-01')), dates)).toBe(
+      0,
+    );
+  });
+
+  it('composes "45 days end of month"', () => {
+    expect(evaluateExpression(endOfMonth(dateAdd(literal('2026-01-20'), literal(45))), dates)).toBe(
+      '2026-03-31',
+    );
+    expect(evaluateExpression(endOfMonth(literal('2024-02-05')), dates)).toBe('2024-02-29');
+  });
+
+  it('reads the render date as a KEY OF THE SCOPE, under a name Openview never chose', () => {
+    // Proven by changing the value and watching the result change: there is no `today` to
+    // reserve, and the only rule left is that the engine does not read the clock (E6).
+    const overdue = dateDiff(path('invoice.dueOn'), path('company.processedOn'));
+
+    expect(evaluateExpression(overdue, dates)).toBe(8);
+    expect(evaluateExpression(overdue, { ...dates, company: { processedOn: '2026-03-20' } })).toBe(
+      18,
+    );
+    // Absent, and the document does not abort: core reports absence, policy is elsewhere.
+    expect(evaluateExpression(overdue, { invoice: dates.invoice, company: {} })).toBeUndefined();
+  });
+
+  it('names the CALLING operator on a bad date, not always dateAdd', () => {
+    // The most likely copy-paste mistake of the lot: it passes all four gates while naming the
+    // wrong operator to the user. Hence dateDiff and endOfMonth, not only dateAdd.
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(dateAdd(path('invoice.bad'), literal(1)), dates),
+      ),
+    ).toStrictEqual({ code: 'not-a-date', site: 'dateAdd', at: ['date'], actualType: 'string' });
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(dateDiff(literal('2026-01-01'), path('invoice.bad')), dates),
+      ),
+    ).toStrictEqual({ code: 'not-a-date', site: 'dateDiff', at: ['to'], actualType: 'string' });
+    expect(
+      expectEvaluationError(() => evaluateExpression(endOfMonth(path('invoice.bad')), dates)),
+    ).toStrictEqual({ code: 'not-a-date', site: 'endOfMonth', at: ['date'], actualType: 'string' });
+  });
+
+  it('refuses a date that is not text at all', () => {
+    expect(
+      expectEvaluationError(() => evaluateExpression(endOfMonth(literal(20_260_131)), dates)),
+    ).toStrictEqual({
+      code: 'operand-type',
+      site: 'endOfMonth',
+      at: ['date'],
+      actualType: 'number',
+    });
+  });
+
+  it('refuses a shift that is not a whole number of days', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(dateAdd(literal('2026-01-31'), literal(1.5)), dates),
+      ),
+    ).toStrictEqual({
+      code: 'operand-type',
+      site: 'dateAdd',
+      at: ['days'],
+      actualType: 'number',
+    });
+  });
+
+  it('refuses a shift that leaves the supported range', () => {
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(dateAdd(literal('9999-12-31'), literal(1)), dates),
+      ),
+    ).toStrictEqual({
+      code: 'not-a-date',
+      site: 'dateAdd',
+      at: ['days'],
+      actualType: 'number',
+    });
+  });
+
+  it('propagates absence rather than aborting', () => {
+    expect(
+      evaluateExpression(dateAdd(path('invoice.missing'), literal(30)), dates),
+    ).toBeUndefined();
+    expect(
+      evaluateExpression(dateAdd(literal('2026-01-31'), path('invoice.missing')), dates),
+    ).toBeUndefined();
+    expect(evaluateExpression(endOfMonth(path('invoice.missing')), dates)).toBeUndefined();
+  });
+
+  it('yields ISO, which is an EXCHANGE form and not a display format', () => {
+    // Until lot C6 owns display, a template that prints this prints ISO. That is stated rather
+    // than hidden, and the playground labels these as raw values.
+    expect(evaluateExpression(dateAdd(literal('2026-01-31'), literal(0)), dates)).toBe(
+      '2026-01-31',
+    );
+  });
+});
+
 describe('evaluatePredicate', () => {
   it('accepts a boolean result', () => {
     expect(evaluatePredicate(path('invoice.paid'), scope)).toBe(false);
@@ -698,21 +1008,6 @@ describe('evaluateSequence', () => {
   });
 });
 
-/**
- * Codes the catalogue declares whose producer arrives in a later increment.
- *
- * The catalogue is complete from the start, because lot C8 has to enumerate it and
- * adding a required field to a public interface mid-lot would be the only real cost.
- * A naive "every code has a producer" test would therefore be red at the commit that
- * writes it -- so the assertion is a PARTITION against this dated constant instead.
- * The last increment to empty it deletes the constant, and the exhaustive test appears
- * by subtraction.
- */
-const PENDING_CODES = {
-  'not-a-date': 'INC-8',
-  'string-limit-exceeded': 'INC-8',
-} as const;
-
 /** A chain of `levels` nested `not` nodes -- built in a loop, so it passes no guard. */
 function nestedNot(levels: number): Expression {
   let built: Expression = literal(true);
@@ -723,10 +1018,23 @@ function nestedNot(levels: number): Expression {
 }
 
 /**
- * One producer per code that exists today, so the partition below is proven rather
- * than declared: each thunk is executed and its code asserted.
+ * One producer per DECLARED code, every one of them executed by the test below -- so "the
+ * catalogue is complete" is proven rather than declared.
+ *
+ * The catalogue was declared whole from the first increment of this lot, because lot C8 has
+ * to enumerate it and adding a required field to a public interface mid-lot would have been
+ * the only real cost. While producers were still landing, this table was paired with a dated
+ * `PENDING_CODES` debt list and the assertion was a PARTITION: produced ∪ debt == catalogue,
+ * and produced ∩ debt == ∅. That kept a declared-but-unproducible code from passing as
+ * covered, and kept a settled debt from rotting in silence. Nothing is owed any more, so the
+ * debt list is gone from the file and the exhaustive assertion appeared by subtraction.
+ *
+ * A TOTAL `Record` rather than a `Partial`, which is the stricter form the subtraction buys:
+ * a declared code with no producer now fails to COMPILE. It forbids the two symmetrical
+ * drifts -- a code nothing produces (C8 would promise a message for an impossible situation)
+ * and a throw with no label (C8 would have nothing to hang a message on).
  */
-const PRODUCED_CODES: Readonly<Partial<Record<ExpressionErrorCode, () => unknown>>> = {
+const PRODUCED_CODES: Readonly<Record<ExpressionErrorCode, () => unknown>> = {
   'not-comparable': () =>
     evaluateExpression(
       { kind: 'compare', op: 'eq', left: path('invoice.lines'), right: path('invoice.lines') },
@@ -755,18 +1063,19 @@ const PRODUCED_CODES: Readonly<Partial<Record<ExpressionErrorCode, () => unknown
   'not-finite': () =>
     evaluateExpression(arithmetic('add', path('broken.nan'), literal(1)), numeric),
   'division-by-zero': () => evaluateExpression(arithmetic('div', literal(1), literal(0)), scope),
+  'not-a-date': () =>
+    evaluateExpression({ kind: 'endOfMonth', date: literal('not a date') }, scope),
+  'string-limit-exceeded': () =>
+    evaluateExpression({ kind: 'concat', parts: [literal('abcd'), literal('efgh')] }, scope, {
+      budget: createBudget({ maxStringLength: 4 }),
+    }),
 };
 
 describe('expression error payload', () => {
-  it('reports every declared code as produced or as an explicit debt', () => {
-    // Two assertions, and it is their CONJUNCTION that does the work: no orphan code
-    // (C8 would promise a message for an impossible situation) and no stale debt (a
-    // throw with no label, which C8 would have nothing to hang a message on).
-    const produced = Object.keys(PRODUCED_CODES);
-    const pending = Object.keys(PENDING_CODES);
-
-    expect([...produced, ...pending].sort()).toStrictEqual([...EXPRESSION_ERROR_CODES].sort());
-    expect(produced.filter((code) => pending.includes(code))).toStrictEqual([]);
+  it('produces every code the catalogue declares, and no other', () => {
+    // The total Record above already makes a missing producer a compile error; this catches
+    // the other direction, a producer for a code the catalogue dropped.
+    expect(Object.keys(PRODUCED_CODES).sort()).toStrictEqual([...EXPRESSION_ERROR_CODES].sort());
   });
 
   it.each(Object.entries(PRODUCED_CODES))('produces %s from a real evaluation', (code, run) => {

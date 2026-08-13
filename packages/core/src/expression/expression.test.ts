@@ -4,8 +4,12 @@ import {
   type AggregateExpressionSchema,
   type ArithmeticExpressionSchema,
   type CompareExpressionSchema,
+  type ConcatExpressionSchema,
   type ConditionalExpressionSchema,
   type CountExpressionSchema,
+  type DateAddExpressionSchema,
+  type DateDiffExpressionSchema,
+  type EndOfMonthExpressionSchema,
   type Expression,
   type ExpressionKind,
   ExpressionSchema,
@@ -21,6 +25,8 @@ import {
   PrintableExpressionSchema,
   pathsOf,
   rootSegment,
+  type TextCaseExpressionSchema,
+  type TextExpressionSchema,
 } from './expression.js';
 
 /** True only when each type accepts the other; `false` otherwise, which fails to assign. */
@@ -49,6 +55,12 @@ type EnumeratedMembers =
   | z.infer<typeof AggregateExpressionSchema>
   | z.infer<typeof CountExpressionSchema>
   | z.infer<typeof ConditionalExpressionSchema>
+  | z.infer<typeof ConcatExpressionSchema>
+  | z.infer<typeof TextExpressionSchema>
+  | z.infer<typeof TextCaseExpressionSchema>
+  | z.infer<typeof DateAddExpressionSchema>
+  | z.infer<typeof DateDiffExpressionSchema>
+  | z.infer<typeof EndOfMonthExpressionSchema>
   | z.infer<typeof CompareExpressionSchema>
   | z.infer<typeof LogicalExpressionSchema>
   | z.infer<typeof NotExpressionSchema>
@@ -102,6 +114,26 @@ const SAMPLES: { readonly [K in ExpressionKind]: Extract<Expression, { kind: K }
     whenTrue: { kind: 'literal', value: 0 },
     whenFalse: { kind: 'path', path: 'invoice.discount' },
   },
+  concat: {
+    kind: 'concat',
+    parts: [
+      { kind: 'literal', value: 'N° ' },
+      { kind: 'text', value: { kind: 'path', path: 'invoice.number' } },
+    ],
+  },
+  text: { kind: 'text', value: { kind: 'path', path: 'invoice.number' } },
+  textCase: { kind: 'textCase', op: 'upper', text: { kind: 'path', path: 'invoice.label' } },
+  dateAdd: {
+    kind: 'dateAdd',
+    date: { kind: 'path', path: 'invoice.issuedOn' },
+    days: { kind: 'literal', value: 30 },
+  },
+  dateDiff: {
+    kind: 'dateDiff',
+    from: { kind: 'path', path: 'invoice.dueOn' },
+    to: { kind: 'path', path: 'company.processedOn' },
+  },
+  endOfMonth: { kind: 'endOfMonth', date: { kind: 'path', path: 'invoice.issuedOn' } },
   compare: {
     kind: 'compare',
     op: 'gt',
@@ -128,6 +160,12 @@ const PRINTABLE_KINDS: { readonly [K in PrintableExpression['kind']]: true } = {
   aggregate: true,
   count: true,
   if: true,
+  concat: true,
+  text: true,
+  textCase: true,
+  dateAdd: true,
+  dateDiff: true,
+  endOfMonth: true,
 };
 
 describe('ExpressionSchema', () => {
@@ -220,6 +258,82 @@ describe('ExpressionSchema', () => {
       'kind',
       'path',
     );
+  });
+});
+
+describe('the texts-and-dates schemas', () => {
+  it('refuses a concat with fewer than two parts', () => {
+    // One part is the part itself, and zero is nothing.
+    expect(() =>
+      ExpressionSchema.parse({ kind: 'concat', parts: [{ kind: 'literal', value: 'x' }] }),
+    ).toThrow(/at least two parts/);
+    expect(() => ExpressionSchema.parse({ kind: 'concat', parts: [] })).toThrow();
+  });
+
+  it.each([
+    ['2026-02-30'],
+    ['2025-02-29'],
+    ['2026-13-01'],
+    ['2026-1-5'],
+    ['31/01/2026'],
+    ['0000-01-01'],
+  ])('refuses the literal date %o AT SAVE TIME', (value) => {
+    // The doctrine this repo already applies to a path: "a malformed path fails when the
+    // template is saved instead of when a document renders". That a `path` cannot be checked
+    // at save time says nothing about a `literal`, so the refinement speaks about a literal
+    // string and stays silent about everything else.
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'dateAdd',
+        date: { kind: 'literal', value },
+        days: { kind: 'literal', value: 30 },
+      }),
+    ).toThrow();
+  });
+
+  it('says nothing about a date it cannot check at save time', () => {
+    // A path, and a non-string literal: neither can be validated before a render, so the
+    // refinement must not pretend otherwise.
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'dateAdd',
+        date: { kind: 'path', path: 'invoice.issuedOn' },
+        days: { kind: 'literal', value: 30 },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'endOfMonth',
+        date: { kind: 'literal', value: 20_260_131 },
+      }),
+    ).not.toThrow();
+  });
+
+  it('checks both date operands of a dateDiff', () => {
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'dateDiff',
+        from: { kind: 'literal', value: '2026-01-01' },
+        to: { kind: 'literal', value: '2026-02-31' },
+      }),
+    ).toThrow();
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'dateDiff',
+        from: { kind: 'literal', value: '2026-01-01' },
+        to: { kind: 'literal', value: '2026-03-01' },
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses an unknown case operator', () => {
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'textCase',
+        op: 'title',
+        text: { kind: 'literal', value: 'x' },
+      }),
+    ).toThrow();
   });
 });
 
@@ -377,6 +491,38 @@ describe('pathsOf', () => {
     };
 
     expect([...pathsOf(discounted)]).toStrictEqual(['invoice.lines', 'company.threshold']);
+  });
+
+  it('walks every text and date operator through its own field names', () => {
+    // Each kind has NAMED fields of fixed arity, so there is no `args` array to guess at --
+    // and the traversal has to name each one, which is what this pins.
+    const joined: Expression = {
+      kind: 'concat',
+      parts: [
+        { kind: 'literal', value: 'N° ' },
+        { kind: 'text', value: { kind: 'path', path: 'invoice.number' } },
+        { kind: 'textCase', op: 'upper', text: { kind: 'path', path: 'invoice.label' } },
+      ],
+    };
+    expect([...pathsOf(joined)]).toStrictEqual(['invoice.number', 'invoice.label']);
+
+    const due: Expression = {
+      kind: 'endOfMonth',
+      date: {
+        kind: 'dateAdd',
+        date: { kind: 'path', path: 'invoice.issuedOn' },
+        days: { kind: 'path', path: 'company.paymentTerm' },
+      },
+    };
+    expect([...pathsOf(due)]).toStrictEqual(['invoice.issuedOn', 'company.paymentTerm']);
+
+    const overdue: Expression = {
+      kind: 'dateDiff',
+      from: { kind: 'path', path: 'invoice.dueOn' },
+      // The render date is a caller key like any other, under a name Openview never chose.
+      to: { kind: 'path', path: 'company.processedOn' },
+    };
+    expect([...pathsOf(overdue)]).toStrictEqual(['invoice.dueOn', 'company.processedOn']);
   });
 
   it('collects BOTH branches of a conditional', () => {
