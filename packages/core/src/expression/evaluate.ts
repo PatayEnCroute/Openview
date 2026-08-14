@@ -834,10 +834,14 @@ export function evaluateExpression(
             'operands',
             index,
           ]);
+        // `decide` is applied through an explicit arrow rather than passed by reference:
+        // its second parameter is the index, on purpose, and a bare `every(decide)` reads
+        // the same as the accident that rule S7727 exists to catch -- a callback silently
+        // fed the index and the array it never meant to take.
         if (expression.op === 'and') {
-          return expression.operands.every(decide);
+          return expression.operands.every((operand, index) => decide(operand, index));
         }
-        return expression.operands.some(decide);
+        return expression.operands.some((operand, index) => decide(operand, index));
       }
       case 'not':
         return !requireBoolean(

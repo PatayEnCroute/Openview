@@ -100,16 +100,21 @@ describe('kindOf', () => {
     expect(reads).toBe(0);
   });
 
-  it('survives a payload too deep for JSON.stringify', () => {
-    // The reason this function exists. `JSON.stringify` overflows the stack around 8 000
-    // levels, so describing the payload used to crash the exhaustiveness guard on exactly
-    // the inputs it was written to report.
+  it('survives a payload deep enough to overflow a recursive walk', () => {
+    // The reason this function exists: describing the payload used to crash the
+    // exhaustiveness guard on exactly the inputs it was written to report, because the
+    // description walked the value.
+    //
+    // This test used to open by pinning the hazard itself -- `JSON.stringify` throwing a
+    // `RangeError` around 8 000 levels. That assertion pinned the ENGINE, not the code:
+    // Node 26 ships a V8 whose `JSON.stringify` no longer recurses, so it stopped
+    // throwing and the leg went red on a premise. What `kindOf` owes is unchanged either
+    // way -- be total on a payload validation never saw -- so only that is asserted.
     let deep: Record<string, unknown> = { kind: 'regex' };
     for (let level = 0; level < 20_000; level += 1) {
       deep = { child: deep, kind: 'regex' };
     }
 
-    expect(() => JSON.stringify(deep)).toThrow(RangeError);
     expect(kindOf(deep, 'kind')).toBe('regex');
   });
 });
