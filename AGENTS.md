@@ -239,6 +239,15 @@ déclarés par paquet. Ne « corrigez » jamais un blocage en élargissant un
 `import './foo.js'`, jamais `import './foo'`. L'extension pointe vers le fichier
 **émis**, donc `.js` même depuis un `.ts`.
 
+**Modularité & taille des fichiers (Clean Architecture).** Évitez les fichiers
+monolithiques regroupant types, schémas, logique de runtime et cas particuliers :
+- Isolez les contrats de types TypeScript purs (`types.ts`).
+- Isolez les schémas de validation Zod (`schemas.ts`).
+- Découpez les moteurs de runtime en opérations unitaires sous un dossier dédié
+  (ex: `evaluator/operations/`).
+- Exposez des façades claires (barrels) pour la consommation externe sans fuite
+  d'implémentation interne.
+
 ---
 
 ## 🧩 3. Patrons de conception
@@ -319,6 +328,11 @@ ne les passera pas en CI.
 
 - **Tests obligatoires** pour toute fonction de `core` et `engine` : `*.test.ts`
   ou `*.spec.ts` (les deux suffixes sont découverts et exclus de la couverture).
+- **Organisation des fichiers de test (`__tests__/`)** : Lorsque les tests d'un
+  sous-système ou d'un module se multiplient, rassemblez-les dans un sous-dossier
+  `__tests__/` local (ex: `src/expression/__tests__/`, `src/expression/evaluator/__tests__/`).
+  Cela aère l'arborescence `src/` tout en restant 100 % compatible avec `vitest`
+  et la contrainte TypeScript `rootDir: "src"`.
 - **Seuil de couverture : 90 %.** Il est mesuré sur *tout* le code source, pas
   seulement sur les fichiers qu'un test importe. Ne le désactivez jamais, même
   « temporairement » : un seuil neutralisé ne se réactive pas.

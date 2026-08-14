@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidEvaluationLimitsError } from '../errors.js';
-import { createBudget, DEFAULT_EVALUATION_LIMITS, resolveEvaluationLimits } from './limits.js';
+import { InvalidEvaluationLimitsError } from '../../errors.js';
+import { createBudget, DEFAULT_EVALUATION_LIMITS, resolveEvaluationLimits } from '../limits.js';
 
 describe('createBudget', () => {
   it('counts steps against the ceiling and then keeps refusing', () => {

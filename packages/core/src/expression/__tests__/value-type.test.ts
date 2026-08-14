@@ -4,7 +4,7 @@ import {
   type ExpressionValueType,
   kindOf,
   valueTypeOf,
-} from './value-type.js';
+} from '../value-type.js';
 
 describe('valueTypeOf', () => {
   it.each<readonly [unknown, ExpressionValueType]>([

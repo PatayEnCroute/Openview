@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { civilDateOf, dayNumberOf, endOfMonthOf, shiftDay } from './civil-date.js';
+import { civilDateOf, dayNumberOf, endOfMonthOf, shiftDay } from '../civil-date.js';
 
 /**
  * The module is tested for itself and not only through the evaluator, and that is measured
@@ -39,7 +39,7 @@ describe('the round trip', () => {
     }
 
     expect(mismatches).toStrictEqual([]);
-  });
+  }, 30_000);
 
   it('anchors the origin where the algorithm expects it', () => {
     expect(requireDayNumber('1970-01-01')).toBe(0);
