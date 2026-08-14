@@ -100,6 +100,79 @@ describe('DocumentNodeSchema', () => {
     ).toThrow();
   });
 
+  it('rejects a list-valued expression in a print position', () => {
+    // The companion of the test above, for the sub-algebra ADR 0003 added: `filter` yields a
+    // LIST, and a binding that accepted it would print `[object Object],[object Object]`.
+    expect(() =>
+      DocumentNodeSchema.parse({
+        type: 'text',
+        id: 't',
+        content: [
+          {
+            kind: 'binding',
+            value: {
+              kind: 'filter',
+              source: { kind: 'path', path: 'invoice.lines' },
+              as: 'line',
+              where: {
+                kind: 'compare',
+                op: 'gt',
+                left: { kind: 'path', path: 'line.discount' },
+                right: { kind: 'literal', value: 0 },
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('accepts a computed amount in a print position', () => {
+    // The widening ADR 0003 made: a binding carries the whole printable sub-algebra now, so
+    // a line amount can be calculated rather than supplied.
+    const parsed = DocumentNodeSchema.parse({
+      type: 'text',
+      id: 't',
+      content: [
+        {
+          kind: 'binding',
+          value: {
+            kind: 'aggregate',
+            op: 'sum',
+            source: { kind: 'path', path: 'invoice.lines' },
+            as: 'line',
+            value: {
+              kind: 'arithmetic',
+              op: 'mul',
+              left: { kind: 'path', path: 'line.quantity' },
+              right: { kind: 'path', path: 'line.unitPrice' },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(parsed.type).toBe('text');
+  });
+
+  it('accepts a filter as a loop source, with the node unchanged', () => {
+    // `LoopNode.each` was already typed `Expression`, so composition needed no migration.
+    const parsed = DocumentNodeSchema.parse({
+      type: 'loop',
+      id: 'l1',
+      each: {
+        kind: 'filter',
+        source: { kind: 'path', path: 'invoice.lines' },
+        as: 'line',
+        where: { kind: 'isEmpty', operand: { kind: 'path', path: 'line.cancelledAt' } },
+      },
+      as: 'line',
+      children: [],
+    });
+
+    expect(parsed.type).toBe('loop');
+  });
+
   it('accepts an empty paragraph', () => {
     expect(TextNodeSchema.parse({ type: 'text', id: 't', content: [] }).content).toStrictEqual([]);
   });

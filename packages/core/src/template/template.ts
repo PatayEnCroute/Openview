@@ -5,21 +5,55 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  * Format version of the template document, distinct from {@link Template.version}
  * which is the author-facing revision of a given template.
  *
+ * ## What version 2 means
+ *
+ * Version 2 is **the complete C1 algebra**: the 18 expression kinds of ADR 0003 --
+ * arithmetic and percentage, aggregation, count and filter, the in-formula conditional,
+ * concatenation, explicit stringification, case folding, and the three civil-date
+ * operations -- plus `TextBindingSegment.value` widened from `literal | path` to the whole
+ * printable sub-algebra.
+ *
+ * It is stamped ONCE, after the last persisted shape of the lot, and not once per
+ * increment. Four stamps and four identity migrations for one functional lot would make the
+ * number designate a commit rather than a contract. The consequence was a rule of conduct
+ * while the lot was in flight: no commit before this one was publishable, because a build
+ * taken mid-lot reads a lower version and would answer `Invalid input` to a document written
+ * by a later one -- exactly the defect the bump exists to fix.
+ *
  * Bump this whenever the stored shape changes, and add the matching entry to
  * TEMPLATE_MIGRATIONS in ./migrate.ts in the same commit. A template saved by an
  * older release must stay renderable: this is the one decision that cannot be
  * revisited once a real user has saved a document.
  *
- * "Whenever" includes adding a purely OPTIONAL field, which needs no migration
- * step but still needs the bump. Zod strips unknown keys, so a document written by
- * a newer release and opened by an older one loses the new field silently -- and
- * an editor then re-saves the loss. The version is what makes migrateToCurrent
- * refuse the document instead ("written by a newer release; upgrade before
- * opening it").
+ * "Whenever" covers two incompatibilities, and NEITHER of them produces a legible
+ * error without the bump. Both are measured, not supposed.
+ *
+ * SILENT LOSS -- adding a purely OPTIONAL field. Zod strips unknown keys, so a
+ * document written by a newer release and opened by an older one loses the new
+ * field with no error at all, and an editor then re-saves the loss.
+ *
+ * ILLEGIBLE REFUSAL -- WIDENING a union, which is what ADR 0003 did to the
+ * expression algebra. An older build meets a kind it has no member for, and Zod
+ * reports `"note": "No matching discriminator"`, `"message": "Invalid input"` on a
+ * path like `root.children.0.content.1.value.kind`: not an OpenviewError, not a
+ * TemplateMigrationError, no mention of a version, and no remedy for whoever reads
+ * it. With the bump, the same document yields
+ * `TemplateMigrationError: Template uses schema version 2 but this build
+ * understands at most 1. It was written by a newer release of Openview; upgrade
+ * before opening it.` -- which is the message lot C8 is being built to produce.
+ *
+ * A migration that only stamps the version is therefore NOT a phantom migration:
+ * the stamp is the entire mechanism behind that second message.
  */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /**
+ * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape
+ * guard: `TemplateSchema.parse(raw)` is exactly `parseTemplate`'s body minus its guard, so a
+ * deep enough document raises a bare `RangeError` from Zod instead of a typed
+ * `TemplateShapeError`. Use `parseTemplate` unless you specifically need the schema as a
+ * value -- for `z.infer`, for composition, or for the partial validation a Designer does.
+ *
  * Note what a Template does NOT carry: any description of the data it expects.
  * The catalogue of available fields belongs to the integrating application (see
  * `EvaluationScope`, and `dataCatalogue` on the Designer's props). A template records

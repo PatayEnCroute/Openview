@@ -46,11 +46,43 @@ La colonne de droite dit ce qui vous arrêtera réellement.
 | DOM interdit dans `core`/`engine`, Node interdit dans les paquets navigateur | **tsc** (`lib`/`types` par paquet) |
 | Extensions `.js` sur les imports relatifs de `core`/`engine` | **tsc** (`NodeNext`) |
 | Couverture ≥ 90 %, tests type-checkés | **Vitest** + `tsconfig.typecheck.json` |
+| Aucune lecture d'environnement dans `core`/`engine` : constructeur `Date` à toute arité, `Date.now`, `Date.parse`, `Math.random`, `process.env`, `performance.*`, `globalThis.*`, `toLocale*`, les neuf getters locaux de `Date`, `Intl.*` sans locale, `Intl.DateTimeFormat` sans `timeZone` | **Biome** (`noJsRestrictedProperties` + plugin `no-environment-read`) — *avec les trois angles morts et les deux faux positifs ci-dessous* |
 | Assertion `<X>v`, promesses non attendues, patrons de conception, Zod-first | **Revue humaine uniquement** |
-| Aucune lecture d'environnement dans `core`/`engine` : `Date.now()`, `new Date()` sans argument, `Intl.*` sans locale explicite, `Math.random`, `process.env` | **Revue humaine uniquement** — *à outiller* |
 
-Les deux dernières lignes du tableau sont votre responsabilité directe : rien ne
-vous rattrapera.
+La dernière ligne du tableau est votre responsabilité directe : rien ne vous
+rattrapera.
+
+**Et la ligne « lecture d'environnement » n'est couverte qu'en partie — il faut le
+dire, sinon le tableau fait exactement ce qu'il existe pour empêcher.** Une version
+antérieure de cette section annonçait *cinq* contournements « tous vérifiés muets » ;
+la vérification a montré que **deux d'entre eux ne sont pas muets, ce sont des faux
+positifs**. Le motif `$args <: not contains \`timeZone\`` compare du **texte source**,
+pas une valeur : tout objet d'options qui n'est pas un littéral en ligne déclenche donc
+la règle.
+
+**Trois angles morts, réellement muets, barrés par la revue seule :** un **alias**
+(`const C = Date; new C()`), une **locale `undefined` explicite**
+(`Intl.NumberFormat(undefined, opts)`), et une **diffusion d'arguments sur
+`NumberFormat`** (`Intl.NumberFormat(...args)`).
+
+**Deux faux positifs, à connaître avant de perdre une heure dessus :**
+`Intl.DateTimeFormat('fr-FR', options)` avec `options` déclaré ailleurs, et
+`Intl.DateTimeFormat(...args)`, sont **refusés** alors qu'ils sont corrects. Le lot C6
+doit donc écrire son objet d'options **en ligne** — c'est la contrainte à accepter, et
+elle est écrite ici pour que le prochain contributeur ne cherche ni un `biome-ignore`
+(§1.1 l'interdit sans justification) ni une retouche du plugin (§7 l'interdit sans
+mandat).
+
+Ce qui **passe** délibérément, parce que C6 et E4 en ont besoin :
+`Intl.NumberFormat('fr-FR')`, `Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC' })`
+**littéral**, leurs homologues `new`, et `Date.UTC(…)`. Formater dans une locale que le
+**modèle** déclare est permis ; lire celle de la **machine** ne l'est pas.
+
+> ⚠️ `noJsRestrictedProperties` est une règle **nursery**, hors versionnement
+> sémantique : une montée de Biome peut la renommer ou la retirer **en silence**. La
+> sonde jetable décrite dans l'ADR 0003 doit être rejouée à chaque montée ; si la
+> règle disparaît, le repli est de rapatrier ses entrées dans le plugin, qui
+> appartient au dépôt.
 
 ---
 
@@ -118,6 +150,30 @@ discriminant, et toute évolution s'accompagne d'une migration `migrate(from, to
 Un template enregistré en v1 doit pouvoir être rendu en v12. Cette décision est
 irréversible dès le premier template client : ne la reportez pas.
 
+« Toute évolution » se lit au sens large, et deux formes d'incompatibilité l'exigent —
+la seconde a été découverte à l'ADR 0003, et aucune des deux ne produit d'erreur
+lisible sans l'incrément :
+
+- **La perte silencieuse.** `z.object` **supprime** les clés qu'il ne connaît pas. Un
+  champ ajouté, même purement **optionnel**, est donc effacé par un build antérieur
+  qui ouvre le document — sans erreur, puisque la version n'a pas bougé — et un
+  `onSave` persiste la perte.
+- **Le refus illisible.** Une union **élargie** (un kind de plus) rend, sur un build
+  antérieur, un `ZodError` « No matching discriminator » / « Invalid input » sur un
+  chemin de discriminant : ni erreur typée, ni mention de version, aucun remède.
+  Avec l'incrément, le même document rend `TemplateMigrationError: … written by a
+  newer release of Openview; upgrade before opening it.`
+
+**Une migration qui ne transforme rien n'est pas une migration fantôme.** Elle
+estampille, et l'estampille est *tout* ce qui produit le second message ci-dessus.
+Écrire `migrate: (input) => ({ ...input, schemaVersion: n })` est un travail complet.
+
+**Il n'y a pas de dérogation pré-v1.0 au versionnement.** La dérogation pré-v1.0
+porte sur les **rétrécissements** — une borne nouvelle qui refuse un document
+auparavant valide, qu'aucune migration ne peut rattraper sans corrompre le document.
+Le versionnement, lui, n'a pas de coût qui justifierait de l'ajourner. Ce fichier
+fait foi : une ADR qui entend l'amender doit le dire explicitement.
+
 ### 1.3 Gestion des erreurs
 
 **Aucun `catch` vide, dans aucune écriture.** Les trois formes suivantes sont
@@ -182,6 +238,15 @@ déclarés par paquet. Ne « corrigez » jamais un blocage en élargissant un
 **Imports relatifs.** `core` et `engine` sont en résolution `NodeNext` :
 `import './foo.js'`, jamais `import './foo'`. L'extension pointe vers le fichier
 **émis**, donc `.js` même depuis un `.ts`.
+
+**Modularité & taille des fichiers (Clean Architecture).** Évitez les fichiers
+monolithiques regroupant types, schémas, logique de runtime et cas particuliers :
+- Isolez les contrats de types TypeScript purs (`types.ts`).
+- Isolez les schémas de validation Zod (`schemas.ts`).
+- Découpez les moteurs de runtime en opérations unitaires sous un dossier dédié
+  (ex: `evaluator/operations/`).
+- Exposez des façades claires (barrels) pour la consommation externe sans fuite
+  d'implémentation interne.
 
 ---
 
@@ -263,6 +328,11 @@ ne les passera pas en CI.
 
 - **Tests obligatoires** pour toute fonction de `core` et `engine` : `*.test.ts`
   ou `*.spec.ts` (les deux suffixes sont découverts et exclus de la couverture).
+- **Organisation des fichiers de test (`__tests__/`)** : Lorsque les tests d'un
+  sous-système ou d'un module se multiplient, rassemblez-les dans un sous-dossier
+  `__tests__/` local (ex: `src/expression/__tests__/`, `src/expression/evaluator/__tests__/`).
+  Cela aère l'arborescence `src/` tout en restant 100 % compatible avec `vitest`
+  et la contrainte TypeScript `rootDir: "src"`.
 - **Seuil de couverture : 90 %.** Il est mesuré sur *tout* le code source, pas
   seulement sur les fichiers qu'un test importe. Ne le désactivez jamais, même
   « temporairement » : un seuil neutralisé ne se réactive pas.

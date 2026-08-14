@@ -1,4 +1,5 @@
-import { type Expression, pathsOf } from '../expression/expression.js';
+import { type Expression, pathsOf, rootSegment } from '../expression/expression.js';
+import { kindOf } from '../expression/value-type.js';
 import type {
   ConditionNode,
   ContainerNode,
@@ -47,7 +48,10 @@ export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TRes
       // Adding a member to DocumentNode without handling it here fails to
       // compile: `node` is only assignable to `never` when every case is covered.
       const exhaustive: never = node;
-      throw new TypeError(`Unhandled document node: ${JSON.stringify(exhaustive)}`);
+      // `kindOf` rather than `JSON.stringify`, for the same reason as in the expression
+      // traversals: stringifying a deep payload overflows the stack around 8 000 levels,
+      // so the guard would crash while describing what reached it.
+      throw new TypeError(`Unhandled document node: ${kindOf(exhaustive, 'type')}`);
     }
   }
 }
@@ -110,7 +114,7 @@ export function visitSegment<TResult>(
       return visitor.binding(segment);
     default: {
       const exhaustive: never = segment;
-      throw new TypeError(`Unhandled text segment: ${JSON.stringify(exhaustive)}`);
+      throw new TypeError(`Unhandled text segment: ${kindOf(exhaustive, 'kind')}`);
     }
   }
 }
@@ -184,11 +188,12 @@ function addCallerPaths(
     return;
   }
   for (const dataPath of pathsOf(expression)) {
-    // indexOf/slice rather than split: only the root segment decides, and this
-    // runs once per expression of the whole tree.
-    const dot = dataPath.indexOf('.');
-    const rootSegment = dot === -1 ? dataPath : dataPath.slice(0, dot);
-    if (!aliases.has(rootSegment)) {
+    // `rootSegment` now lives in expression.ts, because the expression-level filter
+    // there applies the same rule to an alias bound inside an expression. Note the
+    // rename trap this removes: the local was already called `rootSegment`, so adding
+    // the import without deleting the local would have shadowed it -- and
+    // `noUnusedImports` plus `noUnusedLocals` both refuse that.
+    if (!aliases.has(rootSegment(dataPath))) {
       into.add(dataPath);
     }
   }
@@ -222,7 +227,7 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
  * 0001), the engine can tell a caller which keys a template needs before
  * rendering anything.
  *
- * Two limits, both deliberate, and both narrower than an earlier version of this
+ * THREE limits, all deliberate, and all narrower than an earlier version of this
  * docstring claimed.
  *
  * Paths rooted at a loop alias are excluded, because they are internal
@@ -235,6 +240,20 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
  * a child reading `invoice.total` -- silently changes what that child means, and
  * this function reports nothing at all rather than a collision. Detecting it needs
  * the same scope-qualified output, and is open for the same reason.
+ *
+ * ADR 0003 adds the third, and it is the second one at two new sites: an EXPRESSION can
+ * now bind an alias too. `sum(invoice.lines, invoice, invoice.total)` shadows a caller key
+ * from inside a formula, and produces the same silent hole as a loop alias does. Left
+ * documented and not fixed, for the same reason as the other two -- but leaving it
+ * unwritten would restart exactly the defect ADR 0002 reproached the old docstring for:
+ * *it promised, and it lied.*
+ *
+ * What is NOT a limit, and cost nothing: an alias bound inside an expression never leaks
+ * out of it. `pathsOf` carries its own alias context, so `line` in
+ * `sum(invoice.lines, line, line.total)` is filtered there rather than being demanded from
+ * an integrator who will never supply it. `NodeReads.binds` stays a single name for that
+ * reason -- widening it to a list would leak an expression's alias to children that have
+ * no business reading it.
  */
 export function collectDataPaths(root: DocumentNode): readonly string[] {
   const found = new Set<string>();
