@@ -248,7 +248,7 @@ describe('ExpressionSchema', () => {
     // `resolvePath` re-splits a path on every read, and aggregations turn that count
     // from O(1) into O(n).
     const long = `a.${'b'.repeat(255)}`;
-    expect(long.length).toBe(257);
+    expect(long).toHaveLength(257);
     expect(() => ExpressionSchema.parse({ kind: 'path', path: long })).toThrow(
       /may not exceed 256/,
     );

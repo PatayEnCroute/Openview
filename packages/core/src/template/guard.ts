@@ -119,22 +119,10 @@ const NOT_PLAIN_DATA =
  *
  * Iterative by construction, so the guard is itself insensitive to the depth it measures.
  *
- * ## Why the width of a single value is checked BEFORE its properties are read
- *
- * An earlier version fetched every descriptor of a value in one
- * `Object.getOwnPropertyDescriptors` call and counted them inside the loop that followed.
- * That bounded the loop body and not the snapshot the loop walked, so the guard's own cost
- * scaled with the payload rather than with `maxNodes`: measured, `{ root: new Array(n) }`
- * still refused with `too-many-nodes`, but took 342 ms and +69 MB at n = 1 000 000 and
- * 2 401 ms and +831 MB at n = 5 000 000, against a ceiling of 100 000. A 3.8 MB request
- * body parsed in 15 ms and then spent 798 ms in here. That is the denial of service this
- * guard exists to prevent, performed by the guard.
- *
- * So the width is tested first, against the budget that remains, and descriptors are
- * fetched ONE AT A TIME afterwards. An array is the shape that matters -- its width is
- * known in O(1) and it is what a hostile payload uses -- and it now costs O(1) to refuse.
- * An object still pays for its own key array, which is the price of reading own
- * non-enumerable keys at all, but never for a descriptor beyond the ceiling.
+ * What a single value directly contains is {@link childValuesOf}, and the order it works in
+ * -- width first, descriptors one at a time -- is load-bearing for the reason written there.
+ * Kept out of this loop so the traversal reads as what it is: pop a frame, bound its depth,
+ * push its children.
  *
  * The guard cannot live inside the schema: a `.superRefine` at the head of a `z.lazy`
  * body would re-run at every level of the recursion.
@@ -164,37 +152,72 @@ export function assertBoundedShape(raw: unknown, limits?: Partial<ShapeLimits>):
       continue;
     }
 
-    // Own NON-enumerable string keys are included on purpose, because Zod reads a field of
-    // its shape whether or not it is enumerable. Symbol keys are excluded: nothing
-    // downstream reads one, so a value hidden under a symbol key is neither validated nor
-    // measured, and no getter under one is ever invoked.
-    const keys: readonly (string | number)[] = Array.isArray(value)
-      ? // Length first, so a hostile array is refused without one property being touched.
-        indicesOf(value.length, maxNodes - discovered, maxNodes)
-      : Object.getOwnPropertyNames(value);
-
-    if (keys.length > maxNodes - discovered) {
-      throw tooManyNodes(maxNodes);
-    }
-
-    for (const key of keys) {
-      // One descriptor at a time, and by descriptor rather than by read: measured, a naive
-      // scan INVOKES a getter, so caller code would run before any validation -- with a
-      // check-then-parse window in which the getter can hand one value to the guard and
-      // another to Zod. `parseTemplate` expects data, not a live object.
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined) {
-        // A hole in a sparse array. There is no value there to measure.
-        continue;
-      }
-      if (!('value' in descriptor)) {
-        throw new TemplateShapeError(NOT_PLAIN_DATA, 'not-plain-data', undefined);
-      }
-
+    for (const child of childValuesOf(value, maxNodes - discovered, maxNodes)) {
       discovered += 1;
-      const child: unknown = descriptor.value;
       top = { value: child, depth: depth + 1, next: top };
     }
+  }
+}
+
+/**
+ * The values one object or array directly contains, yielded one at a time.
+ *
+ * ## Why the width of a single value is checked BEFORE its properties are read
+ *
+ * An earlier version fetched every descriptor of a value in one
+ * `Object.getOwnPropertyDescriptors` call and counted them inside the loop that followed.
+ * That bounded the loop body and not the snapshot the loop walked, so the guard's own cost
+ * scaled with the payload rather than with `maxNodes`: measured, `{ root: new Array(n) }`
+ * still refused with `too-many-nodes`, but took 342 ms and +69 MB at n = 1 000 000 and
+ * 2 401 ms and +831 MB at n = 5 000 000, against a ceiling of 100 000. A 3.8 MB request
+ * body parsed in 15 ms and then spent 798 ms in here. That is the denial of service the
+ * guard exists to prevent, performed by the guard.
+ *
+ * So the width is tested first, against the budget that remains, and descriptors are
+ * fetched ONE AT A TIME afterwards. An array is the shape that matters -- its width is
+ * known in O(1) and it is what a hostile payload uses -- and it now costs O(1) to refuse.
+ * An object still pays for its own key array, which is the price of reading own
+ * non-enumerable keys at all, but never for a descriptor beyond the ceiling.
+ *
+ * A generator, and not a list of children: returning an array would materialise a second
+ * copy of every width this function exists to refuse paying for, and it would read every
+ * descriptor of a value before the caller saw the first one. Yielding keeps "one descriptor
+ * at a time" literally true.
+ */
+function* childValuesOf(
+  value: object,
+  remaining: number,
+  maxNodes: number,
+): Generator<unknown, void, undefined> {
+  // Own NON-enumerable string keys are included on purpose, because Zod reads a field of
+  // its shape whether or not it is enumerable. Symbol keys are excluded: nothing
+  // downstream reads one, so a value hidden under a symbol key is neither validated nor
+  // measured, and no getter under one is ever invoked.
+  const keys: readonly (string | number)[] = Array.isArray(value)
+    ? // Length first, so a hostile array is refused without one property being touched.
+      indicesOf(value.length, remaining, maxNodes)
+    : Object.getOwnPropertyNames(value);
+
+  if (keys.length > remaining) {
+    throw tooManyNodes(maxNodes);
+  }
+
+  for (const key of keys) {
+    // One descriptor at a time, and by descriptor rather than by read: measured, a naive
+    // scan INVOKES a getter, so caller code would run before any validation -- with a
+    // check-then-parse window in which the getter can hand one value to the guard and
+    // another to Zod. `parseTemplate` expects data, not a live object.
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) {
+      // A hole in a sparse array. There is no value there to measure.
+      continue;
+    }
+    if (!('value' in descriptor)) {
+      throw new TemplateShapeError(NOT_PLAIN_DATA, 'not-plain-data', undefined);
+    }
+
+    const child: unknown = descriptor.value;
+    yield child;
   }
 }
 
