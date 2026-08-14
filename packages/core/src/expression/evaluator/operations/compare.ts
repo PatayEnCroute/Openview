@@ -21,12 +21,36 @@ function order<TComparable extends number | string>(
   }
 }
 
+/**
+ * The `not-finite` seal, at the position that decides which branch of a document renders.
+ *
+ * `requireNumber` seals it for a calculation, and leaving a comparison unsealed reopened
+ * the hole in the one place it cannot be seen: every ordering operator answers `false` for
+ * a `NaN`, so `filter(lines, l, gt(l.total, 0))` DROPS the line and `if(gte(total, 0), …)`
+ * takes the other branch -- no error, wrong document. `Infinity` is worse than silent:
+ * `gt(total, 100)` answers `true`, so a corrupt total passes a threshold test.
+ *
+ * Applied to BOTH operands before the eq/neq branch as well as before the ordering one:
+ * `NaN === NaN` is `false`, so an equality would report two identical faults as different.
+ */
+function refuseNonFinite(value: unknown, site: ExpressionErrorSite, field: 'left' | 'right'): void {
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    fail(
+      { code: 'not-finite', site, at: [field], actualType: 'not-finite' },
+      'A comparison needs a finite number. NaN and the infinities are numbers to JavaScript and faults to a document.',
+    );
+  }
+}
+
 export function evaluateCompare(
   op: ComparisonOperator,
   left: unknown,
   right: unknown,
   site: ExpressionErrorSite,
 ): boolean {
+  refuseNonFinite(left, site, 'left');
+  refuseNonFinite(right, site, 'right');
+
   if (op === 'eq' || op === 'neq') {
     // Objects and arrays would compare by reference, which is never what a
     // template author means.
@@ -44,7 +68,13 @@ export function evaluateCompare(
         `Cannot compare ${describe(valueTypeOf(left))} with ${describe(valueTypeOf(right))}: eq/neq operate on primitives.`,
       );
     }
-    const equal = left === right;
+    // `isAbsent` rather than a bare `===`, so `null` and `undefined` are ONE value here as
+    // they are everywhere else in the algebra -- in `guards.ts`, and in the ordering branch
+    // three lines below. Without it a JSON `null` the caller emitted for "no discount"
+    // read as DIFFERENT from a key the caller simply omitted, and `neq` answered `true`
+    // for two values the same expression tree orders as equal.
+    const equal =
+      isAbsent(left) || isAbsent(right) ? isAbsent(left) && isAbsent(right) : left === right;
     return op === 'eq' ? equal : !equal;
   }
 

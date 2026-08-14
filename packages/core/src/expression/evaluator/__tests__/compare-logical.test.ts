@@ -159,6 +159,47 @@ describe('comparison', () => {
       /operate on primitives/,
     );
   });
+
+  it('seals a non-finite operand here too, rather than answering in silence', () => {
+    const broken = { line: { total: Number.NaN, cap: Number.POSITIVE_INFINITY } };
+    const compareIn = (op: 'eq' | 'gt', a: Expression, b: Expression) =>
+      evaluateExpression({ kind: 'compare', op, left: a, right: b }, broken);
+
+    // Unsealed, this answered `false` -- so a filter dropped the line and an `if` took the
+    // other branch, with no error anywhere.
+    expect(
+      expectEvaluationError(() => compareIn('gt', path('line.total'), literal(0))),
+    ).toStrictEqual({
+      code: 'not-finite',
+      site: 'compare',
+      at: ['left'],
+      actualType: 'not-finite',
+    });
+    // And on eq, where `NaN === NaN` would have reported two identical faults as different.
+    expect(
+      expectEvaluationError(() => compareIn('eq', literal(0), path('line.cap'))),
+    ).toStrictEqual({
+      code: 'not-finite',
+      site: 'compare',
+      at: ['right'],
+      actualType: 'not-finite',
+    });
+  });
+
+  it('reads null and an omitted key as ONE absent value on eq/neq', () => {
+    const absences = { line: { discount: null }, invoice: { defaultDiscount: undefined } };
+    const compareIn = (op: 'eq' | 'neq', a: Expression, b: Expression) =>
+      evaluateExpression({ kind: 'compare', op, left: a, right: b }, absences);
+    const discount = path('line.discount');
+    const fallback = path('invoice.defaultDiscount');
+
+    expect(compareIn('eq', discount, fallback)).toBe(true);
+    expect(compareIn('neq', discount, fallback)).toBe(false);
+    // Absence collapses; it does not swallow. One side present is still a difference,
+    // whichever side it is.
+    expect(compareIn('eq', discount, literal(0))).toBe(false);
+    expect(compareIn('neq', literal(0), discount)).toBe(true);
+  });
 });
 
 describe('the conditional inside a formula', () => {

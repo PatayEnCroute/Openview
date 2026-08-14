@@ -53,12 +53,15 @@ export function evaluateExpression(
     );
   }
   if (!budget.enter()) {
-    // This bound cannot fire on a tree that came through `parseTemplate` -- the shape
-    // guard caps the JSON depth well below it. It exists because `evaluateExpression` is
-    // public and takes an `Expression` from wherever: a tree built in a loop by an
-    // integrator overflows the stack around 20 000 levels and raises a bare `RangeError`.
-    // Refusing that unwrapped error at parse time and accepting it at render time would
-    // be incoherent.
+    // With the DEFAULT shape limit this bound does not fire on a tree that came through
+    // `parseTemplate` -- the guard refuses first, by ONE node, and the exact margin is
+    // worked out on `EvaluationLimits.maxDepth`. It is reachable as soon as a caller
+    // raises that limit, because `parseTemplate(raw, undefined, { maxDepth: 256 })` is a
+    // supported call: the two bounds share a default and have to be moved together.
+    // It also exists because `evaluateExpression` is public and takes an `Expression`
+    // from wherever: a tree built in a loop by an integrator overflows the stack around
+    // 20 000 levels and raises a bare `RangeError`. Refusing that unwrapped error at
+    // parse time and accepting it at render time would be incoherent.
     return fail(
       {
         code: 'depth-limit-exceeded',
@@ -66,7 +69,7 @@ export function evaluateExpression(
         at: [],
         limit: budget.limits.maxDepth,
       },
-      `This formula nests more than ${budget.limits.maxDepth} levels deep. A tree built by hand can pass that; one loaded through parseTemplate cannot.`,
+      `This formula nests more than ${budget.limits.maxDepth} levels deep. Reduce the nesting, or raise maxDepth on the evaluation budget AND on parseTemplate's shape limits -- the two share a default, and the shape guard refuses first.`,
     );
   }
 
