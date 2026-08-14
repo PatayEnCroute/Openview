@@ -435,9 +435,8 @@ export default function App() {
         Aucun alias n'y figure : <code>line</code> est déclaré par le template, qu'il soit lié par
         la boucle, par l'agrégat ou par le filtre. Les autres chemins sont les noms choisis par
         l'application intégratrice — c'est la liste que le moteur <em>rend</em> à l'appelant, pas
-        une liste qu'il lui <em>impose</em>. Remarquez qu'
-        <code>traitement.effectueLe</code> y figure comme n'importe quelle autre clé : « aujourd'hui
-        » est une donnée, pas une horloge.
+        une liste qu'il lui <em>impose</em>. Remarquez qu'<code>traitement.effectueLe</code> y
+        figure comme n'importe quelle autre clé : « aujourd'hui » est une donnée, pas une horloge.
       </p>
       <ul>
         {dataPaths.map((dataPath) => (
@@ -467,7 +466,7 @@ export default function App() {
         */}
         {lineRows.map((row, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
-          <li key={index}>
+          <li key={index /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
             <code>{row.label}</code> — remise {row.discounted ? 'appliquée' : 'absente'}
           </li>
         ))}
@@ -488,9 +487,9 @@ export default function App() {
         <code>{dateSegments.join(' + ')}</code>
       </p>
       <p>
-        Valeurs brutes en <code>YYYY-MM-DD</code>, qui est une représentation d'<em>échange</em>
-        et non un format d'affichage : les rendre en <code>31/03/2026</code> appartient au lot C6.
-        Les jours de retard se comptent entre deux dates <em>fournies</em> — le moteur ne lit jamais
+        Valeurs brutes en <code>YYYY-MM-DD</code>, qui est une représentation d'<em>échange</em> et
+        non un format d'affichage : les rendre en <code>31/03/2026</code> appartient au lot C6. Les
+        jours de retard se comptent entre deux dates <em>fournies</em> — le moteur ne lit jamais
         l'horloge, sinon deux rendus du même modèle ne pourraient pas donner le même document.
       </p>
 
@@ -534,9 +533,8 @@ export default function App() {
         Un seul budget pour tout ce qui précède, créé une fois comme le fera le pipeline :{' '}
         <code>{budget.spent.steps}</code> opérations et <code>{budget.spent.itemsVisited}</code>{' '}
         éléments de liste traversés, sur <code>{budget.limits.maxSteps}</code> et{' '}
-        <code>{budget.limits.maxItemsVisited}</code>
-        autorisés. Un budget par appel se réinitialiserait à chaque liaison, et la borne deviendrait
-        décorative.
+        <code>{budget.limits.maxItemsVisited}</code> autorisés. Un budget par appel se
+        réinitialiserait à chaque liaison, et la borne deviendrait décorative.
       </p>
 
       <h2>Document validé</h2>

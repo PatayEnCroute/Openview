@@ -25,9 +25,9 @@ import { z } from 'zod/v4';
  *   would install data over a method every JavaScript consumer assumes exists, and
  *   `String(scope)` would throw.
  */
-export const IDENTIFIER_SOURCE = '[A-Za-z_$][\\w$]*';
+export const IDENTIFIER_SOURCE = String.raw`[A-Za-z_$][\w$]*`;
 export const IDENTIFIER_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}$`);
-export const PATH_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}(\\.${IDENTIFIER_SOURCE})*$`);
+export const PATH_PATTERN = new RegExp(String.raw`^${IDENTIFIER_SOURCE}(\.${IDENTIFIER_SOURCE})*$`);
 
 export const FORBIDDEN_IDENTIFIERS: ReadonlySet<string> = new Set([
   ...Object.getOwnPropertyNames(Object.prototype),

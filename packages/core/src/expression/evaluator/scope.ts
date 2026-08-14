@@ -40,11 +40,10 @@ export function resolvePath(path: string, scope: EvaluationScope): unknown {
     if (current === null || typeof current !== 'object') {
       return undefined;
     }
-    const descriptor = Object.getOwnPropertyDescriptor(current, segment);
-    if (descriptor === undefined || !descriptor.enumerable) {
+    if (Object.getOwnPropertyDescriptor(current, segment)?.enumerable !== true) {
       return undefined;
     }
-    // Read through Reflect.get rather than descriptor.value: an accessor has to
+    // Read through Reflect.get rather than the descriptor's `value`: an accessor has to
     // be invoked, and Reflect.get keeps `current` typed as `object` without an
     // assertion.
     current = Reflect.get(current, segment);

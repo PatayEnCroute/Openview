@@ -15,6 +15,27 @@ type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
     : false
   : false;
 
+/**
+ * The segment schema and the hand-written union, checked in BOTH directions.
+ *
+ * `z.ZodType` is covariant in its output, so neither `DocumentNodeSchema`'s explicit
+ * binding nor the `const segments: readonly TextSegment[]` assignment further down can
+ * catch a schema that drifted -- both accept one producing LESS than `TextSegment`. The
+ * annotation here does: `MutuallyAssignable` collapses to `false`, and `false` does not
+ * assign to `true`.
+ *
+ * A `const` and not an `it`, because there is nothing to run. It used to be an `it` ending
+ * in `expect(inStep).toBe(true)`, an assertion that cannot fail -- worse than no assertion,
+ * because it made the suite look like it checked something at runtime. The guard is the
+ * ANNOTATION, and `pnpm run type-check` is what runs it: `tsconfig.typecheck.json` covers
+ * test files. Exported so it is not reported unused; nothing imports it, and the runner
+ * ignores a test module's exports.
+ */
+export const SEGMENT_SCHEMA_IN_STEP: MutuallyAssignable<
+  z.infer<typeof TextSegmentSchema>,
+  TextSegment
+> = true;
+
 describe('DocumentNodeSchema', () => {
   it('parses a tree nested several levels deep', () => {
     const raw = {
@@ -72,17 +93,6 @@ describe('DocumentNodeSchema', () => {
 
     expect(segments).toHaveLength(2);
     expect(segments[1]?.kind).toBe('binding');
-  });
-
-  it('keeps the segment schema and the hand-written union in step', () => {
-    // A compile-time assertion wearing a runtime expectation, and the only guard
-    // that works here. `z.ZodType` is covariant in its output, so neither
-    // DocumentNodeSchema's explicit binding nor the assignment above can catch a
-    // schema that drifted -- both accept one producing LESS than TextSegment.
-    // This fails to compile in both directions.
-    const inStep: MutuallyAssignable<z.infer<typeof TextSegmentSchema>, TextSegment> = true;
-
-    expect(inStep).toBe(true);
   });
 
   it('rejects a predicate expression in a print position', () => {
