@@ -39,9 +39,22 @@
 > plutôt que B, et la classification de la table devise → décimales retirée de D10, faute de
 > mandat [§2, D10 et §8] ; les constructeurs manquants de la fixture du critère de recette
 > [§6.2] ; six références internes ou `fichier:ligne` fausses. **Ce que la relecture a confirmé et
-> qui ne bouge pas :** les 33 vecteurs figés (0 écart, douze divergences de mode), les mesures de
+> qui ne bouge pas :** les 34 vecteurs figés (0 écart, douze divergences de mode), les mesures de
 > D2, la borne prouvée de D7, les six chaînes de refus au parse, et l'implémentation de la [§3.3]
 > confrontée à une référence BigInt réécrite pour l'occasion — **0 divergence sur 440 000 cas**.
+>
+> **Analyse externe du 2026-08-14.** Huit constats reçus d'une analyse extérieure au dépôt, rejoués
+> un par un. **Trois sont retenus, trois étaient déjà au plan, un est mesurément faux**, et le
+> premier est le plus important du document : **`roundDecimal` n'avait pas de garde de finitude, et
+> `roundDecimal(NaN, 2, m)` rendait `0.01`** — un `NaN` converti en centime, ni propagé ni refusé
+> ([§3.3]). L'analyse l'annonçait comme une troncature inoffensive ; la mesure a montré un montant
+> faux. Retenus aussi : le vecteur `-5e-324` qui épingle le zéro non signé, le `describe` qui rend la
+> matrice de propriétés partageable [§5.2], les deux causes de l'écart nommées séparément au
+> playground [§4, INC-4], et les trois options transmises à C6 [§4, INC-5]. **Déjà au plan** :
+> `EnumeratedMembers` (qui porte sa propre ligne de tableau en [§4]), la section d'affichage
+> distincte des refus au parse (INC-4), et les six chaînes de refus [§5.3]. **Faux** : la crainte
+> que le message global de `z.number({ error })` écrase `.int()`, `.min()` et `.max()` — mesuré sur
+> `zod@3.25.76` via `zod/v4`, chaque validateur rend bien **son** message.
 
 ---
 
@@ -1088,6 +1101,12 @@ function keptDigits(digits: string, drop: number, mode: RoundMode): string {
  * implementation-approximated in ECMA-262, which is the very reason `Math.pow` was kept out
  * of the algebra (see ARITHMETIC_OPERATORS).
  *
+ * PRECONDITION, and it is enforced by the first line rather than merely documented: the
+ * value must be FINITE. In the normal flow `evaluateRound` has already refused a non-finite
+ * operand through `requireNumber`, but this function is exported and a test, a property
+ * draw or a future caller reaches it directly. Without the guard, `NaN` does not propagate
+ * and does not throw -- it returns an AMOUNT.
+ *
  * Verified over 4 400 022 comparisons against an independently written exact BigInt
  * reference -- every `k/1000` in both signs up to 60 000, 40 000 uniform random bit
  * patterns, 40 000 realistic amounts, at eleven precisions including both bounds, in both
@@ -1103,6 +1122,11 @@ function keptDigits(digits: string, drop: number, mode: RoundMode): string {
  * problem -- the bound counts steps -- but lot E8 needs it before it sizes a worker timeout.
  */
 export function roundDecimal(value: number, decimals: number, mode: RoundMode): number {
+  // A non-finite input leaves UNCHANGED, and this guard is load-bearing rather than
+  // defensive decoration: without it `NaN` returns a plausible AMOUNT. See the note below.
+  if (!Number.isFinite(value)) {
+    return value;
+  }
   if (value === 0) {
     return 0;
   }
@@ -1153,6 +1177,39 @@ export function evaluateRound(
   return requireFiniteResult(roundDecimal(value, decimals, mode), 'round', []);
 }
 ```
+
+> 🚫 **Correction d'un défaut réel, trouvé par une analyse externe le 2026-08-14 — et il était
+> pire que ce que cette analyse en disait.** Une version antérieure de cette section n'ouvrait pas
+> `roundDecimal` par une garde de finitude. L'analyse annonçait une troncature inoffensive de
+> `"Infinity"` en `"Infinit"` ; **la mesure dit autre chose**, et c'est le seul cas où ce lot
+> aurait pu écrire un montant faux dans un document :
+>
+> | Entrée | Sans la garde | Avec la garde |
+> | :--- | ---: | ---: |
+> | `roundDecimal(NaN, 2, m)` | **`0.01`** | `NaN` |
+> | `roundDecimal(NaN, 0, m)` | **`1`** | `NaN` |
+> | `roundDecimal(NaN, -2, m)` | **`100`** | `NaN` |
+> | `roundDecimal(±Infinity, d, m)` | `±Infinity` | `±Infinity` |
+>
+> **Le mécanisme, parce qu'il ne se devine pas.** `Math.abs(NaN).toExponential()` rend `"NaN"`, où
+> `indexOf('e')` vaut `-1` ; `exponent` devient `NaN`, donc `drop` aussi — et **`NaN <= 0` est
+> `false`**, si bien que le retour anticipé « déjà sur le réseau » **ne se déclenche pas**. Le
+> calcul continue sur la chaîne `"Na"`, `keptDigits` rend `'1'`, et `Number('1e-2')` vaut `0.01`.
+> Un `NaN` n'est donc ni propagé ni refusé : il est **converti en centime**. C'est exactement la
+> faute que l'ADR 0003 décision 6 avait scellée en amont pour l'arithmétique (« un NaN traverserait
+> sinon trois niveaux de formule jusque dans une facture »), et elle se rouvrait ici par une porte
+> que personne ne regardait.
+>
+> `±Infinity`, lui, sortait déjà **correctement** — par le retour anticipé, `-Infinity <= 0` étant
+> vrai et `+Infinity` donnant `drop = -Infinity`. La troncature en `"Infinit"` a bien lieu, mais
+> elle est sans effet : c'est la moitié du constat externe qui était fausse, et la noter évite
+> qu'un relecteur cherche un bug là où il n'y en a pas.
+>
+> **Pourquoi rendre la valeur plutôt que lever.** La levée appartient à `evaluateRound`, qui refuse
+> déjà par `requireNumber` en amont et par `requireFiniteResult` en aval (D6, ADR 0003 décision 6).
+> Un helper numérique pur qui lèverait ouvrirait un **second site de levée** hors de `fail()`, ce
+> que l'invariant d'INC-1 du lot C1 interdit. Rendre l'entrée inchangée aligne `NaN` sur ce que
+> `±Infinity` faisait déjà : **le helper n'invente jamais un nombre, l'évaluateur refuse.**
 
 ### 3.4 Les deux parcours — un `case` chacun, et rien d'autre
 
@@ -1434,7 +1491,7 @@ seul, mais sans intérêt à l'être.
 > deux cas manquait. **Deux vecteurs de la [§5.1] existent maintenant pour cela** — `[0, 2, 0, 0]`
 > et `[2.1251, 2, 2.13, 2.13]` (au-delà du demi d'un cheveu : la disjonction l'emporte, en
 > `halfEven` comme en `halfExpand`) — et l'assertion `Object.is(roundDecimal(-0, 2, m), 0)` se pose
-> à côté de celle de `-0.004`. Re-mesuré avec les 33 : **plus une seule branche à zéro**.
+> à côté de celle de `-0.004`. Re-mesuré avec les 33 (34 depuis la relecture externe) : **plus une seule branche à zéro**.
 
 ---
 
@@ -1554,6 +1611,22 @@ partageant les mêmes données et le même budget : **A** (lignes puis total, `h
 trois colonnes de montants, trois totaux, l'écart mis en évidence · **un refus au parse**, avec son
 véhicule · la phrase l. 481-482 réécrite · la docstring de `remise` l. 55 réécrite.
 
+> **« Mis en évidence » ne suffit pas, et il faut dire ce que la page doit énoncer.** Trois chiffres
+> qui diffèrent d'un centime sans explication enseignent qu'un moteur d'arrondi est capricieux —
+> l'inverse exact de ce que ce lot démontre. Les **deux causes sont distinctes** et la page les
+> nomme séparément, parce qu'un auteur de modèle qui les confond écrira le mauvais modèle :
+>
+> - **`63,26` contre `63,24` — c'est le MODE.** Même position d'arrondi, même ordre : seules les
+>   deux lignes dyadiques `2,125` et `1,125` sont des *ties* exacts, et `halfEven` les renvoie vers
+>   le chiffre pair là où `halfExpand` les éloigne de zéro.
+> - **`63,25` — c'est la POSITION de la déclaration dans l'arbre.** Aucune ligne n'est arrondie ;
+>   l'arrondi porte sur le total. Les deux modes rendent ici le **même** chiffre, ce qui prouve que
+>   l'écart précédent ne venait pas d'eux.
+>
+> Le contraste est le contenu pédagogique du lot : **un même jeu de données, trois totaux, deux
+> causes indépendantes.** Et la démonstration se lit d'autant mieux que le premier jeu de lignes,
+> laissé intact ([§8], arbitrage n°4), montre l'arrondi **identité** sur des montants déjà exacts.
+
 > ⚠️ **Le refus au parse n'a pas de véhicule, et une version antérieure de ce plan le demandait sans
 > le dire.** `App.tsx:353-372` : `reportRefusal(title, expression: Expression)` appelle
 > `evaluateExpression`, ne capture que `ExpressionEvaluationError` et **relance** tout le reste ; les
@@ -1587,7 +1660,10 @@ comme **code de production**. Seuls mordent : `lint`, `build` (`vite build`), `t
 
 **Commit.** `feat(playground): trois modèles, un jeu de données, trois totaux`
 
-**Condition de fin.** Le playground affiche l'écart d'un centime **et le nomme**.
+**Condition de fin.** Le playground affiche l'écart d'un centime, **nomme ses deux causes
+séparément** — le mode pour `63,26` contre `63,24`, la position de déclaration pour `63,25` — et
+présente le refus au parse dans une section distincte de celle des refus d'évaluation, parce que
+l'un se produit à la sauvegarde du modèle et l'autre au rendu.
 
 ---
 
@@ -1639,6 +1715,19 @@ des décisions de la [§2] que l'ADR doit reprendre, plus ce que ce plan a mesur
     « Ce qui reste ouvert », la question adressée à C6 telle quelle :** *qui déclare l'échelle
     d'affichage d'un montant — le modèle, l'intégrateur, ou une table de devises ?* C2 ne la
     tranche pas et ne classe pas la table.
+
+    **La question s'accompagne des trois options, sans recommandation.** Une question ouverte
+    sans options se relit comme une inquiétude ; avec elles, C6 hérite d'un point de départ. Ce
+    qu'aucune des trois ne doit faire — et c'est le seul énoncé que C2 se permet ici, parce qu'il
+    découle de D2 et non d'un arbitrage de C6 — est de **ré-arrondir en silence un montant que le
+    modèle a déjà arrondi** : `round(x, 2, m)` puis un affichage à trois décimales rendrait visible
+    un chiffre que l'auteur a déclaré ne pas vouloir.
+
+    | Option | Qui déclare | Ce qu'elle coûte |
+    | :--- | :--- | :--- |
+    | **1 — le modèle** | une échelle d'affichage écrite dans le nœud de format de C6, à côté de la locale | cohérent avec C2, où l'échelle de calcul est déjà **lisible dans l'arbre** ; mais elle se déclare deux fois, et rien n'oblige les deux à s'accorder |
+    | **2 — l'intégrateur** | un catalogue devise → échelle injecté par l'application hôte | aucune table dans Openview, cohérent avec la décision 9 de la roadmap ; mais c'est une charge d'amorçage de plus, et un catalogue absent doit **refuser**, pas deviner |
+    | **3 — ICU** | `Intl.NumberFormat(locale, { style: 'currency', currency })` | le moyen que `biome.jsonc:273` autorise déjà et le seul qui tienne le critère de fin de C6 sans duplication ; mais il **résout `maximumFractionDigits` tout seul**, donc applique une échelle qu'aucun modèle n'a déclarée — les cinq mesures de D10 en pièce jointe |
 11. **D11** — la **dérogation écrite** à AGENTS.md §3.B pour l'algèbre d'expressions, son contrôle
     compensatoire et son seuil de réouverture.
 12. **D12** — le hors-périmètre, dont la répartition du résidu et sa raison.
@@ -1667,7 +1756,7 @@ des décisions de la [§2] que l'ADR doit reprendre, plus ce que ce plan a mesur
 
 ## 5. Le plan de test
 
-### 5.1 Vecteurs figés — 33 lignes, toutes mesurées
+### 5.1 Vecteurs figés — 34 lignes, toutes mesurées
 
 ```ts
 it.each([
@@ -1708,6 +1797,7 @@ it.each([
   // Les deux branches qu'aucun vecteur ci-dessus n'exerçait, mesuré à l'instrumentation.
   [0,                           2,   0,                       0],      // l'entrée nulle : le tirage continu ne l'atteint jamais
   [2.1251,                      2,   2.13,                    2.13],   // au-delà du demi d'un cheveu : `restNonZero` l'emporte, halfEven compris
+  [-5e-324,                     2,   0,                       0],      // subnormal négatif : `toBe` étant `Object.is`, ce vecteur SEUL épingle le zéro non signé
 ])('pins the frozen rounding vector round(%o, %o)', (v, d, expand, even) => {
   expect(roundDecimal(v, d, 'halfExpand')).toBe(expand);
   expect(roundDecimal(v, d, 'halfEven')).toBe(even);
@@ -1720,7 +1810,7 @@ it.each([
 > décoratif — le sous-estimer affaiblit gratuitement la démonstration. **Mesuré : douze
 > divergences** (`1.005`, `0.145`, `2.125`, `-2.125`, `0.125`, `0.5`, `2.5`, `-2.5`, `-0.5`, `50`,
 > `1250`, `-1250`). Avec les cinq vecteurs de retenue totale **et les deux vecteurs de couverture
-> ci-dessous**, la table compte **33 lignes, dont douze divergent sur le mode** — les sept ajouts
+> ci-dessous**, la table compte **34 lignes, dont douze divergent sur le mode** — les sept ajouts
 > n'ajoutent aucune divergence, et c'est vérifié.
 >
 > Et **trois** corrections de couverture, toutes découvertes à l'instrumentation, toutes rejouées.
@@ -1733,7 +1823,7 @@ it.each([
 > dernier chiffre pair —, d'où `[2.1251, 2, 2.13, 2.13]`. Les trois étaient laissées sous la seule
 > garde des tirages aléatoires, ce que la doctrine du dépôt contredit : le dépôt **gèle des
 > vecteurs** plutôt que d'appeler une bibliothèque vivante ou de s'en remettre au hasard
-> (`text.test.ts:152-166`). **Les 33 vecteurs ne laissent plus une seule branche à zéro passage** —
+> (`text.test.ts:152-166`). **Les 34 vecteurs ne laissent plus une seule branche à zéro passage** —
 > et c'est ce qui rend la condition de fin d'INC-1 (« couverture à 100 % ») atteignable, ce qu'elle
 > n'était pas.
 
@@ -1745,6 +1835,26 @@ Assertion structurelle qui double la valeur des vecteurs, sur le patron des vect
 // exact, donc les deux modes rendraient le même chiffre. C'est ce qui rend `mode` réel.
 expect(roundDecimal(0.145, 2, 'halfExpand')).not.toBe(roundDecimal(0.145, 2, 'halfEven'));
 ```
+
+**Et la précondition de finitude, dans son propre `it`** — elle n'entre pas dans le tableau des
+vecteurs, parce que le tableau dit *comment un montant s'arrondit* et que ceci dit *ce qui n'est pas
+un montant* :
+
+```ts
+it.each([Number.NaN, Infinity, -Infinity])('leaves the non-finite %o unchanged', (value) => {
+  for (const decimals of [-2, 0, 2]) {
+    // Sans la garde de la §3.3, `NaN` sortait d'ici en `100`, `1` et `0.01` respectivement.
+    expect(roundDecimal(value, decimals, 'halfExpand')).toBe(value);
+    expect(roundDecimal(value, decimals, 'halfEven')).toBe(value);
+  }
+});
+```
+
+> `toBe` s'appuie sur `Object.is`, donc `expect(roundDecimal(NaN, 2, m)).toBe(NaN)` **passe**
+> là où `toEqual` sur un `NaN` serait ambigu — et c'est la même propriété qui fait que le vecteur
+> `[-5e-324, 2, 0, 0]` épingle à lui seul le zéro **non signé** : `expect(-0).toBe(0)` échoue.
+> Aucune assertion `Object.is` explicite n'est donc à écrire en plus ; l'ajouter laisserait croire
+> que `toBe` ne suffit pas.
 
 ### 5.2 Propriétés — avec leur budget de temps, qui est une condition de passage
 
@@ -1778,6 +1888,19 @@ machine de CI deux fois plus lente — c'est l'ordre de grandeur des tests de ch
 
 Les 4,4 M de cas sont consignés dans l'ADR 0004 comme **sonde de développement rejouable**, pas
 comme test committé — même arbitrage que pour l'oracle `Intl` ([§5.5]).
+
+**Ces onze `it` vivent sous un `describe` à eux**, et c'est une consigne d'ergonomie, pas de style :
+
+```ts
+describe('roundDecimal — property matrix against the BigInt reference', () => { /* les onze it */ });
+```
+
+2,84 s est acceptable pour les quatre portes et intenable dans une boucle d'édition. Le `describe`
+rend le partage praticable : `pnpm vitest round -t "frozen"` rejoue les 34 vecteurs en quelques
+millisecondes pendant un refactor de `keptDigits`, et la matrice complète ne repasse qu'au moment de
+committer. Sans ce découpage, la seule granularité disponible est le fichier entier, et un
+développeur qui paie 2,84 s à chaque sauvegarde finit par désactiver la suite — ce qui est la façon
+ordinaire dont un oracle exact meurt.
 
 ### 5.3 Refus au parse — les six chaînes, mesurées, pour que le test soit copiable
 
