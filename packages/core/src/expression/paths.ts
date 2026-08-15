@@ -84,7 +84,18 @@ function collectPaths(
       }
       break;
     case 'text':
+      collectPaths(expression.value, aliases, into);
+      break;
     case 'round':
+      // Its own case rather than fused with `text`, though the two bodies are identical
+      // today. The exhaustiveness guard below forces a case to EXIST; nothing forces its
+      // body to be right, and this function returns `void`, so no second check backstops it.
+      // Fusing on the field NAME would invite a future kind carrying `value` plus a second
+      // child into this group, where it would compile clean while that child's paths were
+      // silently dropped -- `collectDataPaths` under-reporting, which is the ADR 0002 bug
+      // class this pass exists to prevent. `value` already means three different traversals
+      // in this switch: untraversed on `literal`, plain here, alias-scoped on `aggregate`.
+      //
       // `decimals` and `mode` are literals, so a rounding reads nothing of its own.
       collectPaths(expression.value, aliases, into);
       break;

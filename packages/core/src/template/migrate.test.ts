@@ -225,7 +225,7 @@ describe('parseTemplate', () => {
       },
     };
 
-    expect(parseTemplate(rounded).schemaVersion).toBe(3);
+    expect(parseTemplate(rounded).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   it('ACCEPTS an under-stamped document, because the guard only bites upward', () => {

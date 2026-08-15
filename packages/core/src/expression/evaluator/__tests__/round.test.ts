@@ -93,6 +93,17 @@ describe('roundDecimal', () => {
     expect(roundDecimal(-0.4, 0, mode)).toBe(0);
   });
 
+  it('refuses a mode outside the closed set instead of rounding it to-even', () => {
+    // Smuggled past the compiler the way `paths.test.ts` smuggles an unknown kind: the
+    // `RoundMode` union and `z.enum(ROUND_MODES)` both refuse this, so only an untyped
+    // caller of the public API can produce it. What the assertion pins is that the answer is
+    // a REFUSAL and not a plausible amount -- an open `else` here rounded every unknown mode
+    // to-even in silence, so `halfUp` answered 2.12 where its own name promises 2.13, and a
+    // widened `ROUND_MODES` would have shipped that error on every exact tie.
+    const smuggled: RoundMode = JSON.parse('"halfUp"');
+    expect(() => roundDecimal(2.125, 2, smuggled)).toThrow(TypeError);
+  });
+
   it('overflows only from a position built outside the declared window', () => {
     // The reserve behind `requireFiniteResult`: a `decimals` of -308 cannot come through
     // Zod, but `evaluateExpression` is public and takes an `Expression` from wherever. The
@@ -113,6 +124,23 @@ describe('roundDecimal', () => {
  * committed oracle because its result is indexed on an ICU build; this one is indexed on
  * nothing.
  */
+function tieGoesUp(mode: RoundMode, kept: bigint): boolean {
+  switch (mode) {
+    case 'halfExpand':
+      return true;
+    case 'halfEven':
+      return kept % 2n === 1n;
+    default: {
+      // An open `else` here would default an unknown mode to half-even -- which is what the
+      // implementation used to do -- so the two would agree in LOCKSTEP and this matrix
+      // would report zero divergences for a mode neither of them rounds correctly. An
+      // oracle that shares the implementation's blind spot is not an oracle.
+      const exhaustive: never = mode;
+      throw new TypeError(`The oracle has no tie-break for the mode ${String(exhaustive)}`);
+    }
+  }
+}
+
 function referenceRound(value: number, decimals: number, mode: RoundMode): number {
   if (!Number.isFinite(value) || value === 0) {
     return value === 0 ? 0 : value;
@@ -130,7 +158,7 @@ function referenceRound(value: number, decimals: number, mode: RoundMode): numbe
     const remainder = scaled % divisor;
     scaled /= divisor;
     const twice = remainder * 2n;
-    if (twice > divisor || (twice === divisor && (mode === 'halfExpand' || scaled % 2n === 1n))) {
+    if (twice > divisor || (twice === divisor && tieGoesUp(mode, scaled))) {
       scaled += 1n;
     }
   }

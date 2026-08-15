@@ -13,9 +13,10 @@
 > mural de la [§3.3] et de la [§5] (**réfutée** — la machine de livraison rend 378 ns et 120 ns,
 > hors de la dispersion « 0,8× à 3,2× » annoncée) ; la docstring de la [§3.7] qui reproduisait la
 > réserve fausse que la [§5.4] contrat 5 corrige (**c'est la [§5.4] qui a été suivie**) ; et le
-> critère `createBudget` de la [§6.4], qui annonçait trois occurrences pour quatre documents (la
-> fabrique de modèles en rend bien trois, mais **le principe est un budget par document, pas un
-> décompte**).
+> critère `createBudget` de la [§6.4], qui annonçait trois occurrences pour quatre documents — le
+> compte est **quatre** depuis que la revue de code a montré que les démonstrations de refus
+> gonflaient le budget de la facture et leur a donné le leur, et **le principe est un budget par
+> document, pas un décompte**.
 >
 > **Statut à l'exécution :** ✅ **prêt à exécuter.** Les cinq arbitrages de la [§8] ont été tranchés par le
 > propriétaire du produit le **2026-08-14**, conformément aux cinq recommandations : **1-A**
@@ -2548,9 +2549,12 @@ c'est ce qui a laissé passer un test qui ne pouvait pas passer et une preuve qu
    `evaluateExpression` est publique et prend un `Expression` de n'importe où ; le dépôt le documente
    déjà pour la borne de profondeur. Conséquences nommées : un `decimals: -308` construit à la main
    atteint `requireFiniteResult` — **vérifié**, et c'est pourquoi le garde reste et qu'un test
-   construit ce nœud ; un `decimals: 2.5` construit à la main rend `NaN` à la reconstruction et lève
-   donc `not-finite` plutôt que d'imprimer un nombre faux — **vérifié**, un message imparfait pour
-   une entrée impossible, ce qui est la bonne dégradation.
+   construit ce nœud ; un `decimals: 2.5` construit à la main **dépend de la donnée** —
+   `roundDecimal(0.615, 2.5, m)` rend `NaN` à la reconstruction et lève donc `not-finite`, mais
+   `roundDecimal(63.25, 2.5, m)` sort par le retour identité et rend `63.25` en silence, et
+   `decimals: Infinity` est l'identité. **Cette phrase disait « lève donc `not-finite` » sans
+   réserve : c'était faux d'une moitié des cas.** La dégradation reste acceptée — aucun chemin
+   supporté ne délivre cette position — mais elle ne se décrit pas comme un refus systématique.
 
 7. **`parseTemplate` valide au schéma COURANT, après la chaîne de migrations, jamais au schéma de
    l'estampille lue.**

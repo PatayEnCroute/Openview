@@ -357,11 +357,16 @@ l'invariant de C1 interdit. **Le helper n'invente jamais un nombre ; l'évaluate
   52 bits, exposant dans `[-40, 40]` — écriture décimale longue, donc la chirurgie sur la chaîne).
 - `Math.random` est **refusé par la machine** sous `packages/core/**` (`noJsRestrictedProperties`,
   `biome.jsonc`), tests compris. Un test irreproductible ne mesure rien.
-- **34 vecteurs figés**, dont **douze divergent sur le mode**. Ils couvrent `round.ts` à **100 %**,
-  branches comprises — trois d'entre eux existent parce que l'instrumentation a montré que rien ne
-  les atteignait : `[0, 2, 0, 0]` (l'entrée nulle, qu'un tirage continu n'atteint jamais),
-  `[2.1251, 2, 2.13, 2.13]` (la disjonction `restNonZero`) et `[-5e-324, 2, 0, 0]` (le zéro non
-  signé, `toBe` étant `Object.is`).
+- **34 vecteurs figés**, dont **douze divergent sur le mode** — trois d'entre eux existent parce que
+  l'instrumentation a montré que rien ne les atteignait : `[0, 2, 0, 0]` (l'entrée nulle, qu'un
+  tirage continu n'atteint jamais), `[2.1251, 2, 2.13, 2.13]` (la disjonction `restNonZero`) et
+  `[-5e-324, 2, 0, 0]` (le zéro non signé, `toBe` étant `Object.is`).
+  **Ce qui couvre `round.ts` à 100 %, c'est la SUITE, pas les vecteurs seuls**, et la distinction
+  compte pour qui voudrait élaguer : mesuré au filtre `-t "frozen"`, les 34 vecteurs atteignent
+  **88,88 % des instructions et 91,17 % des branches**. Aucun d'eux n'est non fini, donc la garde
+  de finitude n'est jamais franchie, et aucun n'appelle `evaluateRound`. Ce sont les `it` de
+  non-finitude, de débordement et d'évaluation qui ferment les 100 % — retirer l'un des trois fait
+  passer le paquet sous le seuil de 90 %.
 - **Piège vérifié, à ne pas réintroduire.** Une version naïve du cas « tous les chiffres tombent »
   répond `130` à `round(120, -1, m)`. Ce qui le répare est la distinction *adjacent* : **seul un
   décalage d'exactement une place peut atteindre le demi.** Un vecteur figé l'épingle.
@@ -383,10 +388,22 @@ l'invariant de C1 interdit. **Le helper n'invente jamais un nombre ; l'évaluate
 sens autour de la référence. Une version antérieure annonçait une dispersion de « 0,8× à 3,2× » ;
 la machine de livraison la réfute d'un facteur 4 à 10.
 
-> **L'énoncé opposable est qualitatif, et il suffit à E8 :** un nœud `round` dépense **un** pas de
-> budget mais coûte **21× à 110×** un nœud arithmétique en temps mural — un à deux ordres de
-> grandeur. Ce n'est pas un problème de borne, la borne compte des pas ; c'est un problème de
-> délai de worker.
+**Et le RAPPORT ne voyage pas davantage, ce qu'une version antérieure de cette section affirmait
+pourtant** en donnant « 21× à 110× » pour énoncé opposable. Une multiplication en boucle serrée
+se mesure de 1,2 ns à 50 ns selon ce que V8 sort de la boucle : le dénominateur bouge autant que
+le numérateur, et sur la machine de livraison le même `round` vaut 21× ou 52× selon le harnais.
+
+**Deux chemins rapides ajoutés le 2026-08-16** (revue de code, constats 6 et 7) changent la forme
+plutôt que l'échelle. Mesurés avant/après sur une machine, à puits identique et **0 divergence sur
+16 800 624 comparaisons** : entiers **102 → 6 ns**, mélange facture **114 → 61 ns**, 17 chiffres
+**369 → 338 ns**. Un `round` qui tombe sur l'identité — une position déjà atteinte, un montant
+entier — ne coûte plus qu'un petit multiple d'un nœud arithmétique.
+
+> **L'énoncé opposable est qualitatif, et il suffit à E8 :** un nœud `round` qui **arrondit
+> vraiment** dépense **un** pas de budget et coûte **un à deux ordres de grandeur** de plus qu'un
+> nœud arithmétique en temps mural ; un `round` qui rend l'identité coûte désormais un petit
+> multiple. Ce n'est pas un problème de borne, la borne compte des pas ; c'est un problème de délai
+> de worker — **et il se re-mesure sur la machine qui dimensionne le délai**, jamais ici.
 
 **Écarté.** (a) L'algorithme de Dekker : exact — mais exact pour la sémantique **binaire**, que la
 décision 2 refuse ; et l'ordre de ses quatre additions porte la correction sans qu'aucun outil ne
@@ -705,8 +722,15 @@ S du lot : **circulaire**, puisque le lot est pesé S *parce qu'*on a décidé d
 Visitor. Une estimation d'effort enregistre une décision, elle ne la fonde pas.
 
 **Le seuil est surveillé mécaniquement**, ce qui distingue cet amendement d'une exception :
-`git grep -l "case 'round':" -- packages/core/src | wc -l` rend **2**. Toute autre valeur signale
+`git grep -n "case 'round':" -- packages/core/src | wc -l` rend **2**. Toute autre valeur signale
 soit un parcours oublié, soit le troisième parcours qui retire l'amendement.
+
+> ⚠️ **`-n` et non `-l`, et la différence est le garde-fou lui-même.** `-l` liste les **fichiers**
+> appariés : un troisième parcours ajouté *dans un fichier existant* — un second `switch` sur les
+> kinds dans `evaluate.ts`, par exemple — laisserait le compte à 2 et le critère muet, au moment
+> précis où la condition de retrait de l'amendement serait remplie. `-n` compte les **lignes**
+> appariées, donc les `case` eux-mêmes, et passe à 3 où que le parcours atterrisse. Un critère
+> aveugle à une forme réaliste de l'événement qu'il surveille ne surveille rien.
 
 **Réversible**, et son coût de réouverture est faible — précisément parce que les deux `never`
 garantissent que les deux `switch` sont complets.

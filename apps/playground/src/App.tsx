@@ -423,8 +423,13 @@ function modeleArrondi(
   cle: string,
   libelle: string,
   parLigne: PrintableExpression,
-  total: PrintableExpression,
+  mode: RoundMode,
 ): ModeleArrondi {
+  // Le total est DÉRIVÉ de l'expression de ligne, jamais réécrit à côté d'elle : c'est ce
+  // qui garantit que la colonne d'un modèle et son total somment bien la même chose. Épelé
+  // deux fois, rien n'obligerait les deux copies à rester identiques, et les désaccorder
+  // rendrait la démonstration silencieusement fausse — aucune porte ne lit ce fichier.
+  const total = arrondir(sommeDes(parLigne), mode);
   return {
     cle,
     libelle,
@@ -459,19 +464,19 @@ const modeles: readonly ModeleArrondi[] = [
     'A',
     'lignes arrondies, puis le total — halfExpand',
     arrondir(montantLigne, 'halfExpand'),
-    arrondir(sommeDes(arrondir(montantLigne, 'halfExpand')), 'halfExpand'),
+    'halfExpand',
   ),
   modeleArrondi(
     'B',
     'lignes arrondies, puis le total — halfEven',
     arrondir(montantLigne, 'halfEven'),
-    arrondir(sommeDes(arrondir(montantLigne, 'halfEven')), 'halfEven'),
+    'halfEven',
   ),
   modeleArrondi(
     'A′',
     'lignes exactes, total seul arrondi — halfExpand',
     montantLigne,
-    arrondir(sommeDes(montantLigne), 'halfExpand'),
+    'halfExpand',
   ),
 ];
 
@@ -524,6 +529,38 @@ function lireModele(modele: ModeleArrondi): LectureArrondi {
 }
 
 const lectures: readonly LectureArrondi[] = modeles.map(lireModele);
+
+/**
+ * La prose ci-dessous NOMME des chiffres ; elle les lit donc, elle ne les recopie pas.
+ *
+ * Écrits en dur à côté d'un tableau calculé en direct, ils se périment au premier coup d'œil
+ * de quelqu'un qui édite les cinq lignes de démonstration — et aucune porte ne relit ce
+ * fichier, `apps/*` étant hors du glob de Vitest. La page enseignerait alors une conclusion
+ * que son propre tableau contredit.
+ */
+function lectureDe(cle: string): LectureArrondi {
+  const lecture = lectures.find((candidate) => candidate.modele.cle === cle);
+  if (lecture === undefined) {
+    throw new Error(`Modèle « ${cle} » absent : la démonstration ne dit plus ce qu'elle annonce.`);
+  }
+  return lecture;
+}
+
+const lectureA = lectureDe('A');
+const lectureB = lectureDe('B');
+const lectureAPrime = lectureDe('A′');
+
+/**
+ * Les lignes que l'arrondi change réellement — c'est-à-dire celles dont le montant exact
+ * n'est pas déjà au centime. Dérivées plutôt que listées : c'est exactement le point
+ * pédagogique, et une ligne ajoutée au jeu de données entre d'elle-même dans la phrase.
+ */
+const lignesDyadiques = lectureAPrime.montants.filter(
+  (montant, index) => montant !== lectureA.montants[index],
+);
+
+/** L'écriture française d'un nombre calculé, pour que la prose et le tableau concordent. */
+const fr = (value: number): string => String(value).replace('.', ',');
 
 /** Les lignes du second jeu, telles que la page les affiche à gauche du tableau. */
 const lignesArrondi = renderData.arrondi.lignes;
@@ -614,9 +651,19 @@ interface RefusalReport {
   readonly message: string;
 }
 
+/**
+ * Le budget des démonstrations de refus, et il est SÉPARÉ de celui de la facture.
+ *
+ * Ces quatre formules fautives n'appartiennent à aucun document : les charger au budget de
+ * la facture gonflait le compteur que la section « Budget du rendu » affiche sous son nom —
+ * mesuré, 145 opérations affichées pour 124 réelles. La page enseigne qu'un compteur partagé
+ * au-delà d'un document est l'erreur ; elle n'a pas le droit de la commettre en la montrant.
+ */
+const budgetDemonstrations: EvaluationBudget = createBudget();
+
 function reportRefusal(title: string, expression: Expression): RefusalReport {
   try {
-    evaluateExpression(expression, renderData, { budget: budgetFacture });
+    evaluateExpression(expression, renderData, { budget: budgetDemonstrations });
   } catch (error) {
     if (error instanceof ExpressionEvaluationError) {
       const details = error.details;
@@ -678,13 +725,16 @@ const refusalStyle = {
   marginBottom: '0.75rem',
 } as const;
 
-/** Une couleur distincte : un refus au save time n'est pas un refus au rendu. */
+/**
+ * Une couleur distincte : un refus au save time n'est pas un refus au rendu.
+ *
+ * Dérivé, pas recopié — les deux sortes de cartes se lisent en séquence sur la même page, et
+ * la phrase ci-dessus ne reste vraie que si la géométrie a UNE source.
+ */
 const parseRefusalStyle = {
+  ...refusalStyle,
   background: '#fffaf0',
   border: '1px solid #e8d5a0',
-  padding: '0.75rem',
-  borderRadius: '4px',
-  marginBottom: '0.75rem',
 } as const;
 
 const tableStyle = { borderCollapse: 'collapse', marginBottom: '1rem' } as const;
@@ -827,16 +877,21 @@ export default function App() {
       </p>
       <ul>
         <li>
-          <strong>63,26 contre 63,24, c'est le MODE.</strong> Même position d'arrondi, même ordre :
-          seules les deux lignes dyadiques — <code>2,125</code> et <code>1,125</code> — sont des
-          égalités exactes, et <code>halfEven</code> les renvoie vers le chiffre pair là où{' '}
-          <code>halfExpand</code> les éloigne de zéro. Le jeu est fermé à ces deux modes :{' '}
+          <strong>
+            {fr(lectureA.total)} contre {fr(lectureB.total)}, c'est le MODE.
+          </strong>{' '}
+          Même position d'arrondi, même ordre : seules les lignes dyadiques —{' '}
+          {lignesDyadiques.map((montant) => fr(montant)).join(' et ')} — sont des égalités exactes,
+          et <code>halfEven</code> les renvoie vers le chiffre pair là où <code>halfExpand</code>{' '}
+          les éloigne de zéro. Le jeu est fermé à ces deux modes :{' '}
           <code>{ROUND_MODES.join(' | ')}</code>.
         </li>
         <li>
-          <strong>63,25, c'est la POSITION de la déclaration dans l'arbre.</strong> Aucune ligne
-          n'est arrondie ; l'arrondi porte sur le total. Les deux modes rendent ici le <em>même</em>{' '}
-          chiffre, ce qui prouve que l'écart précédent ne venait pas d'eux. Un champ{' '}
+          <strong>
+            {fr(lectureAPrime.total)}, c'est la POSITION de la déclaration dans l'arbre.
+          </strong>{' '}
+          Aucune ligne n'est arrondie ; l'arrondi porte sur le total. Les deux modes rendent ici le{' '}
+          <em>même</em> chiffre, ce qui prouve que l'écart précédent ne venait pas d'eux. Un champ{' '}
           <code>precision?</code> posé sur chaque nœud n'aurait pas su exprimer ce cas : il n'y a
           aucun nœud intermédiaire où l'accrocher.
         </li>
@@ -958,6 +1013,13 @@ export default function App() {
           </li>
         ))}
       </ul>
+      <p>
+        Les formules fautives des deux sections de refus n'appartiennent, elles, à aucun document :
+        elles portent leur propre compteur — <code>{budgetDemonstrations.spent.steps}</code>{' '}
+        opérations et <code>{budgetDemonstrations.spent.itemsVisited}</code> éléments — plutôt que
+        de gonfler celui de la facture. C'est la même règle appliquée au cas limite : ce qui n'est
+        pas un document n'a pas à peser sur le budget d'un document.
+      </p>
 
       <h2>Document validé</h2>
       <pre style={codeStyle}>{JSON.stringify(sampleTemplate, null, 2)}</pre>

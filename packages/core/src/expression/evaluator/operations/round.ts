@@ -3,6 +3,8 @@ import { requireFiniteResult, requireNumber } from '../guards.js';
 
 const ZERO = 48;
 const NINE = 57;
+const DOT = 46;
+const MINUS = 45;
 
 /** Adds one to a decimal digit string, growing it by one digit on a full carry. */
 function increment(digits: string): string {
@@ -31,17 +33,49 @@ function hasNonZero(digits: string, from: number): boolean {
 }
 
 /**
+ * The exponent of a `toExponential()` form, read without allocating.
+ *
+ * `Number(shortest.slice(marker + 1))` says the same thing and builds a string to say it,
+ * on a path taken by every call including the ones that turn out to be the identity.
+ * ECMA-262 always writes the sign, so the digits start two characters past `e`.
+ */
+function exponentOf(shortest: string, marker: number): number {
+  const negative = shortest.charCodeAt(marker + 1) === MINUS;
+  let magnitude = 0;
+  for (let index = marker + 2; index < shortest.length; index += 1) {
+    magnitude = magnitude * 10 + (shortest.charCodeAt(index) - ZERO);
+  }
+  return negative ? -magnitude : magnitude;
+}
+
+/**
  * Whether the kept digits carry. `lastKept` decides an EXACT tie, and only for `halfEven`
  * -- which is the one place in this lot where the declared mode changes anything.
+ *
+ * The tie is dispatched by an exhaustive `switch` rather than by an open `else`, and that is
+ * not style. An `else` would make every mode that is not `halfExpand` round to-even in
+ * SILENCE: widening `ROUND_MODES` -- the one evolution ADR 0004 decision 3 plans for --
+ * would then compile, type-check and pass the whole property matrix while mis-rounding every
+ * exact tie by a cent. The `never` below is the same control AGENTS.md 3.B's amendment rests
+ * on for the two expression traversals, applied where the mode is actually read.
  */
 function goesUp(mode: RoundMode, first: number, restNonZero: boolean, lastKept: number): boolean {
   if (first !== 5) {
     return first > 5;
   }
-  if (restNonZero || mode === 'halfExpand') {
+  if (restNonZero) {
     return true;
   }
-  return lastKept % 2 === 1;
+  switch (mode) {
+    case 'halfExpand':
+      return true;
+    case 'halfEven':
+      return lastKept % 2 === 1;
+    default: {
+      const exhaustive: never = mode;
+      throw new TypeError(`Unhandled rounding mode: ${String(exhaustive)}`);
+    }
+  }
 }
 
 /**
@@ -56,7 +90,14 @@ function keptDigits(digits: string, drop: number, mode: RoundMode): string {
   if (drop >= digits.length) {
     const adjacent = drop === digits.length;
     const first = adjacent ? digits.charCodeAt(0) - ZERO : 0;
-    return goesUp(mode, first, adjacent && hasNonZero(digits, 1), 0) ? '1' : '0';
+    // What lies past the rounding position, told TRUTHFULLY. Further out than adjacent, the
+    // digit AT the position is a leading zero and the whole string is discarded -- and it is
+    // non-zero, `value === 0` having already returned. Passing a fabricated `false` here
+    // changed nothing for the two half-modes, which read this only on an exact tie, but it
+    // would tell a future directed mode "nothing was dropped" -- and a directed mode reads
+    // every discarded digit.
+    const restNonZero = adjacent ? hasNonZero(digits, 1) : true;
+    return goesUp(mode, first, restNonZero, 0) ? '1' : '0';
   }
   const cut = digits.length - drop;
   const kept = digits.slice(0, cut);
@@ -91,20 +132,36 @@ function keptDigits(digits: string, drop: number, mode: RoundMode): string {
  * Verified over 4 400 022 comparisons against an independently written exact BigInt
  * reference -- every `k/1000` in both signs up to 60 000, 40 000 uniform random bit
  * patterns, 40 000 realistic amounts, at eleven precisions including both bounds, in both
- * modes -- with ZERO divergence. Idempotent, monotone, finite on every finite input, and a
- * negative zero cannot come out of it by the structure of the code rather than by a patch.
+ * modes -- with ZERO divergence. Idempotent, monotone, and a negative zero cannot come out
+ * of it by the structure of the code rather than by a patch.
  *
- * Cost -- and the ABSOLUTE figures do not travel, which is why the statement below is a
- * ratio. Protocol: Node 24.11.1, 200 000 warm-up iterations then 2 000 000 calls on
- * pre-drawn values with a sum sink. Five machines have now been measured and they span
- * 378 ns to 4 838 ns on 17-digit values and 118 ns to 1 467 ns on a realistic invoice mix
- * -- a factor of TWELVE, in both directions around the reference of ADR 0004. Quoting one
- * of them as "the" cost would mislead whoever sizes a timeout against it.
+ * It is finite on every finite input AT A WHOLE `decimals`, and the qualification is
+ * load-bearing rather than pedantic: `decimals` is typed `number`, so a FRACTIONAL one is
+ * type-legal and only Zod refuses it, at save time. On a hand-built tree it rebuilds through
+ * a malformed literal and the outcome depends on the DATA -- measured,
+ * `roundDecimal(0.615, 2.5, m)` is `NaN` while `roundDecimal(63.25, 2.5, m)` is the identity
+ * and `decimals: Infinity` is the identity too. `evaluateRound` then charges that `NaN` as
+ * `not-finite`, whose wording names an overflow that did not happen. ADR 0004 decision 6
+ * declined a runtime guard for a position no supported path can deliver; what is refused is
+ * claiming a finiteness this function does not have.
  *
- * What holds across all five, and what lot E8 actually needs: a `round` node costs
- * **21x to 110x** an arithmetic node in wall time -- one to two orders of magnitude --
- * while spending the SAME single step of the budget. Not a bound problem, since the bound
- * counts steps; a worker-timeout problem.
+ * Cost, and NEITHER the absolute figures NOR the ratio travel -- which is the only durable
+ * thing to say about them. Protocol: Node 24.11.1, 200 000 warm-up iterations then 2 000 000
+ * calls on pre-drawn values with a sum sink. Five machines measured the pre-fast-path code
+ * at 378 ns to 4 838 ns on 17-digit values and 118 ns to 1 467 ns on a realistic invoice
+ * mix -- a factor of TWELVE in both directions. The ratio to an arithmetic node moved just
+ * as much, between harnesses as well as machines, because a multiplication in a tight loop
+ * measures anywhere from 1.2 ns to 50 ns depending on what V8 hoists.
+ *
+ * The two fast paths above then changed the shape rather than the scale, measured on one
+ * machine before and after over 16 800 624 comparisons with an identical sink: integers
+ * 102 -> 6 ns, invoice mix 114 -> 61 ns, 17-digit values 369 -> 338 ns.
+ *
+ * What survives all of it, and what lot E8 actually needs: a `round` node that ACTUALLY
+ * ROUNDS costs one to two orders of magnitude more wall time than an arithmetic node, while
+ * spending the SAME single step of the budget; a `round` that lands on the identity now
+ * costs a small multiple of one. Not a bound problem, since the bound counts steps; a
+ * worker-timeout problem, and one to re-measure on the machine that sizes the timeout.
  */
 export function roundDecimal(value: number, decimals: number, mode: RoundMode): number {
   // A non-finite input leaves UNCHANGED, and this guard is load-bearing rather than
@@ -117,15 +174,28 @@ export function roundDecimal(value: number, decimals: number, mode: RoundMode): 
   if (value === 0) {
     return 0;
   }
+  // An integer at a non-negative position is the identity by construction: its shortest
+  // decimal form carries no fractional digit, so `drop` is `-decimals` and nothing is
+  // dropped. Measured 26x to 38x cheaper than reaching that same conclusion through the
+  // digit string, on a case a document meets constantly -- a quantity, an integer unit
+  // price, a sum of integers. AFTER the zero check on purpose: `Number.isInteger(-0)` is
+  // true, and a guard placed first would return `-0` where the line above returns `0`.
+  if (decimals >= 0 && Number.isInteger(value)) {
+    return value;
+  }
   const shortest = Math.abs(value).toExponential();
   const marker = shortest.indexOf('e');
-  const exponent = Number(shortest.slice(marker + 1));
-  const digits = shortest.slice(0, marker).replace('.', '');
-  const drop = digits.length - 1 - exponent - decimals;
+  // `drop` needs the digit COUNT and the exponent, and neither needs an allocation: the
+  // mantissa is `d` or `d.ddd`, so the dot is at index 1 when there is one. Building the
+  // digit string before this point cost ~46 % of every identity call, which is exactly the
+  // call a template makes on an amount already at scale.
+  const digitCount = shortest.charCodeAt(1) === DOT ? marker - 1 : marker;
+  const drop = digitCount - 1 - exponentOf(shortest, marker) - decimals;
   if (drop <= 0) {
     // Already on the lattice: the identity, and the mode never gets a say.
     return value;
   }
+  const digits = shortest.slice(0, marker).replace('.', '');
   const sign = value < 0 ? '-' : '';
   const rounded = Number(`${sign}${keptDigits(digits, drop, mode)}e${-decimals}`);
   // `round(-0.004, 2, m)` yields zero, not minus zero: a negative zero is not part of a

@@ -51,7 +51,8 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      * the migration really does stamp without validating. What an earlier version of this
      * paragraph got wrong is the consequence it drew: it claimed a document stamped `1` but
      * carrying a C1 kind was still refused with `Invalid input` by a build that knows the
-     * kind. Measured, that document parses cleanly and comes out `schemaVersion: 2`.
+     * kind. Measured, that document parses cleanly and comes out AT THE CURRENT STAMP --
+     * whatever that is on the build reading this, since the chain walks it all the way up.
      *
      * The reason is in the pipeline: `parseTemplate` bounds the shape, MIGRATES, then
      * validates against the CURRENT schema -- never against the schema of the stamp it read.
