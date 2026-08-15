@@ -129,6 +129,24 @@ la somme des montants affichés au-dessus de lui.
 **Poids :** S — **Dépend de :** C1 — *jamais reporté : des arrondis ajoutés après coup
 faussent tous les modèles déjà écrits*
 
+> ✅ **Livré le 2026-08-15.** Le kind `round` porte trois champs requis — `value`, un
+> `decimals` **littéral** dans `[-15, 15]`, et un `mode` parmi `halfExpand` et `halfEven` —
+> et **la position du nœud dans l'arbre EST la déclaration**. Le critère de recette est
+> démontré sur un même jeu de cinq lignes : trois modèles légitimes rendent **63,26**,
+> **63,24** et **63,25**, et les deux causes de l'écart sont distinctes — le *mode* pour les
+> deux premiers, la *position* de la déclaration pour le troisième. `aggregate.ts` n'a pas
+> changé d'une ligne : « aucun total ne diffère de la somme des montants affichés au-dessus
+> de lui » est une propriété du **modèle**, obtenue en enveloppant aux deux niveaux, et
+> Openview ne l'impose pas. Zéro code d'erreur nouveau, zéro plafond nouveau ;
+> `CURRENT_SCHEMA_VERSION` passe à **3** avec sa migration d'estampille.
+>
+> Les douze décisions du lot vivent dans
+> [ADR 0004](../adr/0004-les-arrondis-declares-par-le-modele.md), qui complète l'ADR 0003 et
+> amende `AGENTS.md` §3.B sur la portée du Visitor obligatoire. Le *comment* — découpage en
+> incréments, contrat définitif, plan de test — vit dans
+> [docs/plans/c2-arrondis-declares-par-le-modele.md](../plans/c2-arrondis-declares-par-le-modele.md),
+> périmé depuis la livraison comme le dit son propre en-tête.
+
 ### C3. Le tableau de lignes
 
 **Pourquoi.** La répétition existe, la notion de **tableau** non : des colonnes,

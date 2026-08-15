@@ -262,6 +262,17 @@ un demi-patron : sans lui, `switch (node.type)` se duplique dans le rendu, la
 validation, la collecte de variables et la recherche par id — et chaque nouveau
 type de bloc impose de toucher huit fichiers.
 
+> **Portée : l'AST de document, pas l'algèbre d'expressions**
+> ([ADR 0004](docs/adr/0004-les-arrondis-declares-par-le-modele.md), décision 11 ; mandat du
+> propriétaire du produit, 2026-08-15). La règle ci-dessus vaut pour le Composite qu'énumère
+> §3.A. Elle ne vaut **pas** pour l'algèbre d'expressions, dont les deux parcours restent des
+> `switch` — **tant qu'ils se terminent par `const exhaustive: never = expression`**. Ce contrôle
+> est *strictement plus fort* qu'un Visitor : il rend l'oubli d'un kind impossible à **compiler**
+> (porte 2), là où un Visitor ne casserait qu'à l'exécution d'un test. Une règle qu'on ne peut
+> suivre sans dégrader la garantie qu'elle vise se corrige, elle ne se contourne pas.
+> **Seuil de retrait de l'amendement : l'apparition d'un troisième parcours d'expression.** Ce
+> jour-là, la duplication cesse d'être de deux exemplaires et le Visitor redevient le bon patron.
+
 ### C. Hexagonal — Ports & Adapteurs (`core`, `engine`)
 `core` définit des interfaces (stockage, rendu) ; les implémentations concrètes
 (Puppeteer, Playwright, système de fichiers) sont des adapteurs externes.

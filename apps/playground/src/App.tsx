@@ -8,12 +8,20 @@ import {
   type EvaluationScope,
   type Expression,
   ExpressionEvaluationError,
+  ExpressionSchema,
   evaluateExpression,
   evaluatePredicate,
   evaluateSequence,
   findNodeById,
+  MAX_ROUND_DECIMALS,
+  MIN_ROUND_DECIMALS,
   type PrintableExpression,
   parseTemplate,
+  ROUND_MODES,
+  type RoundExpression,
+  RoundExpressionSchema,
+  type RoundMode,
+  type Template,
   type TextSegment,
   visitSegment,
   walk,
@@ -52,7 +60,13 @@ const totalHT: PrintableExpression = {
   value: lineAmount,
 };
 
-/** A percentage of the total, in points, with no rounding: the model declares that in C2. */
+/**
+ * A percentage of the total, in points, and NOT rounded here.
+ *
+ * Rounding is a `round` node the template writes where it wants one -- see the three
+ * models further down. Rounding this amount by default would be a rounding position *de
+ * facto*, therefore a rule, and Openview answers for no rule.
+ */
 const remise: PrintableExpression = {
   kind: 'percentOf',
   base: totalHT,
@@ -241,17 +255,39 @@ const renderData = {
       { sku: 'C-3', quantite: 4, prixUnitaire: 2.5, discount: 5 },
     ],
   },
+  // Un SECOND jeu de lignes, dédié à la démonstration d'arrondi. La facture ci-dessus
+  // n'est pas touchée : ses quatre montants (60 / 6 / 54 / 20) sont cités nommément par
+  // l'ADR 0003, et les étendre aurait périmé quatre chiffres d'un document qui fait foi.
+  //
+  // Deux de ces cinq lignes portent des valeurs DYADIQUES — 0,125 vaut 2⁻³ et 0,375 vaut
+  // 3·2⁻³, et leurs produits par 17 et par 3 le sont aussi. Le demi y est donc LE demi, et
+  // non un artefact de représentation : c'est la seule façon de montrer que le mode décide
+  // quelque chose. Comme au-dessus, aucune ligne ne porte de montant — seulement une
+  // quantité et un prix unitaire.
+  arrondi: {
+    lignes: [
+      { sku: 'A-1', quantite: 2, prixUnitaire: 10 },
+      { sku: 'B-2', quantite: 1, prixUnitaire: 30 },
+      { sku: 'C-3', quantite: 4, prixUnitaire: 2.5 },
+      { sku: 'D-4', quantite: 17, prixUnitaire: 0.125 },
+      { sku: 'E-5', quantite: 3, prixUnitaire: 0.375 },
+    ],
+  },
   // « Aujourd'hui » est une donnée, sous un nom que l'intégrateur choisit.
   traitement: { effectueLe: '2026-03-10' },
 };
 
 /**
- * Un seul budget pour tout le rendu, créé une fois — comme le fera le pipeline.
+ * Le budget de CE document, créé une fois — comme le fera le pipeline.
  *
- * Un budget par appel se réinitialiserait à chaque liaison, et un document de 500
- * liaisons obtiendrait 500 fois l'allocation : la borne serait décorative.
+ * Deux erreurs symétriques, et la page les évite toutes les deux. Un budget par *appel* se
+ * réinitialiserait à chaque liaison, et un document de 500 liaisons obtiendrait 500 fois
+ * l'allocation : la borne serait décorative. Un budget par *page* ferait dépendre le
+ * compteur d'un document de ce qu'un autre a déjà consommé, donc de l'ordre de la
+ * démonstration. L'unité juste est le DOCUMENT : les trois modèles d'arrondi plus bas
+ * partagent le jeu de données et portent chacun le sien.
  */
-const budget: EvaluationBudget = createBudget();
+const budgetFacture: EvaluationBudget = createBudget();
 
 /**
  * Valeurs brutes, volontairement : transformer une liaison en texte imprimable
@@ -265,7 +301,11 @@ const budget: EvaluationBudget = createBudget();
  * Le parcours passe par `visitSegment` : c'est la deuxième traversée de segments
  * du dépôt, et une nouvelle sorte de segment doit casser la compilation ici.
  */
-function rawSegments(segments: readonly TextSegment[], scope: EvaluationScope): readonly string[] {
+function rawSegments(
+  segments: readonly TextSegment[],
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+): readonly string[] {
   return segments.map((segment) =>
     visitSegment(segment, {
       literal: (literal) => JSON.stringify(literal.text),
@@ -282,16 +322,16 @@ function rawSegments(segments: readonly TextSegment[], scope: EvaluationScope): 
  * de template au-dessus : s'il manque, c'est le contrat de core qui est cassé, et
  * une section vide le dirait beaucoup moins bien qu'une exception.
  */
-function requireNode(id: string): DocumentNode {
-  const node = findNodeById(sampleTemplate.root, id);
+function requireNode(root: DocumentNode, id: string): DocumentNode {
+  const node = findNodeById(root, id);
   if (node === undefined) {
     throw new Error(`Nœud « ${id} » absent du document validé : contrat de core cassé.`);
   }
   return node;
 }
 
-function requireTextNode(id: string): readonly TextSegment[] {
-  const node = requireNode(id);
+function requireTextNode(root: DocumentNode, id: string): readonly TextSegment[] {
+  const node = requireNode(root, id);
   if (node.type !== 'text') {
     throw new Error(`« ${id} » devrait être un texte, pas un ${node.type}.`);
   }
@@ -304,29 +344,290 @@ const dataPaths = collectDataPaths(sampleTemplate.root);
 // Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de boucle,
 // la condition sur le nœud de condition. Les expressions déclarées plus haut ne
 // servent qu'à construire le template ; l'évaluation ci-dessous n'y touche pas.
-const loopNode = requireNode('lines');
+const loopNode = requireNode(sampleTemplate.root, 'lines');
 if (loopNode.type !== 'loop') {
   throw new Error(`« lines » devrait être une boucle, pas un ${loopNode.type}.`);
 }
 
-const conditionNode = requireNode('discounted');
+const conditionNode = requireNode(sampleTemplate.root, 'discounted');
 if (conditionNode.type !== 'condition') {
   throw new Error(`« discounted » devrait être une condition, pas un ${conditionNode.type}.`);
 }
 
-const titleSegments = rawSegments(requireTextNode('title'), renderData);
-const totalSegments = rawSegments(requireTextNode('totals'), renderData);
-const dateSegments = rawSegments(requireTextNode('dates'), renderData);
-const countSegments = rawSegments(requireTextNode('discount-count'), renderData);
+const root = sampleTemplate.root;
+const titleSegments = rawSegments(requireTextNode(root, 'title'), renderData, budgetFacture);
+const totalSegments = rawSegments(requireTextNode(root, 'totals'), renderData, budgetFacture);
+const dateSegments = rawSegments(requireTextNode(root, 'dates'), renderData, budgetFacture);
+const countSegments = rawSegments(
+  requireTextNode(root, 'discount-count'),
+  renderData,
+  budgetFacture,
+);
 
-const lineLabelContent = requireTextNode('line-label');
-const lineRows = evaluateSequence(loopNode.each, renderData, { budget }).map((item) => {
-  const lineScope = childScope(renderData, loopNode.as, item);
-  return {
-    label: rawSegments(lineLabelContent, lineScope).join(' + '),
-    discounted: evaluatePredicate(conditionNode.when, lineScope, { budget }),
-  };
+const lineLabelContent = requireTextNode(root, 'line-label');
+const lineRows = evaluateSequence(loopNode.each, renderData, { budget: budgetFacture }).map(
+  (item) => {
+    const lineScope = childScope(renderData, loopNode.as, item);
+    return {
+      label: rawSegments(lineLabelContent, lineScope, budgetFacture).join(' + '),
+      discounted: evaluatePredicate(conditionNode.when, lineScope, { budget: budgetFacture }),
+    };
+  },
+);
+
+/* ------------------------------------------------------------------------------------- *
+ * Trois modèles, un jeu de données, trois totaux
+ * ------------------------------------------------------------------------------------- */
+
+/** `quantite * prixUnitaire` sur le second jeu de lignes. Aucun montant n'est fourni. */
+const montantLigne: PrintableExpression = {
+  kind: 'arithmetic',
+  op: 'mul',
+  left: { kind: 'path', path: 'l.quantite' },
+  right: { kind: 'path', path: 'l.prixUnitaire' },
+};
+
+/** Le kind du lot C2 : trois champs requis, et la POSITION dans l'arbre est la déclaration. */
+const arrondir = (value: PrintableExpression, mode: RoundMode): RoundExpression => ({
+  kind: 'round',
+  value,
+  decimals: 2,
+  mode,
 });
+
+const sommeDes = (value: PrintableExpression): PrintableExpression => ({
+  kind: 'aggregate',
+  op: 'sum',
+  source: { kind: 'path', path: 'arrondi.lignes' },
+  as: 'l',
+  value,
+});
+
+interface ModeleArrondi {
+  readonly cle: string;
+  readonly libelle: string;
+  readonly template: Template;
+  readonly budget: EvaluationBudget;
+}
+
+/**
+ * Un modèle complet par variante, PARSÉ — pas une expression évaluée à la volée.
+ *
+ * Chacun porte son propre budget, et c'est le contrat : « le budget de travail du rendu
+ * ENTIER, créé une fois par le pipeline et partagé par toute expression du DOCUMENT ».
+ * Trois modèles sont trois documents. Un budget commun ferait dépendre le compteur affiché
+ * sous B de ce que A a déjà dépensé, donc de l'ordre de la démonstration — et un
+ * intégrateur qui recopie cette page câblerait un budget de rendu sur une session.
+ */
+function modeleArrondi(
+  cle: string,
+  libelle: string,
+  parLigne: PrintableExpression,
+  mode: RoundMode,
+): ModeleArrondi {
+  // Le total est DÉRIVÉ de l'expression de ligne, jamais réécrit à côté d'elle : c'est ce
+  // qui garantit que la colonne d'un modèle et son total somment bien la même chose. Épelé
+  // deux fois, rien n'obligerait les deux copies à rester identiques, et les désaccorder
+  // rendrait la démonstration silencieusement fausse — aucune porte ne lit ce fichier.
+  const total = arrondir(sommeDes(parLigne), mode);
+  return {
+    cle,
+    libelle,
+    template: parseTemplate({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: `tpl_arrondi_${cle}`,
+      name: `Arrondi ${cle}`,
+      version: '1.0.0',
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'loop',
+            id: 'lignes',
+            each: { kind: 'path', path: 'arrondi.lignes' },
+            as: 'l',
+            children: [
+              { type: 'text', id: 'montant', content: [{ kind: 'binding', value: parLigne }] },
+            ],
+          },
+          { type: 'text', id: 'total', content: [{ kind: 'binding', value: total }] },
+        ],
+      },
+    }),
+    budget: createBudget(),
+  };
+}
+
+const modeles: readonly ModeleArrondi[] = [
+  modeleArrondi(
+    'A',
+    'lignes arrondies, puis le total — halfExpand',
+    arrondir(montantLigne, 'halfExpand'),
+    'halfExpand',
+  ),
+  modeleArrondi(
+    'B',
+    'lignes arrondies, puis le total — halfEven',
+    arrondir(montantLigne, 'halfEven'),
+    'halfEven',
+  ),
+  modeleArrondi(
+    'A′',
+    'lignes exactes, total seul arrondi — halfExpand',
+    montantLigne,
+    'halfExpand',
+  ),
+];
+
+/** La liaison d'un nœud de texte à une seule liaison. Tombe plutôt que de dégrader. */
+function premiereLiaison(segments: readonly TextSegment[], quoi: string): PrintableExpression {
+  const segment = segments[0];
+  if (segment === undefined || segment.kind !== 'binding') {
+    throw new Error(`« ${quoi} » devrait porter une liaison : contrat de core cassé.`);
+  }
+  return segment.value;
+}
+
+function nombre(value: unknown, quoi: string): number {
+  if (typeof value !== 'number') {
+    throw new Error(`« ${quoi} » aurait dû être un nombre : contrat de core cassé.`);
+  }
+  return value;
+}
+
+interface LectureArrondi {
+  readonly modele: ModeleArrondi;
+  readonly montants: readonly number[];
+  readonly total: number;
+}
+
+/** Tout se lit sur le document VALIDÉ, comme partout ailleurs sur cette page. */
+function lireModele(modele: ModeleArrondi): LectureArrondi {
+  const documentRoot = modele.template.root;
+  const boucle = requireNode(documentRoot, 'lignes');
+  if (boucle.type !== 'loop') {
+    throw new Error(`« lignes » devrait être une boucle, pas un ${boucle.type}.`);
+  }
+  const liaisonMontant = premiereLiaison(requireTextNode(documentRoot, 'montant'), 'montant');
+  const liaisonTotal = premiereLiaison(requireTextNode(documentRoot, 'total'), 'total');
+  const options = { budget: modele.budget };
+
+  return {
+    modele,
+    montants: evaluateSequence(boucle.each, renderData, options).map((item) =>
+      nombre(
+        evaluateExpression(liaisonMontant, childScope(renderData, boucle.as, item), options),
+        `montant du modèle ${modele.cle}`,
+      ),
+    ),
+    total: nombre(
+      evaluateExpression(liaisonTotal, renderData, options),
+      `total du modèle ${modele.cle}`,
+    ),
+  };
+}
+
+const lectures: readonly LectureArrondi[] = modeles.map(lireModele);
+
+/**
+ * La prose ci-dessous NOMME des chiffres ; elle les lit donc, elle ne les recopie pas.
+ *
+ * Écrits en dur à côté d'un tableau calculé en direct, ils se périment au premier coup d'œil
+ * de quelqu'un qui édite les cinq lignes de démonstration — et aucune porte ne relit ce
+ * fichier, `apps/*` étant hors du glob de Vitest. La page enseignerait alors une conclusion
+ * que son propre tableau contredit.
+ */
+function lectureDe(cle: string): LectureArrondi {
+  const lecture = lectures.find((candidate) => candidate.modele.cle === cle);
+  if (lecture === undefined) {
+    throw new Error(`Modèle « ${cle} » absent : la démonstration ne dit plus ce qu'elle annonce.`);
+  }
+  return lecture;
+}
+
+const lectureA = lectureDe('A');
+const lectureB = lectureDe('B');
+const lectureAPrime = lectureDe('A′');
+
+/**
+ * Les lignes que l'arrondi change réellement — c'est-à-dire celles dont le montant exact
+ * n'est pas déjà au centime. Dérivées plutôt que listées : c'est exactement le point
+ * pédagogique, et une ligne ajoutée au jeu de données entre d'elle-même dans la phrase.
+ */
+const lignesDyadiques = lectureAPrime.montants.filter(
+  (montant, index) => montant !== lectureA.montants[index],
+);
+
+/** L'écriture française d'un nombre calculé, pour que la prose et le tableau concordent. */
+const fr = (value: number): string => String(value).replace('.', ',');
+
+/** Les lignes du second jeu, telles que la page les affiche à gauche du tableau. */
+const lignesArrondi = renderData.arrondi.lignes;
+
+/**
+ * Un refus au SAVE TIME, qui n'a rien à voir avec un refus au rendu.
+ *
+ * Il lui faut son propre véhicule : `reportRefusal` ne capture qu'une
+ * `ExpressionEvaluationError` et relance tout le reste, or un `ZodError` ne porte ni
+ * `code`, ni `site`, ni `at`. Et l'argument fautif ne se construirait même pas —
+ * `{ mode: 'halfUp' }` ne type-checke pas comme `Expression`, ce qui est exactement le
+ * garde-fou attendu côté TypeScript. D'où un `unknown` et un `safeParse`.
+ */
+interface ParseRefusalReport {
+  readonly title: string;
+  readonly path: string;
+  readonly message: string;
+}
+
+function reportParseRefusal(title: string, raw: unknown): ParseRefusalReport {
+  const result = ExpressionSchema.safeParse(raw);
+  if (result.success) {
+    throw new Error(`« ${title} » aurait dû être refusée au parse : contrat de core cassé.`);
+  }
+  const issue = result.error.issues[0];
+  if (issue === undefined) {
+    throw new Error(`« ${title} » a été refusée sans motif : contrat de core cassé.`);
+  }
+  return { title, path: issue.path.join(' → '), message: issue.message };
+}
+
+const arrondiValide = { kind: 'round', value: { kind: 'path', path: 'arrondi.total' } };
+
+const parseRefusals: readonly ParseRefusalReport[] = [
+  reportParseRefusal('Un mode qui n’existe pas', { ...arrondiValide, decimals: 2, mode: 'halfUp' }),
+  reportParseRefusal('Un nom de règle plutôt qu’une opération', {
+    ...arrondiValide,
+    decimals: 2,
+    mode: 'bankers',
+  }),
+  reportParseRefusal('Une position fractionnaire', {
+    ...arrondiValide,
+    decimals: 2.5,
+    mode: 'halfEven',
+  }),
+  reportParseRefusal('Une position hors de la fenêtre', {
+    ...arrondiValide,
+    decimals: MIN_ROUND_DECIMALS - 1,
+    mode: 'halfEven',
+  }),
+];
+
+/**
+ * Le même contrôle, du point de vue de l'INTÉGRATEUR.
+ *
+ * Il construit un nœud par programme et veut le valider avant de le stocker, sans passer
+ * par le template entier : c'est ce consommateur — immédiat, et hors du dépôt — qui
+ * justifie que le kind exporte son schéma membre et les deux bornes de sa fenêtre.
+ */
+const horsFenetre = RoundExpressionSchema.safeParse({
+  ...arrondiValide,
+  decimals: MAX_ROUND_DECIMALS + 1,
+  mode: 'halfExpand',
+});
+const messageHorsFenetre = horsFenetre.success
+  ? '(acceptée — ce que le contrat interdit)'
+  : (horsFenetre.error.issues[0]?.message ?? '(refusée sans motif)');
 
 /**
  * Un avant-goût du lot C8 : la charge machine qu'une formule fautive rend.
@@ -350,9 +651,19 @@ interface RefusalReport {
   readonly message: string;
 }
 
+/**
+ * Le budget des démonstrations de refus, et il est SÉPARÉ de celui de la facture.
+ *
+ * Ces quatre formules fautives n'appartiennent à aucun document : les charger au budget de
+ * la facture gonflait le compteur que la section « Budget du rendu » affiche sous son nom —
+ * mesuré, 145 opérations affichées pour 124 réelles. La page enseigne qu'un compteur partagé
+ * au-delà d'un document est l'erreur ; elle n'a pas le droit de la commettre en la montrant.
+ */
+const budgetDemonstrations: EvaluationBudget = createBudget();
+
 function reportRefusal(title: string, expression: Expression): RefusalReport {
   try {
-    evaluateExpression(expression, renderData, { budget });
+    evaluateExpression(expression, renderData, { budget: budgetDemonstrations });
   } catch (error) {
     if (error instanceof ExpressionEvaluationError) {
       const details = error.details;
@@ -413,6 +724,29 @@ const refusalStyle = {
   borderRadius: '4px',
   marginBottom: '0.75rem',
 } as const;
+
+/**
+ * Une couleur distincte : un refus au save time n'est pas un refus au rendu.
+ *
+ * Dérivé, pas recopié — les deux sortes de cartes se lisent en séquence sur la même page, et
+ * la phrase ci-dessus ne reste vraie que si la géométrie a UNE source.
+ */
+const parseRefusalStyle = {
+  ...refusalStyle,
+  background: '#fffaf0',
+  border: '1px solid #e8d5a0',
+} as const;
+
+const tableStyle = { borderCollapse: 'collapse', marginBottom: '1rem' } as const;
+
+const cellStyle = {
+  border: '1px solid #ddd',
+  padding: '0.35rem 0.75rem',
+  textAlign: 'left',
+} as const;
+
+/** L'écart d'un centime se lit sur cette ligne : elle est mise en évidence pour cela. */
+const totalCellStyle = { ...cellStyle, background: '#f0f6ff', fontWeight: 'bold' } as const;
 
 export default function App() {
   return (
@@ -478,8 +812,133 @@ export default function App() {
       </p>
       <p>
         Le prix moyen passe par un <code>if</code> qui court-circuite : la division n'est évaluée
-        que si le nombre de lignes est strictement positif. Aucun arrondi n'est appliqué — c'est le
-        modèle qui le déclarera, au lot C2.
+        que si le nombre de lignes est strictement positif. Aucun arrondi n'est appliqué ici, et
+        c'est délibéré : l'arrondi est un nœud <code>round</code> que le modèle écrit là où il en
+        veut un. La section suivante montre ce que cette liberté coûte et ce qu'elle rend.
+      </p>
+
+      <h2>Trois modèles, un jeu de données, trois totaux</h2>
+      <p>
+        Les trois modèles ci-dessous lisent <strong>les mêmes cinq lignes</strong> et rendent trois
+        totaux différents. Aucun n'est faux : chacun déclare autre chose. C'est le point exact où
+        naît le fameux « écart d'un centime », et Openview le rend <em>visible dans l'arbre</em> au
+        lieu de le décider à la place de l'auteur.
+      </p>
+      <table style={tableStyle}>
+        <thead>
+          <tr>
+            <th style={cellStyle}>Ligne</th>
+            <th style={cellStyle}>Quantité</th>
+            <th style={cellStyle}>Prix unitaire</th>
+            {lectures.map((lecture) => (
+              <th key={lecture.modele.cle} style={cellStyle}>
+                {lecture.modele.cle}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {lignesArrondi.map((ligne, index) => (
+            <tr key={ligne.sku}>
+              <td style={cellStyle}>{ligne.sku}</td>
+              <td style={cellStyle}>{ligne.quantite}</td>
+              <td style={cellStyle}>{ligne.prixUnitaire}</td>
+              {lectures.map((lecture) => (
+                <td key={lecture.modele.cle} style={cellStyle}>
+                  <code>{lecture.montants[index]}</code>
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr>
+            <th colSpan={3} style={cellStyle}>
+              Total
+            </th>
+            {lectures.map((lecture) => (
+              <td key={lecture.modele.cle} style={totalCellStyle}>
+                <code>{lecture.total}</code>
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+      <ul>
+        {lectures.map((lecture) => (
+          <li key={lecture.modele.cle}>
+            <strong>{lecture.modele.cle}</strong> — {lecture.modele.libelle}
+          </li>
+        ))}
+      </ul>
+      <p>
+        <strong>
+          Les deux causes de l'écart sont distinctes, et les confondre fait écrire le mauvais
+          modèle.
+        </strong>
+      </p>
+      <ul>
+        <li>
+          <strong>
+            {fr(lectureA.total)} contre {fr(lectureB.total)}, c'est le MODE.
+          </strong>{' '}
+          Même position d'arrondi, même ordre : seules les lignes dyadiques —{' '}
+          {lignesDyadiques.map((montant) => fr(montant)).join(' et ')} — sont des égalités exactes,
+          et <code>halfEven</code> les renvoie vers le chiffre pair là où <code>halfExpand</code>{' '}
+          les éloigne de zéro. Le jeu est fermé à ces deux modes :{' '}
+          <code>{ROUND_MODES.join(' | ')}</code>.
+        </li>
+        <li>
+          <strong>
+            {fr(lectureAPrime.total)}, c'est la POSITION de la déclaration dans l'arbre.
+          </strong>{' '}
+          Aucune ligne n'est arrondie ; l'arrondi porte sur le total. Les deux modes rendent ici le{' '}
+          <em>même</em> chiffre, ce qui prouve que l'écart précédent ne venait pas d'eux. Un champ{' '}
+          <code>precision?</code> posé sur chaque nœud n'aurait pas su exprimer ce cas : il n'y a
+          aucun nœud intermédiaire où l'accrocher.
+        </li>
+      </ul>
+      <p>
+        Le premier jeu de lignes, plus haut, dit la moitié complémentaire : sur des montants déjà
+        exacts au centime, <code>round</code> est l'<strong>identité</strong>. L'arrondi n'apparaît
+        que là où le modèle l'écrit, et il ne change une valeur que lorsqu'il y a quelque chose à
+        changer.
+      </p>
+      <p>
+        La position se déclare comme un entier littéral, dans une fenêtre fermée de{' '}
+        <code>{MIN_ROUND_DECIMALS}</code> à <code>{MAX_ROUND_DECIMALS}</code> : « ce total
+        arrondit-il comme les lignes au-dessus ? » se répond alors en comparant deux entiers dans
+        l'arbre, <em>sans données et sans rendu</em>.
+      </p>
+
+      <h2>Refus à la SAUVEGARDE du modèle (et non au rendu)</h2>
+      <p>
+        Les refus de la section suivante se produisent au <em>rendu</em> ; ceux-ci se produisent
+        quand le modèle est <em>enregistré</em>. La distinction n'est pas cosmétique : ce que le
+        schéma tranche au save time est ce que le lot C2 n'a eu besoin d'aucun code d'erreur nouveau
+        pour dire. La charge n'a donc ni <code>code</code>, ni <code>site</code> — elle a un chemin
+        et une phrase.
+      </p>
+      <p>
+        Les deux premiers rendent <em>la même</em> phrase, et c'est voulu : un nom à consonance
+        réglementaire n'obtient aucun traitement de faveur. Un nom désigne une <em>opération</em>,
+        jamais une règle — <code>halfEven</code> est le nom de « l'arrondi du banquier » quand on le
+        décrit au lieu de l'invoquer.
+      </p>
+      {parseRefusals.map((refusal) => (
+        <div key={refusal.title} style={parseRefusalStyle}>
+          <strong>{refusal.title}</strong>
+          <ul>
+            <li>
+              <code>issue.path</code> : <code>{refusal.path}</code>
+            </li>
+            <li>{refusal.message}</li>
+          </ul>
+        </div>
+      ))}
+      <p>
+        Et le même contrôle vu de l'application intégratrice, qui construit un nœud par programme et
+        le valide avant de le stocker — sans passer par le template entier :{' '}
+        <code>RoundExpressionSchema.safeParse</code> d'une position à{' '}
+        <code>{MAX_ROUND_DECIMALS + 1}</code> rend « {messageHorsFenetre} ».
       </p>
 
       <h2>Dates : échéance, « 45 jours fin de mois » et jours de retard</h2>
@@ -528,13 +987,38 @@ export default function App() {
         </div>
       ))}
 
-      <h2>Budget du rendu</h2>
+      <h2>Budget du rendu — un par DOCUMENT</h2>
       <p>
-        Un seul budget pour tout ce qui précède, créé une fois comme le fera le pipeline :{' '}
-        <code>{budget.spent.steps}</code> opérations et <code>{budget.spent.itemsVisited}</code>{' '}
-        éléments de liste traversés, sur <code>{budget.limits.maxSteps}</code> et{' '}
-        <code>{budget.limits.maxItemsVisited}</code> autorisés. Un budget par appel se
-        réinitialiserait à chaque liaison, et la borne deviendrait décorative.
+        Un budget par <em>appel</em> se réinitialiserait à chaque liaison, et un document de 500
+        liaisons obtiendrait 500 fois l'allocation : la borne serait décorative. Mais un budget par{' '}
+        <em>page</em> serait faux dans l'autre sens — le compteur d'un document dépendrait de ce
+        qu'un autre a déjà consommé, donc de l'ordre de la démonstration. L'unité est le{' '}
+        <strong>document</strong>, et cette page en rend quatre : la facture et les trois modèles
+        d'arrondi, qui partagent le jeu de données et rien d'autre.
+      </p>
+      <ul>
+        <li>
+          <strong>Facture Exemple</strong> — <code>{budgetFacture.spent.steps}</code> opérations et{' '}
+          <code>{budgetFacture.spent.itemsVisited}</code> éléments de liste traversés, sur{' '}
+          <code>{budgetFacture.limits.maxSteps}</code> et{' '}
+          <code>{budgetFacture.limits.maxItemsVisited}</code> autorisés.
+        </li>
+        {lectures.map((lecture) => (
+          <li key={lecture.modele.cle}>
+            <strong>Arrondi {lecture.modele.cle}</strong> —{' '}
+            <code>{lecture.modele.budget.spent.steps}</code> opérations et{' '}
+            <code>{lecture.modele.budget.spent.itemsVisited}</code> éléments de liste traversés. Un
+            nœud <code>round</code> dépense <em>un</em> pas, comme tout autre nœud à opérande
+            unique.
+          </li>
+        ))}
+      </ul>
+      <p>
+        Les formules fautives des deux sections de refus n'appartiennent, elles, à aucun document :
+        elles portent leur propre compteur — <code>{budgetDemonstrations.spent.steps}</code>{' '}
+        opérations et <code>{budgetDemonstrations.spent.itemsVisited}</code> éléments — plutôt que
+        de gonfler celui de la facture. C'est la même règle appliquée au cas limite : ce qui n'est
+        pas un document n'a pas à peser sur le budget d'un document.
       </p>
 
       <h2>Document validé</h2>

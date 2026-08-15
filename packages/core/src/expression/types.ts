@@ -69,6 +69,85 @@ export const TEXT_CASE_OPERATORS = ['upper', 'lower'] as const;
 
 export type TextCaseOperator = (typeof TEXT_CASE_OPERATORS)[number];
 
+/**
+ * The two ways a tie is broken, and the whole set.
+ *
+ * The names are ECMA-402's `roundingMode` values, taken verbatim, and the reason is not
+ * fashion:
+ *
+ * - **They are unambiguous about the sign.** `halfUp` reads as "ties toward +Infinity" to
+ *   half the industry (ECMA-402 calls that `halfCeil`) and "ties away from zero" to the
+ *   other half (Java's `HALF_UP`). On a credit note the two differ by one cent on every
+ *   line, and a field that decides a cent may not be named by a word that means two things.
+ * - **They stay coherent if the set is ever widened.** Should a directed mode be admitted
+ *   one day (see below), `expand`/`trunc`/`ceil`/`floor` join a vocabulary that already
+ *   names them; `halfUp` would have made `ceil` unreadable beside it.
+ * - **They make the verification self-documenting.** `Intl.NumberFormat` with the SAME
+ *   string is the oracle these two modes were checked against. That oracle is a development
+ *   probe, never a committed test: its result is indexed on an ICU build, and a
+ *   deterministic engine may not depend on one.
+ *
+ * `halfExpand` sends a tie AWAY FROM ZERO: `2.125` yields `2.13` and `-2.125` yields
+ * `-2.13`. `halfEven` sends it to the even last digit: `2.125` yields `2.12`, `2.135`
+ * yields `2.14`. What separates them is DIRECTION, and the claim has to be stated
+ * carefully: `halfExpand` moves every tie the same way, away from zero, so on positive
+ * amounts its ties always drift the total UP. `halfEven` has no direction of its own --
+ * where a tie goes is decided by the parity of the digit before it, which no amount
+ * chooses. It does NOT follow that a total never drifts up: a set whose amounts all end
+ * in `.135` rounds every tie up under `halfEven` too. The property is the absence of a
+ * SYSTEMATIC direction in the mode, not a guarantee about an arbitrary set of amounts --
+ * and whoever writes the ADR should not upgrade the first into the second.
+ *
+ * ## What is refused, and on which ground
+ *
+ * The DIRECTED modes -- `ceil`, `floor`, `expand`, `trunc` -- are not here, and the ground
+ * is the one this repository already writes: no named use today, and the anti-over-
+ * engineering rule. Adding one later costs a single stamp migration and invalidates no
+ * stored template, which makes it the cheapest decision in the lot to defer. The reopening
+ * signal is written: a request naming a business need that must round in one direction
+ * INSIDE the template.
+ *
+ * A measurement is recorded with that refusal IN ADR 0004, as information rather than as the
+ * criterion, because it will matter on the day it is reopened: a directed mode reads EVERY
+ * discarded digit, where a half-mode only looks at the one just past the rounding position,
+ * so a `ceil` at two decimals answers a cent too high whenever a sum carries a binary
+ * residue. The figures and their protocol live in the ADR, not in a published typing.
+ *
+ * Refused for another reason entirely: `bankers`, `commercial`, `legal`, `arrondiLegal`,
+ * `swedish`, `cash`, `fiscal`. Each names a rule Openview answers for none of (ADR 0003,
+ * decision 10). `halfEven` is what "banker's rounding" is called when it is described
+ * instead of invoked.
+ */
+export const ROUND_MODES = ['halfExpand', 'halfEven'] as const;
+
+export type RoundMode = (typeof ROUND_MODES)[number];
+
+/**
+ * The rounding position, as a power of ten. `2` is the cent, `0` the unit, `-3` the
+ * thousand.
+ *
+ * **The window is documentary on BOTH sides, and it is a NARROWING no migration can undo.**
+ * That is said first because it is what a later reader needs: it rests on the pre-v1.0
+ * assumption, exactly like the three bounds of ADR 0003 decision 2.
+ *
+ * The upper anchor is not a taste, and not a slogan about `DBL_DIG` -- it is an inequality.
+ * A shortest round-tripping decimal has at most 17 digits, and the number of digits dropped
+ * is `len - 1 - exponent - decimals`. For any `|value| >= 1` the exponent is at least 0, so
+ * from `decimals = 16` onward the count is at most `17 - 1 - 0 - 16 = 0`: **16 is the first
+ * position that is the identity for every magnitude at or above one, so 15 is the last one
+ * that can still change such a value.**
+ *
+ * Below magnitude one the property does not hold -- rounding `0.12345678901234566` at 16
+ * decimals really does change it -- and no finite bound would make it universal. So above
+ * 15 and below -15 the window refuses positions that ARE reachable, deliberately: no
+ * document amount has a meaning past `1e15`, which is also the last power of ten on
+ * binary64's exact-integer grid (`Number.isSafeInteger(1e15)` is true, `1e16` is false).
+ *
+ * Widening this later is cheap; shrinking it will not be.
+ */
+export const MIN_ROUND_DECIMALS = -15;
+export const MAX_ROUND_DECIMALS = 15;
+
 export interface LiteralExpression {
   readonly kind: 'literal';
   readonly value: LiteralValue;
@@ -129,14 +208,89 @@ export interface ArithmeticExpression {
  * No rounding, here or anywhere: a default rounding would be a rounding position *de
  * facto*, therefore a rule, and Openview answers for no rule. `div(1, 3)` yields
  * `0.3333333333333333`, and a test pins that so nobody "tidies up" the division later.
- * How an amount rounds is declared by the template, in lot C2, through a `round` wrapper
- * kind -- not through a `precision?` field on every intermediate node that nobody fills
- * in.
+ * How an amount rounds is declared by the template through the {@link RoundExpression}
+ * wrapper kind -- not through a `precision?` field on every intermediate node that nobody
+ * fills in. `div` and `percentOf` still round nothing, and two tests pin that.
  */
 export interface PercentOfExpression {
   readonly kind: 'percentOf';
   readonly base: PrintableExpression;
   readonly rate: PrintableExpression;
+}
+
+/**
+ * The rounding a template DECLARES: `round(percentOf(total, rate), 2, 'halfExpand')`.
+ *
+ * The wrapper ADR 0003 decision 4 announced, confirmed here without reopening it -- a kind
+ * of its own, additive, composable and VISIBLE IN THE TREE, never a `precision?` field on
+ * every intermediate node that nobody fills in. What decision 4 left to this lot is
+ * everything below: the semantics, the mode set and the nature of `decimals`.
+ *
+ * ## It rounds the number AS IT IS WRITTEN, not the binary value underneath
+ *
+ * The operation is defined on the SHORTEST decimal that round-trips to the double -- what
+ * `toExponential()` returns, and what `text()` prints. So `0.615` yields `0.62`, and the
+ * whole explanation is "0.615 rounds up to 0.62". Nothing about IEEE-754 has to be said,
+ * which is the entire point: lot C8 exists so a document author never has to learn that
+ * `0.615` is stored as `0.614999999999999991118...`.
+ *
+ * Both alternatives were measured and both fail that test. Rounding the exact binary value
+ * -- what `Number(x.toFixed(d))` implements -- disagrees with the printed decimal on 48,00 %
+ * of the 100 000 exact `.xx5` ties at two decimals, and worse, it makes THIS KIND'S `mode`
+ * FIELD NEARLY DECORATIVE: over the million values `k/1000`, the mode changes the result
+ * 2 000 times under binary semantics against 50 000 times here. Scaling by `10 ** decimals`
+ * disagrees on 4,59 % of those ties and does so INCONSISTENTLY -- right on `0.615` and
+ * `2.675`, wrong on `1.005`, `0.145`, `8.575` and `1.255` -- and "predictable" is a word in
+ * this lot's acceptance criterion.
+ *
+ * Determinism is stronger here than for `textCase`, not weaker: ECMA-262 fixes the shortest
+ * round-tripping form exactly ("f as small as possible") and fixes string-to-number as the
+ * exact value rounded once to nearest. Neither is indexed on an ICU version.
+ *
+ * ## Composable, and the position IS the declaration
+ *
+ * Measured on five lines (17 x 0.125, 3 x 0.375, 2 x 10, 1 x 30, 4 x 2.5):
+ *
+ * - rounding each line, then the total, in `halfExpand` -> 2.13 | 1.13 | 20 | 30 | 10, total 63.26
+ * - the same in `halfEven`                              -> 2.12 | 1.12 | 20 | 30 | 10, total 63.24
+ * - rounding only the total, lines left exact           -> 63.25
+ *
+ * Three cents of spread between three templates nobody could call wrong. A `precision?`
+ * field could not have expressed the third at all: there is no intermediate node to hang it
+ * on.
+ *
+ * ## What it is NOT
+ *
+ * It yields a NUMBER, never a string, and a double carries no scale: `round(1.5, 2, m)` is
+ * `1.5` and prints `1.5`, not `1.50`. The trailing zero is padding, padding cannot change a
+ * value, and it belongs to lot C6 -- writing it here would be a format position *de facto*,
+ * the same mistake as the implicit rounding refused for `percentOf`.
+ *
+ * **The frontier, as a test:** if a declaration can change the result of a `compare`, a
+ * `sum` or a `dateAdd`, it is C2; if it can only change what a reader sees, it is C6.
+ */
+export interface RoundExpression {
+  readonly kind: 'round';
+  readonly value: PrintableExpression;
+  /**
+   * A LITERAL whole number in `[MIN_ROUND_DECIMALS, MAX_ROUND_DECIMALS]`, never an
+   * expression -- checked when the template is SAVED, which is the doctrine
+   * `PathExpressionSchema` already states at exactly this point.
+   *
+   * The decisive reason is neither of those, though: **"does this total round like the
+   * lines above it?" has to be answerable WITHOUT the data.** With a literal it is a
+   * comparison of two integers in the tree, done by a reviewer, by a reader of the JSON, or
+   * by lot D7's formula bar. With an expression it becomes undecidable until a document
+   * renders, and a criterion nobody can check before rendering is not a criterion.
+   *
+   * The cost is named and accepted: a per-scale precision is not data-driven, and a
+   * template that needs two scales writes the choice into the tree with an `if`, where it
+   * can be seen. That is ADR 0003 decision 3 applied again: composition replaces
+   * optionality, and every field stays required everywhere. Choosing a DISPLAY scale from
+   * something the template declares is lot C6's problem, not this field's.
+   */
+  readonly decimals: number;
+  readonly mode: RoundMode;
 }
 
 /**
@@ -318,6 +472,7 @@ export type PrintableExpression =
   | PathExpression
   | ArithmeticExpression
   | PercentOfExpression
+  | RoundExpression
   | AggregateExpression
   | CountExpression
   | ConditionalExpression

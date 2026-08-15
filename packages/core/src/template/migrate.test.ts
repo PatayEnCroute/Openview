@@ -94,7 +94,7 @@ describe('parseTemplate', () => {
     );
   });
 
-  it('brings a template written before C1 up to version 2', () => {
+  it('brings a template written before C1 up to the current stamp', () => {
     // The promise of lot C9, made concrete: a model written before this lot still parses --
     // now THROUGH the 1 -> 2 migration, and not "with no migration at all" as an earlier plan
     // for this lot claimed.
@@ -129,11 +129,22 @@ describe('parseTemplate', () => {
 
     const parsed = parseTemplate(beforeC1);
 
-    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(parsed.root.children).toHaveLength(1);
   });
 
-  it('parses a v2 document carrying a C1 kind', () => {
+  it('walks the chain ONE STEP AT A TIME rather than by a direct converter', () => {
+    // The assertion that proves `1 -> 2` was not merged into a `1 -> 3` when C2 stamped.
+    // A direct converter would still bring the document above to the current stamp, so the
+    // test right above cannot tell the difference; only the registry's shape can.
+    expect(TEMPLATE_MIGRATIONS.map((step) => [step.from, step.to])).toStrictEqual([
+      [1, 2],
+      [2, 3],
+    ]);
+    expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
+  });
+
+  it('parses a current-stamp document carrying a C1 kind', () => {
     const computed = {
       ...validTemplate,
       root: {
@@ -165,7 +176,118 @@ describe('parseTemplate', () => {
       },
     };
 
-    expect(parseTemplate(computed).schemaVersion).toBe(2);
+    expect(parseTemplate(computed).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it('parses a C2 rounding nested where a document really carries one', () => {
+    // `aggregate.value` under a `TextBindingSegment.value`: the deepest position the lot
+    // widened, and the one that pays for the bump. A build one version behind answers
+    // `No matching discriminator` on `root.children.0.content.0.value.kind` -- no version
+    // named, no remedy.
+    const rounded = {
+      ...validTemplate,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'text',
+            id: 'total',
+            content: [
+              {
+                kind: 'binding',
+                value: {
+                  kind: 'round',
+                  value: {
+                    kind: 'aggregate',
+                    op: 'sum',
+                    source: { kind: 'path', path: 'facture.lignes' },
+                    as: 'l',
+                    value: {
+                      kind: 'round',
+                      value: {
+                        kind: 'arithmetic',
+                        op: 'mul',
+                        left: { kind: 'path', path: 'l.q' },
+                        right: { kind: 'path', path: 'l.p' },
+                      },
+                      decimals: 2,
+                      mode: 'halfExpand',
+                    },
+                  },
+                  decimals: 2,
+                  mode: 'halfExpand',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(parseTemplate(rounded).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it('ACCEPTS an under-stamped document, because the guard only bites upward', () => {
+    // Counter-intuitive enough to need saying: a document stamped `2` that already carries a
+    // `round` -- hand-made, or written by an unstamped mid-lot build -- is NOT refused. The
+    // pipeline bounds the shape, migrates, then validates against the CURRENT schema, never
+    // against the schema of the stamp it read, so the v3 schema recognises the kind and the
+    // document goes through.
+    //
+    // An earlier version of this contract demanded the opposite, on the strength of a
+    // sentence that was in the repository and measurably false. What the stamp guards is a
+    // document written by a NEWER build (the test below); it guards nothing in this
+    // direction, and it never was designed to.
+    const understamped = {
+      ...validTemplate,
+      schemaVersion: 2,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'text',
+            id: 'total',
+            content: [
+              {
+                kind: 'binding',
+                value: {
+                  kind: 'round',
+                  value: { kind: 'path', path: 'facture.total' },
+                  decimals: 2,
+                  mode: 'halfEven',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(parseTemplate(understamped).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it('refuses a document whose kind is unknown at the CURRENT stamp', () => {
+    // The other half of the pair above, and it is what proves the discriminated union still
+    // bites: a document stamped at the current version carrying a kind no member covers is
+    // refused by Zod. That refusal depends on no stamp at all.
+    expect(() =>
+      parseTemplate({
+        ...validTemplate,
+        root: {
+          type: 'container',
+          id: 'root',
+          children: [
+            {
+              type: 'text',
+              id: 'total',
+              content: [{ kind: 'binding', value: { kind: 'roundTo', value: 1, step: 0.05 } }],
+            },
+          ],
+        },
+      }),
+    ).toThrow();
   });
 
   it('refuses a document written by a newer release, naming both versions', () => {
@@ -173,15 +295,15 @@ describe('parseTemplate', () => {
     // not a phantom one. Without the bump an earlier build answers `Invalid input` on a
     // discriminant path, with no mention of a version and no remedy.
     try {
-      parseTemplate({ ...validTemplate, schemaVersion: 3 });
+      parseTemplate({ ...validTemplate, schemaVersion: CURRENT_SCHEMA_VERSION + 1 });
       expect.unreachable('parseTemplate should have refused a newer document');
     } catch (error) {
       expect(error).toBeInstanceOf(TemplateMigrationError);
       if (error instanceof TemplateMigrationError) {
-        expect(error.message).toContain('schema version 3');
-        expect(error.message).toContain('at most 2');
+        expect(error.message).toContain(`schema version ${CURRENT_SCHEMA_VERSION + 1}`);
+        expect(error.message).toContain(`at most ${CURRENT_SCHEMA_VERSION}`);
         expect(error.message).toContain('upgrade before opening it');
-        expect(error.fromVersion).toBe(3);
+        expect(error.fromVersion).toBe(CURRENT_SCHEMA_VERSION + 1);
       }
     }
   });
@@ -210,12 +332,12 @@ describe('migrateToCurrent', () => {
     expect(migrated.name).toBe('Invoice (v1)');
   });
 
-  it('stamps a v1 document as v2 and changes nothing else', () => {
+  it('walks a v1 document up to the current stamp and changes nothing else', () => {
     const stored = { ...validTemplate, schemaVersion: 1 };
 
     const migrated = migrateToCurrent(stored);
 
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     // Pinned by exclusion: the stamp is the ONLY difference. A migration that quietly
     // reshaped a document would be the hardest kind of bug to notice.
     const { schemaVersion: _stamped, ...restOfMigrated } = migrated;

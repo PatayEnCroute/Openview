@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
+import { TextBindingSegmentSchema } from '../../ast/nodes.js';
 import {
   type AggregateExpressionSchema,
   type ArithmeticExpressionSchema,
@@ -23,6 +24,7 @@ import {
   type PercentOfExpressionSchema,
   type PrintableExpression,
   PrintableExpressionSchema,
+  RoundExpressionSchema,
   type TextCaseExpressionSchema,
   type TextExpressionSchema,
 } from '../expression.js';
@@ -50,6 +52,7 @@ type EnumeratedMembers =
   | z.infer<typeof PathExpressionSchema>
   | z.infer<typeof ArithmeticExpressionSchema>
   | z.infer<typeof PercentOfExpressionSchema>
+  | z.infer<typeof RoundExpressionSchema>
   | z.infer<typeof AggregateExpressionSchema>
   | z.infer<typeof CountExpressionSchema>
   | z.infer<typeof ConditionalExpressionSchema>
@@ -86,6 +89,12 @@ const SAMPLES: { readonly [K in ExpressionKind]: Extract<Expression, { kind: K }
     kind: 'percentOf',
     base: { kind: 'path', path: 'invoice.total' },
     rate: { kind: 'literal', value: 20 },
+  },
+  round: {
+    kind: 'round',
+    value: { kind: 'path', path: 'invoice.total' },
+    decimals: 2,
+    mode: 'halfExpand',
   },
   aggregate: {
     kind: 'aggregate',
@@ -155,6 +164,7 @@ const PRINTABLE_KINDS: { readonly [K in PrintableExpression['kind']]: true } = {
   path: true,
   arithmetic: true,
   percentOf: true,
+  round: true,
   aggregate: true,
   count: true,
   if: true,
@@ -386,6 +396,101 @@ describe('the texts-and-dates schemas', () => {
         text: { kind: 'literal', value: 'x' },
       }),
     ).toThrow();
+  });
+});
+
+describe('RoundExpressionSchema', () => {
+  const rounding = (patch: Record<string, unknown>) => ({
+    kind: 'round',
+    value: { kind: 'path', path: 'invoice.total' },
+    decimals: 2,
+    mode: 'halfExpand',
+    ...patch,
+  });
+
+  it.each([
+    [{ decimals: 2.5 }, 'A rounding position is a whole number of decimal places'],
+    [{ decimals: 16 }, 'A rounding position may not exceed 15'],
+    [{ decimals: -16 }, 'A rounding position may not go below -15'],
+    [{ decimals: Number.NaN }, 'A rounding position is a finite whole number of decimal places'],
+    [
+      { decimals: Number.POSITIVE_INFINITY },
+      'A rounding position is a finite whole number of decimal places',
+    ],
+    [{ mode: 'halfUp' }, 'Invalid option: expected one of "halfExpand"|"halfEven"'],
+  ])('refuses %o AT SAVE TIME, and says why', (patch, message) => {
+    // Everything a rounding can get wrong about ITSELF is settled here, which is what lets
+    // this lot introduce zero new error codes -- worth more to lot C8 than any wording.
+    //
+    // The `error` argument on `z.number()` is what makes the last two legible: without it,
+    // `Infinity` yields `Invalid input: expected number, received number`, a payload that
+    // contradicts itself. That is the exact defect lot C1 fixed by creating
+    // `not-a-whole-number`, and it would have landed in the one lot whose promise is "no
+    // new message".
+    //
+    // Asserted on the ISSUE and not on `toThrow(...)`: a ZodError's `message` is a JSON dump
+    // of its issues, so a wording carrying a quote -- the mode one does -- never matches as
+    // a substring, and the test would pass or fail for reasons unrelated to the wording.
+    const result = RoundExpressionSchema.safeParse(rounding(patch));
+    if (result.success) {
+      expect.unreachable('the rounding should have been refused at save time');
+    }
+    expect(result.error.issues.map((issue) => issue.message)).toContain(message);
+  });
+
+  it.each(['bankers', 'commercial', 'legal', 'arrondiLegal', 'ceil', 'floor'])(
+    'refuses the mode %o',
+    (mode) => {
+      // The first four name a RULE Openview answers for none of (ADR 0003, decision 10);
+      // `halfEven` is what "banker's rounding" is called when it is described instead of
+      // invoked. The last two are directed modes, out of scope until a business need names
+      // one -- the reopening signal is written in ROUND_MODES.
+      expect(() => ExpressionSchema.parse(rounding({ mode }))).toThrow();
+    },
+  );
+
+  it.each([-15, 0, 15])(
+    'accepts the position %o, which is the other half of the window',
+    (decimals) => {
+      // The positive counterpart, and it is what proves the window was not closed one notch
+      // too far: both bounds are IN. The upper one is an inequality rather than a taste --
+      // from 16 on, the operation is the identity for every magnitude at or above one.
+      expect(ExpressionSchema.parse(rounding({ decimals }))).toHaveProperty('decimals', decimals);
+    },
+  );
+
+  it('parses inside a text binding, which is the position that pays for the version bump', () => {
+    // `round` joins `printableMembers()`, so it widens `ExpressionSchema` AND
+    // `PrintableExpressionSchema` at once, hence `TextBindingSegment.value`. That is exactly
+    // the widening a build one version behind answers with `No matching discriminator` on a
+    // discriminant path -- the illegible refusal the stamp exists to replace.
+    const segment = {
+      kind: 'binding',
+      value: rounding({
+        value: {
+          kind: 'percentOf',
+          base: { kind: 'path', path: 'i.t' },
+          rate: { kind: 'literal', value: 20 },
+        },
+      }),
+    };
+
+    expect(TextBindingSegmentSchema.parse(segment)).toStrictEqual(segment);
+  });
+
+  it('is writable in a `days` position, which is what makes the new refusal actionable', () => {
+    // `requireDays` now tells a template author to wrap the value in a `round`. A remedy a
+    // schema would refuse is not a remedy: `dayCountOperandSchema` is a refinement that only
+    // bites on a `literal`, so a `round` node goes through it untouched -- verified here
+    // rather than assumed, because nothing else in the repo would notice if it stopped being
+    // true.
+    expect(() =>
+      ExpressionSchema.parse({
+        kind: 'dateAdd',
+        date: { kind: 'literal', value: '2026-01-31' },
+        days: rounding({ value: { kind: 'path', path: 'commande.delai' }, decimals: 0 }),
+      }),
+    ).not.toThrow();
   });
 });
 

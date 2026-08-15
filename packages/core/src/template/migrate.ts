@@ -45,11 +45,20 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      * does not -- `migrate.test.ts` reddens, in both cases, so the versioning was already
      * tooled), and that C1 was purely additive (it is not: three value bounds narrow it).
      *
-     * ## What this does NOT catch, and it belongs to C8
+     * ## What this does NOT catch, and the example used to say the opposite of the rule
      *
-     * The version guard reads the STAMP, not the content. A document stamped `1` but carrying
-     * a C1 kind -- hand-made, or written by a third-party tool -- still falls back to `Invalid
-     * input`, even from a v2 build. The migration stamps; it does not validate.
+     * The version guard reads the STAMP, not the content -- that proposition is right, and
+     * the migration really does stamp without validating. What an earlier version of this
+     * paragraph got wrong is the consequence it drew: it claimed a document stamped `1` but
+     * carrying a C1 kind was still refused with `Invalid input` by a build that knows the
+     * kind. Measured, that document parses cleanly and comes out AT THE CURRENT STAMP --
+     * whatever that is on the build reading this, since the chain walks it all the way up.
+     *
+     * The reason is in the pipeline: `parseTemplate` bounds the shape, MIGRATES, then
+     * validates against the CURRENT schema -- never against the schema of the stamp it read.
+     * So an UNDER-stamped document is not refused, it is silently accepted. The guard
+     * protects against a document written by a NEWER build and against nothing in the other
+     * direction; it never was a guard on content.
      *
      * And the three narrowings of ADR 0003 decision 2 are NOT retrofitted here: truncating a
      * 591-character path or flattening a 101-level tree would corrupt the document. They rest
@@ -57,6 +66,30 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      * the right one.
      */
     migrate: (input) => ({ ...input, schemaVersion: 2 }),
+  },
+  {
+    from: 2,
+    to: 3,
+    /**
+     * Identity, except for the stamp -- and the stamp is the entire point, for the second
+     * time and for exactly the reason the 1 -> 2 entry states.
+     *
+     * A v2 document is STRUCTURALLY a v3 document: lot C2 only WIDENED a union, so there is
+     * nothing to transform, and the shape it yields is bounded because it changes neither
+     * depth nor value count -- which is what the repository owes itself since the guard runs
+     * twice.
+     *
+     * The reserve transposes word for word, INCLUDING the correction the entry above
+     * carries: a document stamped `2` but already holding a `round` node -- hand-made, or
+     * written by an unstamped mid-lot build -- is not refused. It parses, and comes out
+     * `schemaVersion: 3`. The stamp only ever guards upward.
+     *
+     * And the `decimals` window is NOT retrofitted here, because there is nothing to
+     * retrofit: no v2 document can carry a `decimals` field at all. That is the whole
+     * difference between adding a kind and tightening an existing one -- the narrowings of
+     * ADR 0003 decision 2 rested on the pre-v1.0 assumption, this one does not have to.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 3 }),
   },
 ];
 

@@ -201,7 +201,7 @@ export function requireDays(
     // code plus actualType would have said "operates on numbers, got a number".
     return fail(
       { code: 'not-a-whole-number', site, at, actualType: 'number' },
-      'A date shift is a whole number of days. Round the value first: the algebra has no rounding of its own, and inventing one here would be a rounding position by stealth.',
+      'A date shift is a whole number of days. Wrap the value in a `round` first, with a `decimals` of 0 and a `mode` of `halfExpand` or `halfEven`.',
     );
   }
   return days;

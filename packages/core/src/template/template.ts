@@ -44,8 +44,23 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  *
  * A migration that only stamps the version is therefore NOT a phantom migration:
  * the stamp is the entire mechanism behind that second message.
+ *
+ * ## What version 3 means
+ *
+ * Version 3 is version 2 plus ONE stored shape: the `round` kind -- a printable wrapper
+ * carrying a literal position in [-15, 15] and one of two tie-breaking modes. Nineteen
+ * expression kinds. That widens `PrintableExpressionSchema`, hence
+ * `TextBindingSegment.value`, hence every operand position of the algebra.
+ *
+ * It is the ILLEGIBLE REFUSAL case described above, unchanged: a version 2 build meeting
+ * `{ kind: 'round', ... }` answers `"No matching discriminator"` / `"Invalid input"` on a
+ * path like `root.children.0.content.1.value.kind`, with no version named and no remedy.
+ * "Purely additive" is not an argument against the bump, it is the argument FOR it.
+ *
+ * Stamped ONCE, after the last persisted shape of the lot. No commit of C2 before that one
+ * is publishable, for the reason version 2 already records.
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /**
  * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape

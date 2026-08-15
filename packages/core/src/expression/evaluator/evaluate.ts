@@ -15,6 +15,7 @@ import { evaluateArithmetic, evaluatePercentOf } from './operations/arithmetic.j
 import { evaluateCompare } from './operations/compare.js';
 import { evaluateDateAdd, evaluateDateDiff, evaluateEndOfMonth } from './operations/dates.js';
 import { evaluateIf, evaluateIsEmpty, evaluateLogical, evaluateNot } from './operations/logical.js';
+import { evaluateRound } from './operations/round.js';
 import { evaluateConcat, evaluateText, evaluateTextCase } from './operations/text.js';
 import { type EvaluationScope, resolvePath } from './scope.js';
 
@@ -91,6 +92,12 @@ export function evaluateExpression(
           evalWithin(expression.base, ['base'], scope, budget),
           evalWithin(expression.rate, ['rate'], scope, budget),
           'percentOf',
+        );
+      case 'round':
+        return evaluateRound(
+          evalWithin(expression.value, ['value'], scope, budget),
+          expression.decimals,
+          expression.mode,
         );
       case 'concat':
         return evaluateConcat(expression.parts, scope, budget, evalWithin);

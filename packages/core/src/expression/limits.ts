@@ -42,8 +42,8 @@ export interface EvaluationLimits {
    * object, then the field carrying its operand)", concluded a template passing the guard
    * at 64 descends at most ~32 times, and therefore that this bound "cannot fire on a tree
    * that came through `parseTemplate`". **The premise is false for every single-operand
-   * kind** -- `not`, `isEmpty`, `text`, `textCase`, `endOfMonth`, `count` -- whose operand
-   * object sits at exactly `parentDepth + 1`. Measured: the guard accepts a bare 63-node
+   * kind** -- `not`, `isEmpty`, `text`, `textCase`, `endOfMonth`, `count`, `round` -- whose
+   * operand object sits at exactly `parentDepth + 1`. Measured: the guard accepts a bare 63-node
    * `not` chain and refuses at 64, while `enter()` refuses the 65th descent. **One JSON
    * level per single-operand node, so the margin is ONE NODE, not a factor of two.**
    *
