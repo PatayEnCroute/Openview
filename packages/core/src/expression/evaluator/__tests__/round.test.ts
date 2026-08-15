@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import { type ExpressionErrorDetails, ExpressionEvaluationError } from '../../../errors.js';
+import { createBudget } from '../../limits.js';
+import type {
+  AggregateExpression,
+  ArithmeticExpression,
+  Expression,
+  LiteralExpression,
+  PathExpression,
+  PrintableExpression,
+  RoundExpression,
+} from '../../types.js';
 import {
   MAX_ROUND_DECIMALS,
   MIN_ROUND_DECIMALS,
   ROUND_MODES,
   type RoundMode,
 } from '../../types.js';
+import { evaluateExpression } from '../evaluate.js';
 import { roundDecimal } from '../operations/round.js';
 
 describe('roundDecimal', () => {
@@ -263,5 +275,230 @@ describe('roundDecimal -- the structural properties', () => {
       }
     }
     expect(violations.slice(0, 5)).toStrictEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------------------- *
+ * The kind, once it is wired: the constructors below are local and minimal, on the pattern
+ * of `aggregate.test.ts`. `AggregateExpression` carries an `as`, not an `alias`.
+ * -------------------------------------------------------------------------------------- */
+
+const path = (dataPath: string): PathExpression => ({ kind: 'path', path: dataPath });
+const literal = (value: number | string | null): LiteralExpression => ({ kind: 'literal', value });
+const round = (value: PrintableExpression, decimals: number, mode: RoundMode): RoundExpression => ({
+  kind: 'round',
+  value,
+  decimals,
+  mode,
+});
+
+const rows = {
+  facture: {
+    lignes: [
+      { q: 2, p: 10 },
+      { q: 1, p: 30 },
+      { q: 4, p: 2.5 },
+      { q: 17, p: 0.125 },
+      { q: 3, p: 0.375 },
+    ],
+  },
+};
+
+const lineAmount: ArithmeticExpression = {
+  kind: 'arithmetic',
+  op: 'mul',
+  left: path('l.q'),
+  right: path('l.p'),
+};
+
+const sumOf = (value: PrintableExpression): AggregateExpression => ({
+  kind: 'aggregate',
+  op: 'sum',
+  source: path('facture.lignes'),
+  as: 'l',
+  value,
+});
+
+/** A / B: every line rounded, then the total. The MODE changes the result. */
+const perLine = (mode: RoundMode): RoundExpression =>
+  round(sumOf(round(lineAmount, 2, mode)), 2, mode);
+
+/** A': lines left exact, only the total rounded. The POSITION changes the result. */
+const totalOnly = (mode: RoundMode): RoundExpression => round(sumOf(lineAmount), 2, mode);
+
+const totalOf = (expression: Expression): unknown => evaluateExpression(expression, rows);
+
+function expectEvaluationError(run: () => unknown): ExpressionErrorDetails {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof ExpressionEvaluationError) {
+      return error.details;
+    }
+    throw error;
+  }
+  return expect.unreachable('the expression should have failed');
+}
+
+describe('the round kind', () => {
+  it('propagates absence rather than substituting a zero', () => {
+    expect(totalOf(round(path('facture.absent'), 2, 'halfExpand'))).toBeUndefined();
+  });
+
+  it('refuses a present non-number at its own field name', () => {
+    expect(
+      expectEvaluationError(() => totalOf(round(literal('12'), 2, 'halfExpand'))),
+    ).toStrictEqual({
+      code: 'operand-type',
+      site: 'round',
+      at: ['value'],
+      actualType: 'string',
+    });
+  });
+
+  it('refuses a NaN operand with the finiteness code, not the shape one', () => {
+    // One rule, stated once: `operand-type` answers for a value's SHAPE, `not-finite` for
+    // its FINITENESS. Zero new codes -- that is what this lot owes lot C8.
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(round(path('broken.nan'), 2, 'halfEven'), { broken: { nan: NaN } }),
+      ),
+    ).toStrictEqual({
+      code: 'not-finite',
+      site: 'round',
+      at: ['value'],
+      actualType: 'not-finite',
+    });
+  });
+
+  it('refuses a result that overflowed, from a node no schema could have produced', () => {
+    // `decimals: -308` cannot come through Zod: the window is [-15, 15]. But
+    // `evaluateExpression` is PUBLIC and takes an `Expression` from wherever -- the same
+    // argument the depth bound already documents -- and the guard is what stops an
+    // `Infinity` from reaching a document. It is why `requireFiniteResult` stays.
+    expect(
+      expectEvaluationError(() =>
+        totalOf({
+          kind: 'round',
+          value: literal(Number.MAX_VALUE),
+          decimals: -308,
+          mode: 'halfExpand',
+        }),
+      ),
+    ).toStrictEqual({ code: 'not-finite', site: 'round', at: [], actualType: 'not-finite' });
+  });
+
+  it('composes with the aggregate absence policy without a line of aggregate.ts', () => {
+    // `sum(lines, l, round(l.total, 2, m))` ignores a line with no total exactly as
+    // `sum(lines, l, l.total)` does. Absence propagating through the wrapper is what makes
+    // D7 free: zero lines changed in `aggregate.ts`.
+    const sparse = { facture: { lignes: [{ total: 1.005 }, {}, { total: 2.5 }] } };
+    const wrapped = sumOf(round(path('l.total'), 2, 'halfExpand'));
+    const bare = sumOf(path('l.total'));
+
+    expect(evaluateExpression(wrapped, sparse)).toBe(3.51);
+    expect(evaluateExpression(bare, sparse)).toBe(3.505);
+  });
+
+  it('spends exactly ONE step of the budget, like every other single-operand kind', () => {
+    const bare = createBudget();
+    evaluateExpression(literal(1), rows, { budget: bare });
+
+    const wrapped = createBudget();
+    evaluateExpression(round(literal(1), 2, 'halfExpand'), rows, { budget: wrapped });
+
+    // `spent.depth` is NOT observable after the fact: `leave()` sits in the `finally` of the
+    // descent, so it reads 0 on the way out. Only `steps` can be read directly -- the level
+    // is proven by the bound, in the test below.
+    expect(wrapped.spent.steps - bare.spent.steps).toBe(1);
+  });
+
+  it('costs exactly ONE level of nesting, proven by the bound rather than declared', () => {
+    const formula: Expression = {
+      kind: 'arithmetic',
+      op: 'add',
+      left: literal(1),
+      right: literal(2),
+    };
+
+    expect(evaluateExpression(formula, rows, { budget: createBudget({ maxDepth: 2 }) })).toBe(3);
+    expect(
+      evaluateExpression(round(formula, 0, 'halfExpand'), rows, {
+        budget: createBudget({ maxDepth: 3 }),
+      }),
+    ).toBe(3);
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(round(formula, 0, 'halfExpand'), rows, {
+          budget: createBudget({ maxDepth: 2 }),
+        }),
+      ).code,
+    ).toBe('depth-limit-exceeded');
+  });
+});
+
+describe('the C2 acceptance criterion', () => {
+  it('makes the accumulation ORDER visible, and the model repairs it with the outer rounding', () => {
+    // The same five two-decimal amounts, summed in two orders, are two different doubles.
+    expect(20 + 30 + 10 + 2.13 + 1.13).toBe(63.260000000000005);
+    expect(2.13 + 1.13 + 20 + 30 + 10).toBe(63.26);
+    // The outer wrapper reconciles them -- and that is what the MODEL declares, not what the
+    // engine decided. The criterion is about VALUES, never about glyphs: a currency
+    // formatter would print "63,26 EUR" for both, while a `compare` against 63.26 fails on
+    // the first.
+    expect(roundDecimal(20 + 30 + 10 + 2.13 + 1.13, 2, 'halfExpand')).toBe(63.26);
+    expect(roundDecimal(2.13 + 1.13 + 20 + 30 + 10, 2, 'halfExpand')).toBe(63.26);
+  });
+
+  it('gives three different and PREDICTABLE totals for three legitimate templates', () => {
+    expect(totalOf(perLine('halfExpand'))).toBe(63.26); // lines rounded, then the total
+    expect(totalOf(perLine('halfEven'))).toBe(63.24); // the MODE changes the result
+    expect(totalOf(totalOnly('halfExpand'))).toBe(63.25); // the POSITION changes the result
+    expect(totalOf(totalOnly('halfEven'))).toBe(63.25); // and the mode says nothing there
+  });
+
+  it('leaves the C1 guarantee intact -- the algebra still rounds nothing on its own', () => {
+    // "A division does not round" is ALREADY pinned by `arithmetic.test.ts`, which this lot
+    // does not touch; duplicating it here would create a second source of truth for the one
+    // test whose whole value is being unique and intact. What is checked HERE is the other
+    // half: a rounding appears ONLY where the template writes it, and it is the identity on
+    // a value already at the scale.
+    expect(roundDecimal(0.3333333333333333, 2, 'halfExpand')).toBe(0.33);
+    expect(roundDecimal(63.25, 2, 'halfExpand')).toBe(63.25);
+  });
+
+  it('answers the frontier test on a compare: a declaration that changes a VALUE is C2', () => {
+    // If a declaration can change the result of a `compare`, a `sum` or a `dateAdd`, it is
+    // C2; if it can only change what a reader sees, it is C6. Here it changes the compare.
+    const equals = (left: PrintableExpression): Expression => ({
+      kind: 'compare',
+      op: 'eq',
+      left,
+      right: literal(63.26),
+    });
+
+    expect(totalOf(equals(perLine('halfExpand')))).toBe(true);
+    expect(totalOf(equals(sumOf(round(lineAmount, 2, 'halfExpand'))))).toBe(false);
+  });
+
+  it('makes the remedy `requireDays` now names actually writable', () => {
+    // The other half of the same frontier test, and the reason `guards.ts` changed wording:
+    // C1 rendered "the algebra has no rounding of its own" TO THE TEMPLATE AUTHOR, which
+    // becomes a lie on delivery. The remedy has to be provable, not just phrased.
+    const shifted: Expression = {
+      kind: 'dateAdd',
+      date: literal('2026-01-31'),
+      days: round(literal(1.5), 0, 'halfExpand'),
+    };
+
+    expect(evaluateExpression(shifted, rows)).toBe('2026-02-02');
+    expect(
+      expectEvaluationError(() =>
+        evaluateExpression(
+          { kind: 'dateAdd', date: literal('2026-01-31'), days: literal(1.5) },
+          rows,
+        ),
+      ).code,
+    ).toBe('not-a-whole-number');
   });
 });

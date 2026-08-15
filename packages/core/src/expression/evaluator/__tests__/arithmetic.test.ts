@@ -75,7 +75,7 @@ describe('arithmetic', () => {
     // The most important test to keep over time: it forbids a future contributor from
     // "tidying up" the division, which would be a rounding position de facto -- a rule,
     // and Openview answers for no rule. How an amount rounds is declared by the template
-    // in lot C2.
+    // through the `round` wrapper kind.
     expect(compute('div', literal(1), literal(3))).toBe(0.3333333333333333);
     expect(compute('add', literal(0.1), literal(0.2))).toBe(0.30000000000000004);
   });

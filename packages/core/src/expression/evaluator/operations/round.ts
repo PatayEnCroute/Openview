@@ -1,4 +1,5 @@
 import type { RoundMode } from '../../types.js';
+import { requireFiniteResult, requireNumber } from '../guards.js';
 
 const ZERO = 48;
 const NINE = 57;
@@ -126,4 +127,31 @@ export function roundDecimal(value: number, decimals: number, mode: RoundMode): 
   // `round(-0.004, 2, m)` yields zero, not minus zero: a negative zero is not part of a
   // document's vocabulary, and it would be visible in a test and in a min/max fold.
   return rounded === 0 ? 0 : rounded;
+}
+
+/**
+ * The kind's evaluation.
+ *
+ * `site` is hard-coded here, unlike in the shared guards, and for the reason `requireDate`'s
+ * docstring gives from the other side: this function serves ONE kind and cannot be
+ * copy-pasted onto another, exactly like `evaluateText`.
+ *
+ * The three policies of ADR 0003 decision 6 apply unchanged, and none of them needed a new
+ * error code: absence propagates -- so `sum(lines, l, round(l.total, 2, m))` ignores a line
+ * with no total exactly as `sum(lines, l, l.total)` does today -- a present non-number
+ * raises `operand-type`, and `NaN` or an infinity raises `not-finite`.
+ *
+ * `requireFiniteResult` looks unreachable and is not, which is why it stays. Within the
+ * declared window it cannot fire, and no non-finite result appeared over 480 000 draws. But
+ * `evaluateExpression` is PUBLIC and takes an `Expression` from wherever -- the argument the
+ * depth bound already documents -- and a hand-built `{ decimals: -308 }` on
+ * `Number.MAX_VALUE` reconstructs `Infinity`. A document must never carry one, so the guard
+ * stays and a test builds that node by hand.
+ */
+export function evaluateRound(raw: unknown, decimals: number, mode: RoundMode): number | undefined {
+  const value = requireNumber(raw, 'round', ['value']);
+  if (value === undefined) {
+    return undefined;
+  }
+  return requireFiniteResult(roundDecimal(value, decimals, mode), 'round', []);
 }

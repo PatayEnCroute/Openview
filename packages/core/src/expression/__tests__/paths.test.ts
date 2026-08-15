@@ -141,6 +141,44 @@ describe('pathsOf', () => {
     expect([...pathsOf(overdue)]).toStrictEqual(['invoice.dueOn', 'company.processedOn']);
   });
 
+  it('walks a rounding, which reads nothing of its own', () => {
+    // `decimals` and `mode` are LITERALS -- that is the whole reason the case is joined to
+    // `text`'s. A rounding reads exactly what its `value` reads, no more and no less.
+    const rounded: Expression = {
+      kind: 'round',
+      value: { kind: 'path', path: 'invoice.total' },
+      decimals: 2,
+      mode: 'halfExpand',
+    };
+
+    expect([...pathsOf(rounded)]).toStrictEqual(['invoice.total']);
+  });
+
+  it('does not demand the alias a rounding is written under', () => {
+    // The composition D7 rests on: per-line rounding inside the aggregate, then the total.
+    // If the alias context did not reach through the `round`, `collectDataPaths` would tell
+    // an integrator handing over { facture } that a key `l` is missing when nothing is.
+    const total: Expression = {
+      kind: 'round',
+      value: {
+        kind: 'aggregate',
+        op: 'sum',
+        source: { kind: 'path', path: 'facture.lignes' },
+        as: 'l',
+        value: {
+          kind: 'round',
+          value: { kind: 'path', path: 'l.total' },
+          decimals: 2,
+          mode: 'halfEven',
+        },
+      },
+      decimals: 2,
+      mode: 'halfEven',
+    };
+
+    expect([...pathsOf(total)]).toStrictEqual(['facture.lignes']);
+  });
+
   it('collects BOTH branches of a conditional', () => {
     // The analysis reports what a template MAY read; which branch runs depends on the data,
     // so reporting only one would tell an integrator a key is unnecessary when it is.

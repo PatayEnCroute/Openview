@@ -84,6 +84,8 @@ function collectPaths(
       }
       break;
     case 'text':
+    case 'round':
+      // `decimals` and `mode` are literals, so a rounding reads nothing of its own.
       collectPaths(expression.value, aliases, into);
       break;
     case 'textCase':

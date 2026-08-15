@@ -208,14 +208,89 @@ export interface ArithmeticExpression {
  * No rounding, here or anywhere: a default rounding would be a rounding position *de
  * facto*, therefore a rule, and Openview answers for no rule. `div(1, 3)` yields
  * `0.3333333333333333`, and a test pins that so nobody "tidies up" the division later.
- * How an amount rounds is declared by the template, in lot C2, through a `round` wrapper
- * kind -- not through a `precision?` field on every intermediate node that nobody fills
- * in.
+ * How an amount rounds is declared by the template through the {@link RoundExpression}
+ * wrapper kind -- not through a `precision?` field on every intermediate node that nobody
+ * fills in. `div` and `percentOf` still round nothing, and two tests pin that.
  */
 export interface PercentOfExpression {
   readonly kind: 'percentOf';
   readonly base: PrintableExpression;
   readonly rate: PrintableExpression;
+}
+
+/**
+ * The rounding a template DECLARES: `round(percentOf(total, rate), 2, 'halfExpand')`.
+ *
+ * The wrapper ADR 0003 decision 4 announced, confirmed here without reopening it -- a kind
+ * of its own, additive, composable and VISIBLE IN THE TREE, never a `precision?` field on
+ * every intermediate node that nobody fills in. What decision 4 left to this lot is
+ * everything below: the semantics, the mode set and the nature of `decimals`.
+ *
+ * ## It rounds the number AS IT IS WRITTEN, not the binary value underneath
+ *
+ * The operation is defined on the SHORTEST decimal that round-trips to the double -- what
+ * `toExponential()` returns, and what `text()` prints. So `0.615` yields `0.62`, and the
+ * whole explanation is "0.615 rounds up to 0.62". Nothing about IEEE-754 has to be said,
+ * which is the entire point: lot C8 exists so a document author never has to learn that
+ * `0.615` is stored as `0.614999999999999991118...`.
+ *
+ * Both alternatives were measured and both fail that test. Rounding the exact binary value
+ * -- what `Number(x.toFixed(d))` implements -- disagrees with the printed decimal on 48,00 %
+ * of the 100 000 exact `.xx5` ties at two decimals, and worse, it makes THIS KIND'S `mode`
+ * FIELD NEARLY DECORATIVE: over the million values `k/1000`, the mode changes the result
+ * 2 000 times under binary semantics against 50 000 times here. Scaling by `10 ** decimals`
+ * disagrees on 4,59 % of those ties and does so INCONSISTENTLY -- right on `0.615` and
+ * `2.675`, wrong on `1.005`, `0.145`, `8.575` and `1.255` -- and "predictable" is a word in
+ * this lot's acceptance criterion.
+ *
+ * Determinism is stronger here than for `textCase`, not weaker: ECMA-262 fixes the shortest
+ * round-tripping form exactly ("f as small as possible") and fixes string-to-number as the
+ * exact value rounded once to nearest. Neither is indexed on an ICU version.
+ *
+ * ## Composable, and the position IS the declaration
+ *
+ * Measured on five lines (17 x 0.125, 3 x 0.375, 2 x 10, 1 x 30, 4 x 2.5):
+ *
+ * - rounding each line, then the total, in `halfExpand` -> 2.13 | 1.13 | 20 | 30 | 10, total 63.26
+ * - the same in `halfEven`                              -> 2.12 | 1.12 | 20 | 30 | 10, total 63.24
+ * - rounding only the total, lines left exact           -> 63.25
+ *
+ * Three cents of spread between three templates nobody could call wrong. A `precision?`
+ * field could not have expressed the third at all: there is no intermediate node to hang it
+ * on.
+ *
+ * ## What it is NOT
+ *
+ * It yields a NUMBER, never a string, and a double carries no scale: `round(1.5, 2, m)` is
+ * `1.5` and prints `1.5`, not `1.50`. The trailing zero is padding, padding cannot change a
+ * value, and it belongs to lot C6 -- writing it here would be a format position *de facto*,
+ * the same mistake as the implicit rounding refused for `percentOf`.
+ *
+ * **The frontier, as a test:** if a declaration can change the result of a `compare`, a
+ * `sum` or a `dateAdd`, it is C2; if it can only change what a reader sees, it is C6.
+ */
+export interface RoundExpression {
+  readonly kind: 'round';
+  readonly value: PrintableExpression;
+  /**
+   * A LITERAL whole number in `[MIN_ROUND_DECIMALS, MAX_ROUND_DECIMALS]`, never an
+   * expression -- checked when the template is SAVED, which is the doctrine
+   * `PathExpressionSchema` already states at exactly this point.
+   *
+   * The decisive reason is neither of those, though: **"does this total round like the
+   * lines above it?" has to be answerable WITHOUT the data.** With a literal it is a
+   * comparison of two integers in the tree, done by a reviewer, by a reader of the JSON, or
+   * by lot D7's formula bar. With an expression it becomes undecidable until a document
+   * renders, and a criterion nobody can check before rendering is not a criterion.
+   *
+   * The cost is named and accepted: a per-scale precision is not data-driven, and a
+   * template that needs two scales writes the choice into the tree with an `if`, where it
+   * can be seen. That is ADR 0003 decision 3 applied again: composition replaces
+   * optionality, and every field stays required everywhere. Choosing a DISPLAY scale from
+   * something the template declares is lot C6's problem, not this field's.
+   */
+  readonly decimals: number;
+  readonly mode: RoundMode;
 }
 
 /**
@@ -397,6 +472,7 @@ export type PrintableExpression =
   | PathExpression
   | ArithmeticExpression
   | PercentOfExpression
+  | RoundExpression
   | AggregateExpression
   | CountExpression
   | ConditionalExpression

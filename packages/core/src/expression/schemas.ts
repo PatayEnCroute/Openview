@@ -5,7 +5,10 @@ import {
   AGGREGATE_OPERATORS,
   ARITHMETIC_OPERATORS,
   type Expression,
+  MAX_ROUND_DECIMALS,
+  MIN_ROUND_DECIMALS,
   type PrintableExpression,
+  ROUND_MODES,
   TEXT_CASE_OPERATORS,
 } from './types.js';
 
@@ -31,6 +34,7 @@ function printableMembers() {
     PathExpressionSchema,
     ArithmeticExpressionSchema,
     PercentOfExpressionSchema,
+    RoundExpressionSchema,
     AggregateExpressionSchema,
     CountExpressionSchema,
     ConditionalExpressionSchema,
@@ -106,6 +110,36 @@ export const PercentOfExpressionSchema = z.object({
   kind: z.literal('percentOf'),
   base: PrintableExpressionSchema,
   rate: PrintableExpressionSchema,
+});
+
+/**
+ * Everything a rounding can get wrong about ITSELF is settled here, when the template is
+ * saved: a fractional position, a non-finite one, a position outside the window, an unknown
+ * mode. That is what lets lot C2 introduce **zero new error codes** -- worth more to lot C8
+ * than any wording, and only true because these two fields are literals.
+ *
+ * The `error` argument on `z.number()` is not decoration. Measured on the installed Zod
+ * (3.25.76 via `zod/v4`), the default message for `Infinity` is `Invalid input: expected
+ * number, received number` -- a payload that contradicts itself, which is the exact defect
+ * lot C1 fixed by creating `not-a-whole-number`. A `.refine(Number.isFinite, ...)` does NOT
+ * fix it: `z.number()` rejects the infinities before any refinement runs.
+ *
+ * There is deliberately NO refinement on a literal in the `value` position, unlike
+ * {@link dateOperandSchema}. That position is exactly `arithmetic.left`; giving the same
+ * class of operand two different save-time strictnesses is an inconsistency lot C8 could not
+ * explain ("why does the sum accept it and the rounding not?"). A date position is
+ * different: it has a FORMAT, and the refinement there carries information nothing else
+ * does.
+ */
+export const RoundExpressionSchema = z.object({
+  kind: z.literal('round'),
+  value: PrintableExpressionSchema,
+  decimals: z
+    .number({ error: 'A rounding position is a finite whole number of decimal places' })
+    .int('A rounding position is a whole number of decimal places')
+    .min(MIN_ROUND_DECIMALS, `A rounding position may not go below ${MIN_ROUND_DECIMALS}`)
+    .max(MAX_ROUND_DECIMALS, `A rounding position may not exceed ${MAX_ROUND_DECIMALS}`),
+  mode: z.enum(ROUND_MODES),
 });
 
 /**

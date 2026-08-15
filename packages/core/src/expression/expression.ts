@@ -36,6 +36,7 @@ export {
   PathExpressionSchema,
   PercentOfExpressionSchema,
   PrintableExpressionSchema,
+  RoundExpressionSchema,
   TextCaseExpressionSchema,
   TextExpressionSchema,
 } from './schemas.js';
@@ -64,6 +65,8 @@ export type {
   PercentOfExpression,
   PredicateExpression,
   PrintableExpression,
+  RoundExpression,
+  RoundMode,
   TextCaseExpression,
   TextCaseOperator,
   TextExpression,
@@ -71,5 +74,8 @@ export type {
 export {
   AGGREGATE_OPERATORS,
   ARITHMETIC_OPERATORS,
+  MAX_ROUND_DECIMALS,
+  MIN_ROUND_DECIMALS,
+  ROUND_MODES,
   TEXT_CASE_OPERATORS,
 } from './types.js';
