@@ -7,7 +7,18 @@
 > ce qui compte est passé dans l'ADR, dans le code et dans ses tests, et ce fichier
 > n'est plus qu'une trace.
 >
-> **Statut :** ✅ **prêt à exécuter.** Les cinq arbitrages ouverts ont été tranchés par
+> **Statut :** 🗄️ **PÉRIMÉ — lot livré.** Ce qui compte est passé dans
+> [l'ADR 0003](../adr/0003-formules-agregations-et-dates-civiles.md), dans le code et dans ses
+> tests. Sa **décision D4** est en particulier **dépassée depuis le 2026-08-15** dans sa dernière
+> moitié : « la couture laissée à C2 » n'est plus une couture, le kind enveloppe existe, et c'est
+> [l'ADR 0004](../adr/0004-les-arrondis-declares-par-le-modele.md) qui fait foi sur sa sémantique,
+> ses modes et la nature de `decimals`. Ce qui reste **entièrement vrai** de D4 et que C2 n'a pas
+> touché : la représentation reste binary64 sans dépendance, aucun arrondi n'est implicite nulle
+> part — `div` et `percentOf` n'arrondissent toujours rien, et deux tests l'épinglent — et le
+> point 2 s'est vérifié à la lettre, l'exactitude décimale étant bien une propriété d'arrondi
+> **déclaré**, pas de représentation.
+>
+> **Statut à l'exécution :** ✅ **prêt à exécuter.** Les cinq arbitrages ouverts ont été tranchés par
 > le propriétaire du produit le 2026-08-13 — relevé en [§8](#8-les-cinq-arbitrages-tranchés).
 > **Date :** 2026-08-13 · **Brique :** `@openview/core`, vague 1 · **Jalon visé :** J1
 >

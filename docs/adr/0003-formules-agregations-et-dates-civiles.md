@@ -6,6 +6,10 @@
 - **Amende :** [ADR 0001](0001-expression-language.md) — le paragraphe « Rien d'autre. Pas
   d'arithmétique, pas d'appel de fonction » ; [ADR 0002](0002-data-binding-and-loop-scope.md) —
   l'argument de rejet de l'option A3 et la conséquence « `CURRENT_SCHEMA_VERSION` reste à 1 »
+- **Complétée par :** [ADR 0004](0004-les-arrondis-declares-par-le-modele.md) (2026-08-15) — la
+  **décision 4** ci-dessous annonçait le kind enveloppe `round` dans sa *forme* et laissait sa
+  sémantique, ses modes et la nature de `decimals` au lot C2. L'ADR 0004 les tranche, porte
+  `CURRENT_SCHEMA_VERSION` à **3**, et amende `AGENTS.md` §3.B sur la portée du Visitor.
 - **Plan d'implémentation :** [docs/plans/c1-formules-et-agregations.md](../plans/c1-formules-et-agregations.md)
   — périmé une fois le lot livré, comme le dit son propre en-tête
 - **Implémentation :** [`src/expression/expression.ts`](../../packages/core/src/expression/expression.ts)
@@ -856,10 +860,14 @@ résultat, c'est le test qui le dit, pas une facture.
 
 ## Ce qui reste ouvert
 
-**L'arrondi (C2).** Le kind enveloppe `{ kind: 'round'; value; decimals; mode }` est décidé dans
-sa **forme** par la décision 4 ; ses modes, son comportement sur les demi-valeurs et son
-interaction avec les totaux appartiennent à C2. Rien de tout cela n'est préempté ici, et c'est
-délibéré.
+**L'arrondi (C2).** ✅ **Tranché le 2026-08-15 par l'[ADR 0004](0004-les-arrondis-declares-par-le-modele.md).**
+Le kind enveloppe `{ kind: 'round'; value; decimals; mode }` était décidé dans sa **forme** par la
+décision 4 ; ses modes, son comportement sur les demi-valeurs et son interaction avec les totaux
+appartenaient à C2, et rien n'en était préempté ici. L'ADR 0004 arrête : l'arrondi porte sur la
+plus courte décimale qui fait aller-retour vers le double, deux modes au vocabulaire ECMA-402,
+`decimals` littéral dans `[-15, 15]`, et **zéro ligne dans `aggregate.ts`** — le critère « aucun
+total ne diffère de la somme des montants affichés au-dessus de lui » est une propriété du
+**modèle**, pas du moteur.
 
 **Le formatage (C6).** `text()` rend une forme canonique, pas un affichage ; `YYYY-MM-DD` est une
 représentation d'échange. La mise en forme — séparateurs, devise, date localisée — se fait au même

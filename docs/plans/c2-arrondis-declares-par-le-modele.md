@@ -5,7 +5,19 @@
 > ni les *décisions* structurantes, qui se consignent dans `docs/adr/`. Il est **périssable** :
 > une fois le lot livré, il ne fait plus foi, et c'est l'ADR 0004 qui reste.
 >
-> **Statut :** ✅ **prêt à exécuter.** Les cinq arbitrages de la [§8] ont été tranchés par le
+> **Statut :** 🗄️ **PÉRIMÉ — lot livré le 2026-08-15.** Ce qui compte est passé dans
+> [l'ADR 0004](../adr/0004-les-arrondis-declares-par-le-modele.md), dans le code et dans ses
+> tests ; ce fichier n'est plus qu'une trace, conservée pour le raisonnement qu'il porte et pour
+> les corrections de motifs qu'il consigne. **Il ne fait plus foi.** Trois écarts entre ce plan et
+> ce qui a été livré, tous mesurés et tous consignés dans l'ADR : la fourchette de coût en temps
+> mural de la [§3.3] et de la [§5] (**réfutée** — la machine de livraison rend 378 ns et 120 ns,
+> hors de la dispersion « 0,8× à 3,2× » annoncée) ; la docstring de la [§3.7] qui reproduisait la
+> réserve fausse que la [§5.4] contrat 5 corrige (**c'est la [§5.4] qui a été suivie**) ; et le
+> critère `createBudget` de la [§6.4], qui annonçait trois occurrences pour quatre documents (la
+> fabrique de modèles en rend bien trois, mais **le principe est un budget par document, pas un
+> décompte**).
+>
+> **Statut à l'exécution :** ✅ **prêt à exécuter.** Les cinq arbitrages de la [§8] ont été tranchés par le
 > propriétaire du produit le **2026-08-14**, conformément aux cinq recommandations : **1-A**
 > (deux modes), **2-A** (`decimals` dans `[-15, 15]`), **3-A** (vocabulaire ECMA-402), **4-C**
 > (un second jeu de lignes au playground), **5-C** (rien dans le gabarit de PR). INC-1 peut
