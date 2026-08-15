@@ -11,6 +11,14 @@
 > (un second jeu de lignes au playground), **5-C** (rien dans le gabarit de PR). INC-1 peut
 > démarrer.
 >
+> **Deux décisions supplémentaires, prises le 2026-08-15** à la suite de la seconde analyse externe
+> ci-dessous : le **pipeline de migration reste tolérant** — on migre puis on valide au schéma
+> courant, on n'introduit pas de validation par version ([§5.4], contrat 5) — et **`AGENTS.md` §3.B
+> est amendé** pour restreindre le Visitor obligatoire à l'AST de document, par un **mandat
+> explicite** du propriétaire du produit ([§2, D11] ; posé par INC-5 dans son propre commit
+> `chore(governance)`). Sans ce mandat, D11 n'a pas de forme recevable et INC-5 ne peut pas être
+> écrit.
+>
 > **Date :** 2026-08-14 · **Brique :** `@openview/core`, vague 1 · **Jalon visé :** J1
 >
 > **Révision du 2026-08-14 (revue de contradiction).** **Quatre** relectures adverses — deux de
@@ -55,6 +63,37 @@
 > distincte des refus au parse (INC-4), et les six chaînes de refus [§5.3]. **Faux** : la crainte
 > que le message global de `z.number({ error })` écrase `.int()`, `.min()` et `.max()` — mesuré sur
 > `zod@3.25.76` via `zod/v4`, chaque validateur rend bien **son** message.
+>
+> **Seconde analyse externe du 2026-08-15.** Neuf constats, tous rejoués par exécution plutôt que par
+> lecture. **Sept sont retenus, un est surqualifié, un est faux.** Deux touchent des phrases que ce
+> plan tenait pour acquises et que la [§9] ne listait pas :
+>
+> - **Le test négatif de migration ne pouvait pas passer** [§5.4, contrat 5]. Mesuré : un document
+>   estampillé `1` portant un kind C1 rend `ACCEPTED, schemaVersion=2`. Le pipeline migre puis valide
+>   au schéma **courant**, donc l'estampille ne garde que vers le **haut**. Et la phrase fautive
+>   n'est pas née ici : elle est **déjà dans le dépôt**, en `migrate.ts:50-52` (« *still falls back to
+>   `Invalid input`, even from a v2 build* »), mesurément fausse. INC-3 la réécrit.
+> - **La preuve comptable de D7 était fausse sur des montants signés** [§2, D7]. Elle bornait chaque
+>   addition par la demi-`ulp` du **total final** ; la borne juste porte sur la plus grande **somme
+>   partielle**. Contre-exemple mesuré : `100000000000000 + 0,01 - 100000000000000` accumule
+>   `0,015625` et rend `0,02` là où la somme exacte vaut `0,01`. La **décision** de D7 ne bouge pas —
+>   zéro ligne dans `aggregate.ts` — et le nombre non plus : il se lit désormais sur `Σ|montants|`.
+> - **D11 s'auto-délivrait une dérogation à AGENTS.md §3.B**, ce qu'un plan ne peut pas faire.
+>   Réécrit en **amendement explicite** d'AGENTS.md porté par l'ADR 0004, le véhicule qu'AGENTS.md
+>   §1.2 nomme lui-même. Deux arguments retirés au passage : la règle anti-sur-ingénierie, dont la
+>   phrase opérante vise l'introduction d'un **Port**, et le poids S, qui est **circulaire**.
+> - **La matrice de propriétés n'était pas reproductible** [§5.2] : ni PRNG, ni graine, ni loi, alors
+>   que `Math.random` est refusé par la machine dans `packages/core/**` — vérifié en jouant Biome sur
+>   une sonde. Protocole écrit, sur le patron de celui de D7.
+> - **Trois modèles ne partagent pas un budget** [§4, INC-4] : un budget vaut pour **un** document
+>   (`context.ts:22`). Données communes, trois budgets.
+> - **Deux décomptes** : les vecteurs figés sont **34** et INC-1 en annonçait 33 — mais la note de la
+>   [§5.1] additionnait `26 + 5 + 2` en annonçant 34, donc **trois** endroits à aligner, pas un. Et
+>   les titres de tests périmés par l'estampille sont **trois**, pas un : INC-3 n'en voyait qu'un.
+> - **Écarté, mesuré faux :** « le critère `wc -l` n'est pas exécutable ». Git Bash est présent et la
+>   forme exacte du critère rend `2` sur le kind homologue. **Écarté aussi :** « le critère
+>   `exactement deux case 'round'` encode la violation » — il encode le seuil de réouverture que D11
+>   nomme, et c'est son travail.
 
 ---
 
@@ -523,12 +562,33 @@ donne le même total arrondi.
 > de plus de **deux ordres de grandeur**, et il est faux de façon *démontrable* : à 5·10¹⁰ un échec
 > est arithmétiquement impossible.
 >
-> **La borne prouvée.** Pour `N` lignes, l'erreur de chaque addition est bornée par la demi-`ulp`
-> du total, donc la dérive totale est bornée par `N · ulp(T)/2`. La propriété est garantie tant que
-> `N · ulp(T)/2 < 0,005`. À `N = 1 000` : `ulp(T)/2 < 5·10⁻⁶` exige `ulp(T) < 10⁻⁵`, or
-> `2⁻¹⁷ ≈ 7,63·10⁻⁶` couvre `T < 2³⁶ ≈ 6,87·10¹⁰`. **La propriété est donc garantie, sans tirage,
-> pour tout total inférieur à ~6,9·10¹⁰ sur 1 000 lignes.** Et cette borne se transpose à n'importe
-> quel nombre de lignes, ce qu'un tirage ne fait pas.
+> **La borne prouvée — et sa quantification, qu'une version antérieure omettait.** L'erreur de la
+> `k`-ième addition est bornée par la demi-`ulp` de son **résultat**, c'est-à-dire de la somme
+> partielle `s_k`, **jamais du total final**. La dérive est donc bornée par `N · ulp(M)/2`, où
+> `M = max_k |s_k|` est la plus grande magnitude atteinte en cours d'accumulation. La propriété est
+> garantie tant que `N · ulp(M)/2 < 0,005`. À `N = 1 000` : `ulp(M)/2 < 5·10⁻⁶` exige
+> `ulp(M) < 10⁻⁵`, or `2⁻¹⁷ ≈ 7,63·10⁻⁶` couvre `M < 2³⁶ ≈ 6,87·10¹⁰`.
+>
+> **Écrire `T` au lieu de `M` est faux, et il faut dire pourquoi** — c'est vrai **uniquement** si les
+> sommes partielles restent bornées par le total, donc si tous les montants sont de **même signe**.
+> Openview ne peut pas l'imposer : un avoir, une remise, une régularisation portent un montant
+> négatif, et le contre-exemple tient en trois lignes déjà au centime :
+>
+> ```
+> 100000000000000 + 0.01 - 100000000000000
+> ```
+>
+> Mesuré : l'accumulation positionnelle rend **`0,015625`** — soit exactement `ulp(10¹⁴)`, la demi-
+> `ulp` de la **somme partielle**, pas du total — et l'arrondi extérieur à deux décimales donne
+> **`0,02`** là où la somme exacte vaut `0,01`. Le total final est ici `0,01`, douze ordres de
+> grandeur **sous** la borne annoncée : une borne lue sur `T` l'aurait déclaré couvert.
+>
+> **L'énoncé juste, indépendant du modèle, et il garde le même nombre.** Comme
+> `M ≤ Σ|montants|`, la garantie se lit sur la somme des **valeurs absolues** : **la propriété est
+> garantie, sans tirage, tant que `Σ|montants| < ~6,9·10¹⁰` sur 1 000 lignes** — et elle se transpose
+> à n'importe quel nombre de lignes, ce qu'un tirage ne fait pas. Sur des montants tous de même
+> signe, `Σ|montants| = |T|` et la lecture « sur le total » redevient exacte : c'est le cas usuel
+> d'une facture, ce n'est pas le cas général d'un modèle.
 >
 > **La mesure, qui va bien au-delà de la garantie — et dont les comptes dépendent de la loi de
 > tirage, laquelle est donc écrite en entier.** Une version antérieure donnait `0 | 48 | 515` aux
@@ -542,6 +602,12 @@ donne le même total arrondi.
 > > `mulberry32`, **graines 1, 7 et 42** ; accumulation positionnelle en binary64 ; arrondi
 > > extérieur `roundDecimal(acc, 2, 'halfExpand')` comparé au **double le plus proche de la somme
 > > exacte en centimes** (BigInt). Node 24.11.1.
+> >
+> > ⚠️ **Cette loi tire dans `[0, 2·T/N]`, donc des montants tous POSITIFS**, donc
+> > `Σ|montants| = T` : le tableau ci-dessous mesure le **cas de même signe**, et il ne dit
+> > **rien** d'un jeu de lignes mélangeant crédits et débits, où la garantie se lit sur
+> > `Σ|montants|` et non sur le total. C'est la restriction à recopier avec les chiffres, pas
+> > à côté.
 >
 > | Total moyen | `5·10⁹` | `10¹⁰` | `5·10¹⁰` | `10¹¹` | `10¹²` | `2·10¹²` | `5·10¹²` | `10¹³` | `10¹⁴` |
 > | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -551,10 +617,17 @@ donne le même total arrondi.
 >
 > **Le premier palier en échec est `2·10¹²`**, soit trente fois au-dessus de la garantie prouvée et
 > huit ordres de grandeur au-dessus de toute facture. La phrase juste, à écrire dans l'ADR :
-> *garantie prouvée jusqu'à ~6,9·10¹⁰ à 1 000 lignes ; mesurée sans un seul échec jusqu'à `10¹²` ;
-> premier échec à `2·10¹²` (2 à 9 sur 2 000 selon la graine, écart maximal 0,0100 €), **sous la loi
-> de tirage ci-dessus — les comptes en dépendent, la borne prouvée non.*** C'est une borne de
-> binary64, pas une borne que C2 introduit.
+> *garantie prouvée tant que `Σ|montants| < ~6,9·10¹⁰` à 1 000 lignes ; mesurée sans un seul échec
+> jusqu'à `10¹²` ; premier échec à `2·10¹²` (2 à 9 sur 2 000 selon la graine, écart maximal
+> 0,0100 €), **sous la loi de tirage ci-dessus, qui est à montants positifs — les comptes en
+> dépendent, la borne prouvée non.*** C'est une borne de binary64, pas une borne que C2 introduit.
+>
+> **Et la conséquence de périmètre, qui est la vraie raison de tenir la borne juste :** un modèle
+> mélangeant des signes peut sortir de la garantie **très en dessous** du total qui la nomme. Ce
+> n'est pas un motif de rouvrir D7 — `aggregate.ts` ne change pas, et aucun réordonnancement des
+> termes ne serait légitime : l'ordre d'accumulation est **contractuel** (ADR 0003) et le trier par
+> magnitude ferait dépendre un total de l'implémentation. C'est un motif de ne pas promettre à
+> l'auteur d'un modèle une propriété qui ne tient que sur ses factures ordinaires.
 
 **Écarté.** (a) Un `sum` qui arrondirait ses termes : arrondi implicite. (b) Un refus au parse d'un
 `sum` non enveloppé : ce serait imposer une règle de conception, et rendre **inexprimable** le
@@ -685,7 +758,7 @@ de la sur-ingénierie ; la **forme** rend la fonction possible, C6 l'écrira s'i
 
 ---
 
-### D11 — Deux `switch` plutôt qu'un Visitor d'expressions : la dérogation est **écrite**, pas constatée
+### D11 — Deux `switch` plutôt qu'un Visitor d'expressions : AGENTS.md §3.B est **amendé**, pas contourné
 
 > ⚠️ **Correction d'un raisonnement faux, à ne pas recopier dans l'ADR 0004.** Une version
 > antérieure de ce plan classait `visitor.ts` en « ne se touche pas » avec pour toute
@@ -694,21 +767,49 @@ de la sur-ingénierie ; la **forme** rend la fonction possible, C6 l'écrira s'i
 > parcours apparaît » et que « Composite sans Visitor est un demi-patron ». L'algèbre d'expressions
 > **est** un Composite, elle compte déjà **deux** parcours écrits en `switch` nu et dupliqué —
 > `evaluator/evaluate.ts:77` et `paths.ts:43` — et C2 les porte tous deux à dix-neuf branches.
-> **Aucune ADR, aucun plan ne consigne de dérogation pour les expressions.** C'était le seul endroit
-> du plan où une règle « obligatoire » du dépôt était contournée par une observation.
 
-**Décision.** Aucun Visitor d'expressions n'est écrit — la règle anti-sur-ingénierie et le poids S
-l'interdisent l'un comme l'autre. **La dérogation est écrite, avec son contrôle compensatoire et
-son seuil de réouverture**, dans ce plan puis dans l'ADR 0004 :
+> 🚫 **Correction d'un défaut de gouvernance, découvert à la seconde analyse externe.** La version
+> suivante de cette décision écrivait « **la dérogation est écrite** » et la consignait « dans ce
+> plan puis dans l'ADR 0004 ». **Ayant établi que §3.B s'applique, elle ne pouvait pas s'en
+> dispenser elle-même** : une décision qui reconnaît la règle puis s'en exempte n'est pas une
+> dérogation, c'est un contournement documenté. Et deux de ses trois arguments ne tenaient pas.
+>
+> - **La règle anti-sur-ingénierie ne dit pas ça.** Sa phrase opérante est « *On n'introduit un
+>   **Port** que lorsqu'un second adaptateur existe réellement ou est planifié à trois mois* »
+>   (AGENTS.md, §3). Ailleurs, c'est un conseil de prudence — jamais une interdiction opposable à
+>   une règle écrite « obligatoire » deux sections plus haut. L'invoquer comme un interdit, c'était
+>   opposer un conseil à une règle.
+> - **« Le poids S l'interdit » est circulaire.** Le lot est pesé S *parce qu'*on a décidé de ne pas
+>   écrire le Visitor. Une estimation d'effort ne peut rien interdire ; elle enregistre une
+>   décision, elle ne la fonde pas.
+> - **Ce qui reste, et qui suffit :** le contrôle compensatoire, qui est réel et mesurable.
 
-> **Dérogation à AGENTS.md §3.B, pour l'algèbre d'expressions uniquement.** Les deux parcours
-> restent des `switch`, parce que le contrôle compensatoire existe et qu'il est **plus fort** qu'un
-> Visitor : `const exhaustive: never = expression` en `evaluate.ts:146` et en `paths.ts:113` rend
-> l'oubli d'un kind **impossible à livrer** — ce sont les deux sites qui cassent à la porte 2, pas
-> à la revue. Un Visitor d'expressions ajouterait une interface, une indirection et un point de
-> dispatch supplémentaire sans ajouter une seule garantie que ces deux `never` ne donnent pas déjà.
-> **Seuil de réouverture, nommé : l'apparition d'un troisième parcours d'expression.** Ce jour-là,
-> la duplication cesse d'être de deux exemplaires et le Visitor redevient le bon patron.
+**Décision.** Aucun Visitor d'expressions n'est écrit, et **AGENTS.md §3.B est amendé pour le
+dire** — par l'ADR 0004, qui est le véhicule qu'AGENTS.md nomme lui-même : « *Ce fichier fait foi :
+une ADR qui entend l'amender doit le dire explicitement* » (§1.2). L'amendement est **une ligne dans
+AGENTS.md**, écrite là où la règle vit, plus la décision correspondante dans l'ADR. C'est INC-5 qui
+les pose, et **c'est un mandat explicite du propriétaire du produit, obtenu le 2026-08-15**, sans
+lequel rien de tout ceci ne s'écrit (AGENTS.md §7 pour l'esprit ; AGENTS.md n'est pas dans la liste
+protégée, mais c'est le document qui gouverne les agents).
+
+> **Amendement à AGENTS.md §3.B — portée : l'algèbre d'expressions uniquement.** Le Visitor reste
+> obligatoire pour le Composite que §3.A énumère, l'arbre de nœuds de document. Il ne l'est pas pour
+> l'algèbre d'expressions, dont les deux parcours restent des `switch`, parce que le contrôle
+> compensatoire y est **plus fort** qu'un Visitor : `const exhaustive: never = expression` en
+> `evaluate.ts:146` et en `paths.ts:113` rend l'oubli d'un kind **impossible à livrer** — ce sont
+> les deux sites qui cassent à la **porte 2**, pas à la revue, là où un Visitor ne casserait qu'à
+> l'exécution d'un test. Un Visitor d'expressions ajouterait une interface à dix-neuf méthodes, une
+> indirection et un point de dispatch supplémentaire sans ajouter une seule garantie que ces deux
+> `never` ne donnent pas déjà. **Seuil de réouverture, nommé : l'apparition d'un troisième parcours
+> d'expression.** Ce jour-là, la duplication cesse d'être de deux exemplaires, l'amendement se
+> retire et le Visitor redevient le bon patron.
+
+**Pourquoi un amendement plutôt qu'un Visitor.** Les deux options ont été pesées et c'est
+l'argument du `never` qui a tranché, pas le coût : l'exhaustivité **au compilateur** est une
+garantie strictement plus forte qu'une interface, et c'est le seul cas du dépôt où la règle demande
+d'échanger la plus forte contre la plus faible. Une règle qu'on ne peut suivre sans dégrader la
+garantie qu'elle vise doit être **corrigée**, pas contournée — et corriger une règle, ici, c'est
+écrire une ligne dans le fichier qui la porte.
 
 **Réversible** — et son coût de réouverture est faible, précisément parce que les deux `never`
 garantissent que les deux `switch` sont complets.
@@ -778,8 +879,14 @@ type-checkés hors du dépôt sous une copie fidèle de `tsconfig.base.json` + `
  *
  * `halfExpand` sends a tie AWAY FROM ZERO: `2.125` yields `2.13` and `-2.125` yields
  * `-2.13`. `halfEven` sends it to the even last digit: `2.125` yields `2.12`, `2.135`
- * yields `2.14`. It exists for the one property `halfExpand` does not have -- applied to
- * many amounts it does not drift the total upward.
+ * yields `2.14`. What separates them is DIRECTION, and the claim has to be stated
+ * carefully: `halfExpand` moves every tie the same way, away from zero, so on positive
+ * amounts its ties always drift the total UP. `halfEven` has no direction of its own --
+ * where a tie goes is decided by the parity of the digit before it, which no amount
+ * chooses. It does NOT follow that a total never drifts up: a set whose amounts all end
+ * in `.135` rounds every tie up under `halfEven` too. The property is the absence of a
+ * SYSTEMATIC direction in the mode, not a guarantee about an arbitrary set of amounts --
+ * and whoever writes the ADR should not upgrade the first into the second.
  *
  * ## What is refused, and on which ground
  *
@@ -1468,7 +1575,7 @@ confrontation à `Intl.NumberFormat` (2 modes × 6 précisions). **Le test commi
 d'arbitrage pour `textCase` en gelant des vecteurs plutôt qu'en comparant à une bibliothèque
 vivante.
 
-**Tests.** Les **33** vecteurs figés de la [§5.1] · la propriété contre une référence **BigInt**
+**Tests.** Les **34** vecteurs figés de la [§5.1] · la propriété contre une référence **BigInt**
 écrite dans le fichier de test, **découpée par précision et budgétée** ([§5.2]) · idempotence,
 monotonie, finitude · `roundDecimal(120, -1, m) === 120` (le piège de l'adjacence) ·
 `Object.is(roundDecimal(-0.004, 2, m), 0)` — **pas `-0`** ·
@@ -1491,7 +1598,9 @@ seul, mais sans intérêt à l'être.
 > deux cas manquait. **Deux vecteurs de la [§5.1] existent maintenant pour cela** — `[0, 2, 0, 0]`
 > et `[2.1251, 2, 2.13, 2.13]` (au-delà du demi d'un cheveu : la disjonction l'emporte, en
 > `halfEven` comme en `halfExpand`) — et l'assertion `Object.is(roundDecimal(-0, 2, m), 0)` se pose
-> à côté de celle de `-0.004`. Re-mesuré avec les 33 (34 depuis la relecture externe) : **plus une seule branche à zéro**.
+> à côté de celle de `-0.004`. Re-mesuré avec les **34** vecteurs de la [§5.1] — le décompte a
+> lui-même été faux deux fois, et il est refait ligne à ligne là-bas : **plus une seule branche à
+> zéro**.
 
 ---
 
@@ -1582,15 +1691,29 @@ contrat**.
 
 **Tests.** Les six contrats de la [§5.4]. Les sept assertions littérales (L132, L168, L176, L181,
 L182, L184, L218) passent à `CURRENT_SCHEMA_VERSION` et `CURRENT_SCHEMA_VERSION + 1`, sur le modèle
-du test L230-234 qui le fait déjà correctement. **Et le titre du test L213 —
-`stamps a v1 document as v2 and changes nothing else` — devient
-`walks a v1 document up to the current stamp and changes nothing else`** : avec l'entrée `2 → 3` la
-chaîne marche v1 → v2 → v3, l'assertion de L218 vaut désormais 3, et le document n'est plus
-estampillé « v2 ». **Un nom de test qui porte un numéro de version se périme à chaque estampille, et
-rien ne le fait rougir** — l'inventaire des sept assertions ne le voyait pas parce qu'il s'arrêtait
-aux assertions. Hors `template/`, rien ne casse :
-`guard.test.ts:189` porte un `schemaVersion: 2` littéral mais dans un payload passé à
-`assertBoundedShape`, qui ne valide aucun schéma.
+du test L230-234 qui le fait déjà correctement.
+
+**Et les titres — il y en a trois, pas un.** **Un nom de test qui porte un numéro de version se
+périme à chaque estampille, et rien ne le fait rougir** : l'inventaire des sept assertions ne les
+voyait pas parce qu'il s'arrêtait aux assertions, et une version antérieure de cet incrément n'en
+corrigeait qu'un sur trois. Recensés par `grep` sur les titres, pas de mémoire :
+
+| Ligne | Titre actuel | Pourquoi il devient faux | Titre |
+| :--- | :--- | :--- | :--- |
+| L213 | `stamps a v1 document as v2 and changes nothing else` | la chaîne marche v1 → v2 → v3, L218 vaut 3 | `walks a v1 document up to the current stamp and changes nothing else` |
+| L97 | `brings a template written before C1 up to version 2` | L132 est dans la liste de délittéralisation : le document atteint 3 | `brings a template written before C1 up to the current stamp` |
+| L136 | `parses a v2 document carrying a C1 kind` | sa fixture est `validTemplate`, estampillée `CURRENT_SCHEMA_VERSION` : **c'est un document v3** | `parses a current-stamp document carrying a C1 kind` |
+
+**Et une docstring de production, qui est fausse aujourd'hui.** `migrate.ts:50-52` écrit, de
+l'entrée `1 → 2` : « *A document stamped `1` but carrying a C1 kind — hand-made, or written by a
+third-party tool — still falls back to `Invalid input`, **even from a v2 build*** ». Mesuré :
+`ACCEPTED, schemaVersion=2`. La proposition générale qui l'entoure — « *The version guard reads the
+STAMP, not the content* » — est juste ; c'est l'exemple qui dit l'inverse de ce qu'il illustre. Il
+est réécrit ici, dans le commit qui pose l'estampille, parce que c'est le seul commit du lot qui
+touche ce fichier et que la [§5.4] contrat 5 en descend directement.
+
+Hors `template/`, rien ne casse : `guard.test.ts:189` porte un `schemaVersion: 2` littéral mais dans
+un payload passé à `assertBoundedShape`, qui ne valide aucun schéma.
 
 **Commit.** `feat(core)!: estampiller l'arrondi déclaré en schemaVersion 3`
 
@@ -1606,8 +1729,8 @@ aux assertions. Hors `template/`, rien ne casse :
 ne portent que des **quantités** et des **prix unitaires** (17 × 0,125 et 3 × 0,375), jamais un
 montant, de sorte que la phrase déjà écrite en `App.tsx:456` (« *Aucun montant de ligne n'est fourni
 par le jeu de données* ») reste vraie du second jeu comme du premier · trois `parseTemplate`
-partageant les mêmes données et le même budget : **A** (lignes puis total, `halfExpand`), **B**
-(idem, `halfEven`), **A′** (total seul) · une section comparative — une ligne de facture par ligne,
+partageant les mêmes données et portant **chacun son budget** : **A** (lignes puis total,
+`halfExpand`), **B** (idem, `halfEven`), **A′** (total seul) · une section comparative — une ligne de facture par ligne,
 trois colonnes de montants, trois totaux, l'écart mis en évidence · **un refus au parse**, avec son
 véhicule · la phrase l. 481-482 réécrite · la docstring de `remise` l. 55 réécrite.
 
@@ -1626,6 +1749,26 @@ véhicule · la phrase l. 481-482 réécrite · la docstring de `remise` l. 55 r
 > Le contraste est le contenu pédagogique du lot : **un même jeu de données, trois totaux, deux
 > causes indépendantes.** Et la démonstration se lit d'autant mieux que le premier jeu de lignes,
 > laissé intact ([§8], arbitrage n°4), montre l'arrondi **identité** sur des montants déjà exacts.
+
+> 🚫 **Un budget vaut pour UN document, et une version antérieure de cet incrément en partageait un
+> entre trois.** Elle demandait « trois `parseTemplate` partageant les mêmes données **et le même
+> budget** ». Le contrat dit le contraire, et il est écrit dans le code : « *The work budget for the
+> **WHOLE render**, created once by the pipeline and shared by every expression in **the
+> document*** » (`context.ts:22`, ADR 0003 décision 8). Trois modèles sont **trois documents**, donc
+> trois rendus.
+>
+> **Ce qu'un budget commun enseignerait, et c'est le vrai coût :** que la consommation du modèle A
+> avance celle du modèle B, donc que le total affiché sous B dépend de **l'ordre de la
+> démonstration**. Un intégrateur qui recopie le playground — c'est à ça qu'il sert — câblerait un
+> budget de rendu sur une session. Le playground est le seul endroit du dépôt où le mode d'emploi du
+> budget se lit en entier ; il n'a pas le droit de le montrer faux.
+>
+> **Donc : `renderData` reste partagé, un `createBudget()` par modèle.** Et la section
+> **« Budget du rendu »** (`App.tsx:531-538`) devient fausse mot pour mot — « *Un **seul** budget
+> pour tout ce qui précède* » : elle rend désormais **trois** compteurs, un par modèle, et sa phrase
+> conserve ce qu'elle enseignait déjà (« *un budget par appel se réinitialiserait à chaque
+> liaison* ») en y ajoutant la distinction que le lot introduit : **par appel** est faux, **par
+> document** est juste.
 
 > ⚠️ **Le refus au parse n'a pas de véhicule, et une version antérieure de ce plan le demandait sans
 > le dire.** `App.tsx:353-372` : `reportRefusal(title, expression: Expression)` appelle
@@ -1678,7 +1821,27 @@ décision 4 · Plan d'implémentation : ce fichier · Implémentation :** liens 
 reste ouvert » : l'arrondi n'est plus ouvert, *tranché par l'ADR 0004* — **annoter, ne pas
 réécrire**, une ADR est un journal ; plus les chiffres de la l. 826 si l'arbitrage n°4 est tranché A)
 · ✏️ `docs/roadmap/core.md` (C2 livré) · ✏️ `docs/plans/c1-…md` (D4 marqué périmé) · ✏️
-`docs/plans/c2-…md` (ce fichier, marqué périmé).
+`docs/plans/c2-…md` (ce fichier, marqué périmé) · ✏️ **`AGENTS.md` §3.B — l'amendement de D11**.
+
+> 🔑 **`AGENTS.md` entre dans cette liste au titre de D11, et sous mandat explicite du propriétaire
+> du produit obtenu le 2026-08-15.** Sans lui, rien de ceci ne s'écrit : c'est le document qui
+> gouverne tous les agents du dépôt, et un plan de lot ne l'amende pas de sa propre autorité — c'est
+> précisément le défaut que D11 corrige.
+>
+> **Une ligne, à la fin de §3.B**, qui restreint la portée de la règle et renvoie au contrôle qui la
+> remplace : le Visitor reste obligatoire pour le Composite qu'énumère §3.A (l'arbre de nœuds de
+> document) ; l'algèbre d'expressions en est exclue tant que ses parcours se terminent par un
+> `const exhaustive: never`, garantie strictement plus forte, vérifiée à la **porte 2** ; le seuil de
+> retrait de l'amendement est **l'apparition d'un troisième parcours d'expression**.
+>
+> **Et c'est un COMMIT SÉPARÉ**, pour la raison exacte que l'arbitrage n°5 a écrite deux paragraphes
+> plus bas : un commit de portée `docs(adr)` qui modifie un fichier de **gouvernance du dépôt** rend
+> son propre sujet faux. Ce sera :
+> `chore(governance): restreindre le Visitor obligatoire à l'AST de document`, sur le patron du plan
+> C1 qui sépare déjà le commit touchant deux fichiers protégés. L'ADR 0004 porte la **décision** ;
+> `AGENTS.md` porte la **règle** ; l'un cite l'autre, et l'ordre est : la règle d'abord, l'ADR
+> ensuite, pour qu'aucun état intermédiaire du dépôt ne montre une décision qui pointe vers un texte
+> non encore amendé.
 
 > ⚠️ **`.github/pull_request_template.md` ne figure plus dans cette liste**, conséquence de
 > l'arbitrage n°5 tranché **C** ([§8]). Deux raisons, et la seconde est interne à ce plan : le
@@ -1704,12 +1867,21 @@ des décisions de la [§2] que l'ADR doit reprendre, plus ce que ce plan a mesur
 5. **D5** — l'algorithme, son protocole de vérification (rejouable), et le coût en temps mural pour
    E8, **en fourchette et avec sa machine**.
 6. **D6** — zéro code nouveau, la réserve du message d'infini et sa correction par `z.number({ error })`.
-7. **D7** — l'enveloppe **prouvée** (`N · ulp(T)/2 < 0,005`) et **mesurée** (0/2 000 jusqu'à `10¹²`,
-   premier échec à `2·10¹²`), **avec la loi de tirage et la graine sans lesquelles les comptes ne se
-   reproduisent pas**.
+7. **D7** — l'enveloppe **prouvée** et **mesurée**, dans cet ordre et sans les confondre :
+   - la borne est `N · ulp(M)/2 < 0,005` où **`M` est la plus grande somme partielle, jamais le
+     total final** ; la lecture indépendante du modèle est `Σ|montants| < ~6,9·10¹⁰` à 1 000 lignes ;
+   - **le contre-exemple signé se recopie**, parce qu'il est ce qui rend la distinction lisible :
+     `100000000000000 + 0,01 - 100000000000000` accumule `0,015625` et rend `0,02` pour une somme
+     exacte de `0,01`, avec un total final de `0,01` — très **sous** la borne ;
+   - la mesure (0/2 000 jusqu'à `10¹²`, premier échec à `2·10¹²`) avec **sa loi de tirage et sa
+     graine**, et la mention que cette loi tire **des montants positifs**, donc ne dit rien du cas
+     signé.
 8. **D8** — l'absence de déclaration au niveau du document, et son coût de sortie.
-9. **D9** — l'estampille, la migration d'identité, et sa réserve (« la migration estampille ; elle ne
-   valide pas »).
+9. **D9** — l'estampille, la migration d'identité, et sa réserve, **énoncée dans le bon sens** : « la
+   migration estampille ; elle ne valide pas » décrit `migrate`, mais la conséquence n'est pas qu'un
+   document mal estampillé est refusé — **il est silencieusement accepté**. Le garde de version ne
+   mord que vers le **haut** (document écrit par un build plus récent). Mesuré ; voir la [§5.4],
+   contrat 5.
 10. **D10** — le piège `Intl` de C6, ses cinq mesures, **et la contradiction nommée avec
     `biome.jsonc:273`**, laissée ouverte parce que son amendement demande un mandat. **Plus, dans
     « Ce qui reste ouvert », la question adressée à C6 telle quelle :** *qui déclare l'échelle
@@ -1728,8 +1900,11 @@ des décisions de la [§2] que l'ADR doit reprendre, plus ce que ce plan a mesur
     | **1 — le modèle** | une échelle d'affichage écrite dans le nœud de format de C6, à côté de la locale | cohérent avec C2, où l'échelle de calcul est déjà **lisible dans l'arbre** ; mais elle se déclare deux fois, et rien n'oblige les deux à s'accorder |
     | **2 — l'intégrateur** | un catalogue devise → échelle injecté par l'application hôte | aucune table dans Openview, cohérent avec la décision 9 de la roadmap ; mais c'est une charge d'amorçage de plus, et un catalogue absent doit **refuser**, pas deviner |
     | **3 — ICU** | `Intl.NumberFormat(locale, { style: 'currency', currency })` | le moyen que `biome.jsonc:273` autorise déjà et le seul qui tienne le critère de fin de C6 sans duplication ; mais il **résout `maximumFractionDigits` tout seul**, donc applique une échelle qu'aucun modèle n'a déclarée — les cinq mesures de D10 en pièce jointe |
-11. **D11** — la **dérogation écrite** à AGENTS.md §3.B pour l'algèbre d'expressions, son contrôle
-    compensatoire et son seuil de réouverture.
+11. **D11** — l'**amendement** d'AGENTS.md §3.B pour l'algèbre d'expressions : son mandat
+    (propriétaire du produit, 2026-08-15), son contrôle compensatoire, son seuil de **retrait**, et
+    le lien vers le commit `chore(governance)` qui le pose. L'ADR consigne la décision ; c'est
+    `AGENTS.md` qui porte la règle, et l'ADR doit le dire — une ADR qui décrirait une exception que
+    le fichier de règles ne connaît pas reproduirait le défaut qu'elle corrige.
 12. **D12** — le hors-périmètre, dont la répartition du résidu et sa raison.
 
 **Commit.** `docs(adr): consigner les douze décisions du lot C2`
@@ -1743,7 +1918,8 @@ des décisions de la [§2] que l'ADR doit reprendre, plus ce que ce plan a mesur
 | Fichier | Consigne |
 | :--- | :--- |
 | `packages/core/src/template/guard.ts` | **Ne pas modifier.** Agnostique aux kinds ; `assertBoundedShape` et `childValuesOf` marchent sur du JSON brut. |
-| `packages/core/src/ast/visitor.ts` | **Ne pas modifier.** Le Visitor porte sur `DocumentNode.type` et `TextSegment.kind`. La dérogation qui autorise cette abstention est écrite en **D11** — sans elle, l'abstention n'est pas motivée. |
+| `packages/core/src/ast/visitor.ts` | **Ne pas modifier.** Le Visitor porte sur `DocumentNode.type` et `TextSegment.kind`. Ce qui autorise cette abstention n'est pas ce constat mais l'**amendement d'AGENTS.md §3.B** écrit en **D11** et posé par INC-5 — sans lui, l'abstention n'est pas motivée. |
+| `AGENTS.md` | **Une seule ligne, à la fin de §3.B, et sous le mandat du 2026-08-15** (D11, posée par INC-5, dans son propre commit `chore(governance)`). **Rien d'autre.** Ce fichier « fait foi » (§1.2) : toute autre retouche, y compris une qui paraîtrait cosmétique, sort du mandat. |
 | `packages/core/src/errors.ts` | **Ne pas modifier.** `ExpressionErrorSite` s'élargit par dérivation (D6). |
 | `packages/core/src/expression/evaluator/operations/aggregate.ts` | **Ne pas modifier** (D7). |
 | `packages/core/src/expression/evaluator/__tests__/arithmetic.test.ts:74` et `:173` | **Ne pas affaiblir.** Ce sont les deux tests qui interdisent l'arrondi implicite. |
@@ -1809,9 +1985,15 @@ it.each([
 > mode. Les deux sont faux et le second sert précisément l'argument que le champ `mode` n'est pas
 > décoratif — le sous-estimer affaiblit gratuitement la démonstration. **Mesuré : douze
 > divergences** (`1.005`, `0.145`, `2.125`, `-2.125`, `0.125`, `0.5`, `2.5`, `-2.5`, `-0.5`, `50`,
-> `1250`, `-1250`). Avec les cinq vecteurs de retenue totale **et les deux vecteurs de couverture
-> ci-dessous**, la table compte **34 lignes, dont douze divergent sur le mode** — les sept ajouts
+> `1250`, `-1250`). Avec les cinq vecteurs de retenue totale **et les trois vecteurs de couverture
+> ci-dessous**, la table compte **34 lignes, dont douze divergent sur le mode** — les huit ajouts
 > n'ajoutent aucune divergence, et c'est vérifié.
+>
+> **Et une troisième correction de comptage, celle-ci interne à ce paragraphe** : il écrivait « les
+> **deux** vecteurs de couverture » tout en annonçant 34, c'est-à-dire `26 + 5 + 2 = 33`. Le bloc en
+> compte bien trois — `[0, …]` et `[2.1251, …]` couvrent chacun une **branche**, `[-5e-324, …]`
+> épingle le **zéro non signé**, qui n'est pas une branche : c'est de là que venait l'écart. Le
+> total juste est **34**, et il est recompté ligne à ligne : `26 + 5 + 3`.
 >
 > Et **trois** corrections de couverture, toutes découvertes à l'instrumentation, toutes rejouées.
 > (1) **Aucun des vingt-six vecteurs initiaux n'exerçait la branche `cursor === 0` d'`increment`** —
@@ -1869,6 +2051,44 @@ it.each([Number.NaN, Infinity, -Infinity])('leaves the non-finite %o unchanged',
 **Forme prescrite :** un `it.each` **par précision**, **20 000 tirages** par précision, sur les onze
 positions `{-15, -9, -5, -2, 0, 1, 2, 3, 5, 9, 15}` et les deux modes. La référence BigInt (~25
 lignes, exacte, spécifiée, **sans ICU**) est écrite dans le fichier de test.
+
+> 🚫 **Correction d'un défaut bloquant, découvert à la seconde analyse externe.** Cette section
+> prescrivait « 20 000 tirages » **sans dire lesquels** : ni générateur, ni graine, ni loi, ni
+> fabrique des doubles. Deux conséquences, et la première est mécanique.
+>
+> **`Math.random` est refusé par la machine**, dans les tests comme ailleurs : l'entrée
+> `noJsRestrictedProperties` de `biome.jsonc:218` s'applique à l'override dont les `includes` sont
+> `["packages/core/**", "packages/engine/**"]`, et rien n'y exclut les `*.test.ts`. Vérifié en
+> jouant Biome sur une sonde jetable : `× Do not use 'Math.random'. — Math.random() makes a render
+> irreproducible (E6).` L'implémenteur qui recopiait cette section butait à la **porte 1**.
+>
+> **Et un test irreproductible ne mesure rien.** « 0 divergence sur 440 000 cas » et « 200 à 360 ms
+> par `it` » ne décrivent une population que si la population est écrite. Ce plan sait le faire — le
+> protocole de D7 va jusqu'à sa graine — et cette section ne le faisait pas, dans le lot dont la
+> promesse est qu'un moteur déterministe ne dépend de rien.
+
+**Protocole de tirage — à recopier tel quel, c'est ce qui rend le chiffre ci-dessous vérifiable.**
+
+- **PRNG `mulberry32`**, écrit dans le fichier de test (une dizaine de lignes, entier 32 bits, aucune
+  dépendance) — le même que celui de D7, pour n'avoir qu'un générateur à relire dans tout le lot.
+- **Graine `0x9E3779B9 ^ (decimals + 16)`**, donc **une graine par précision**, et chaque `it`
+  **repart de la sienne**. C'est la seule forme compatible avec l'exigence d'ergonomie ci-dessous :
+  un `it` rejoué seul par `-t` doit tirer exactement les mêmes 20 000 cas que dans la suite complète.
+  Un flux unique poursuivi d'un `it` à l'autre rendrait chaque `it` dépendant de l'ordre
+  d'exécution — et Vitest ne le garantit pas.
+- **Fabrique des doubles, en deux moitiés**, parce qu'elles ne couvrent pas la même chose et qu'une
+  seule des deux laisserait un angle mort :
+  - **10 000 « montants »** : `signe · (entier tiré dans [0, 10¹²)) / 10^p`, avec `p` tiré dans
+    `[0, 6]`. Ce sont des valeurs dont l'écriture décimale est courte — le cas réel, celui qui
+    produit des *ties* exacts et fait donc travailler le champ `mode`.
+  - **10 000 « doubles quelconques »** : mantisse de 52 bits tirée uniformément, exposant tiré
+    uniformément dans `[-40, 40]`, signe tiré. Ce sont des valeurs dont l'écriture décimale est
+    longue — le cas qui fait travailler la chirurgie sur la chaîne de chiffres.
+  - Les non finis ne sont **pas** tirés : ils ont leur propre `it` ([§5.1]).
+- **Oracle** : la référence BigInt du fichier, jamais `Intl` ([§5.5]).
+
+Sans ces quatre lignes, la matrice n'est ni copiable ni rejouable, et « 0 divergence » ne se
+compare à rien. Avec elles, une divergence trouvée en CI se reproduit à l'identique en local.
 
 **Budget mesuré**, et non projeté — la forme exacte ci-dessus, rejouée hors dépôt sur Node 24.11.1,
 implémentation **et** référence BigInt : **200 à 360 ms par `it`, 2,84 s au total**, pour 440 000 cas
@@ -1932,9 +2152,41 @@ prouve qu'on n'a pas fermé la fenêtre d'un cran de trop. Ajouter `mode: 'banke
    et `fromVersion === 4`.
 4. **Un document v3 portant un `round`** imbriqué dans une position réelle (`aggregate.value` sous un
    `TextBindingSegment.value`) parse, et `schemaVersion === 3`.
-5. **La réserve, en test négatif** : un document estampillé `2` mais portant un `round` échoue sur un
-   `ZodError`, **pas** sur un `TemplateMigrationError`. *La migration estampille ; elle ne valide
-   pas.*
+5. **Le garde ne mord que vers le haut**, et c'est un test d'**acceptation** : un document estampillé
+   `2` mais portant déjà un `round` — mal estampillé, donc — **parse sans erreur**, et rend
+   `schemaVersion === 3`. Le test porte un commentaire qui dit pourquoi, parce que c'est
+   contre-intuitif.
+
+   > 🚫 **Correction d'un défaut bloquant, mesuré, et il ne vient pas de ce plan.** Ce contrat
+   > exigeait l'inverse : « *un document estampillé `2` mais portant un `round` échoue sur un
+   > `ZodError`* ». **Ce test ne peut pas passer**, et la sonde le montre sur le cas homologue
+   > d'aujourd'hui — un document estampillé `1` portant un kind C1 rend **`ACCEPTED,
+   > schemaVersion=2`**. La raison est dans le pipeline : `parseTemplate` borne la forme, **migre**,
+   > puis valide au schéma **courant** (`migrate.ts:165-170`). Le schéma v3 connaissant `round`, le
+   > document passe.
+   >
+   > **La phrase fautive est déjà dans le dépôt**, et c'est d'elle que ce contrat descendait :
+   > `migrate.ts:50-52` écrit « *A document stamped `1` but carrying a C1 kind […] still falls back
+   > to `Invalid input`, **even from a v2 build*** ». Le « even from a v2 build » est mesurément
+   > faux. **INC-3 réécrit cette docstring** en même temps qu'il pose l'estampille.
+   >
+   > **Ce qui reste vrai, et ce qui ne l'est pas.** *« La migration estampille ; elle ne valide
+   > pas »* décrit exactement `migrate` — il n'y a rien à corriger là. Ce qui était faux, c'est la
+   > conclusion qu'on en tirait : un document **sous**-estampillé n'est pas refusé, il est
+   > **silencieusement accepté**. Le garde de version protège contre un document écrit par un build
+   > **plus récent** (contrat 3) ; il ne protège contre rien en sens inverse, et il n'a jamais été
+   > conçu pour — c'est un garde de **stamp**, pas de contenu.
+   >
+   > **Pourquoi on garde ce pipeline** (tranché le 2026-08-15) : valider chaque document contre le
+   > schéma de **son** estampille exigerait de figer et de conserver un schéma par version passée,
+   > à perpétuité — exactement le coût que la chaîne pas-à-pas existe pour éviter, et que
+   > `migrate.ts:88` énonce comme contrat (« *validation is `parseTemplate`'s job, because a
+   > mid-chain document is not expected to satisfy the current schema* »). C'est un lot à soi seul,
+   > pas une ligne de C2.
+   >
+   > **Et le refus par `ZodError` garde un contrat, ailleurs :** un document estampillé à la version
+   > **courante** portant un `kind` **inconnu** est bien refusé par Zod. C'est ce test-là qui prouve
+   > que l'union discriminée mord, et il ne dépend d'aucune estampille.
 6. **La forme reste bornée après migration** — `migrate.test.ts:56-79` couvre déjà le mécanisme
    générique ; rien de neuf, l'identité ne change ni profondeur ni compte de valeurs. **Aucun
    rétrécissement à retrofitter** : aucun document v2 ne peut porter un champ `decimals`.
@@ -2091,10 +2343,15 @@ montants, trois totaux, et **l'écart d'un centime nommé**. C'est la seule mise
 ### 6.4 Définition de fini — critères vérifiables mécaniquement
 
 - `git grep -l "case 'round':" -- packages/core/src | wc -l` rend **2** (`evaluate.ts`, `paths.ts`) ;
-  toute autre valeur signale soit un parcours oublié, soit un troisième parcours qui rouvre **D11**.
+  toute autre valeur signale soit un parcours oublié, soit un troisième parcours, qui est le **seuil
+  de retrait de l'amendement D11** — le critère ne consigne donc pas une exception, il surveille sa
+  condition de validité.
   *(La forme `git grep -c` était fausse : elle imprime une ligne `fichier:compte` par fichier
   apparié, jamais l'entier — un critère « vérifiable mécaniquement » dont on ne peut pas comparer la
-  sortie à la valeur annoncée n'en est pas un.)*
+  sortie à la valeur annoncée n'en est pas un. La forme ci-dessus, elle, est **jouée** : sur le kind
+  homologue, `git grep -l "case 'aggregate':" -- packages/core/src | wc -l` rend `2`. `wc` est
+  fourni par Git Bash, que le dépôt suppose déjà pour ses quatre portes ; sous PowerShell, l'équivalent
+  est `(git grep -l "case 'round':" -- packages/core/src | Measure-Object -Line).Lines`.)*
 - `git grep -n "10 \*\* \|Math.pow\|toFixed\|toLocale" -- packages/core/src/expression/evaluator/operations/round.ts`
   ne rend **rien**.
 - `git grep -n "declaredScaleOf\|Template.rounding\|precision?" -- packages/core/src` ne rend
@@ -2119,6 +2376,17 @@ montants, trois totaux, et **l'écart d'un centime nommé**. C'est la seule mise
 - La docstring de `PercentOfExpression` ne contient plus « in lot C2 », et `guards.ts` ne contient
   plus « the algebra has no rounding of its own ».
 - L'ADR 0004 existe, est en 🟢, et couvre les douze points de la liste d'INC-5.
+- **`AGENTS.md` §3.B porte l'amendement de D11**, dans un commit `chore(governance)` **séparé** de
+  celui de l'ADR, et l'ADR 0004 le cite. `git log --oneline -- AGENTS.md` montre **une** entrée
+  nouvelle pour ce lot, pas zéro et pas deux.
+- **Aucun `it` de `round.test.ts` n'appelle `Math.random`** — la machine le dit
+  (`noJsRestrictedProperties`, `biome.jsonc:218`, porte 1) — **et le PRNG de la [§5.2] porte sa
+  graine en clair** : rejouer un `it` seul par `-t` doit produire exactement les mêmes cas que dans
+  la suite complète, ce qui se vérifie en comparant deux exécutions.
+- **`git grep -n "even from a v2 build" -- packages/core/src` ne rend rien** : la docstring fausse de
+  `migrate.ts:50-52` a été réécrite par INC-3 ([§5.4], contrat 5).
+- **`git grep -n "createBudget" -- apps/playground/src` rend trois occurrences**, une par modèle
+  (INC-4) — un budget vaut pour un document, pas pour une page.
 
 ---
 
@@ -2202,7 +2470,9 @@ c'est l'option qui se rejoue. **Les deux se disent, aucun des deux ne se fait en
 
 ## 9. Ce que ce plan tient pour acquis
 
-**Six hypothèses. Si l'une est fausse, le plan change — une pièce nommée, pas le lot.**
+**Huit hypothèses. Si l'une est fausse, le plan change — une pièce nommée, pas le lot.** Les deux
+dernières ont été ajoutées le 2026-08-15 : elles n'étaient pas fausses, elles étaient **tacites**, et
+c'est ce qui a laissé passer un test qui ne pouvait pas passer et une preuve qui ne tenait pas.
 
 1. **Le projet est toujours en pré-v1.0, et aucun template client n'existe en stockage.**
    *Vérifié :* `git tag` ne rend rien ; aucun workflow de publication (`.github/workflows/` contient
@@ -2269,3 +2539,26 @@ c'est l'option qui se rejoue. **Les deux se disent, aucun des deux ne se fait en
    construit ce nœud ; un `decimals: 2.5` construit à la main rend `NaN` à la reconstruction et lève
    donc `not-finite` plutôt que d'imprimer un nombre faux — **vérifié**, un message imparfait pour
    une entrée impossible, ce qui est la bonne dégradation.
+
+7. **`parseTemplate` valide au schéma COURANT, après la chaîne de migrations, jamais au schéma de
+   l'estampille lue.**
+   *Vérifié à l'exécution* par une sonde jetable : un document estampillé `1` portant un kind C1 rend
+   `ACCEPTED, schemaVersion=2`. Le contrat est écrit en `migrate.ts:88` (« *validation is
+   `parseTemplate`'s job, because a mid-chain document is not expected to satisfy the current
+   schema* ») et le corps le confirme (`migrate.ts:165-170`).
+   *Ce qui repose dessus :* le contrat 5 de la [§5.4], **qui est un test d'acceptation pour cette
+   raison et pour aucune autre**, et la docstring qu'INC-3 réécrit.
+   *Si elle tombe* — le jour où un lot introduirait une validation par version avant migration —
+   *ce contrat redevient un test négatif*, et c'est la seule pièce à rejouer. Ce n'est pas un travail
+   de C2 : il exige de figer et de conserver un schéma par version passée, à perpétuité.
+
+8. **Cette hypothèse-ci, Openview n'a PAS le droit de la faire : que les montants d'un modèle soient
+   de même signe.**
+   Elle est listée parce qu'une version antérieure de D7 la faisait **sans le dire** — sa preuve
+   lisait la borne sur le total final, ce qui n'est vrai que sous elle, et sa loi de tirage
+   n'engendrait que des montants positifs. Un avoir, une remise, une régularisation la réfutent, et
+   la règle de périmètre interdit d'attendre quoi que ce soit de la forme de la donnée
+   (AGENTS.md, « Ce qu'Openview n'est pas »).
+   *Ce qui en découle, et qui est déjà intégré :* la borne prouvée se lit sur `Σ|montants|` et non
+   sur `T` ([§2, D7]) ; la table de paliers porte sa restriction avec elle ; et **aucune promesse
+   faite à l'auteur d'un modèle ne doit être formulée sur le total**.
