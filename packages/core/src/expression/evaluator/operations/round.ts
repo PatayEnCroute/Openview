@@ -94,13 +94,17 @@ function keptDigits(digits: string, drop: number, mode: RoundMode): string {
  * modes -- with ZERO divergence. Idempotent, monotone, finite on every finite input, and a
  * negative zero cannot come out of it by the structure of the code rather than by a patch.
  *
- * Cost, Node 24.11.1, 200 000 warm-up iterations then 2 000 000 calls on pre-drawn values:
- * ~1.52 us on 17-digit values, ~1.23 us on a realistic invoice mix, against ~50 ns for a
- * multiplication. Three other machines measured between 0.8x and 3.2x those two figures --
- * in BOTH directions -- so the one to carry forward is a RANGE: a `round` node costs one to
- * two orders of magnitude more wall time than an arithmetic node while spending the SAME
- * single step of the budget. Not a bound problem -- the bound counts steps -- but lot E8
- * needs it before it sizes a worker timeout.
+ * Cost -- and the ABSOLUTE figures do not travel, which is why the statement below is a
+ * ratio. Protocol: Node 24.11.1, 200 000 warm-up iterations then 2 000 000 calls on
+ * pre-drawn values with a sum sink. Five machines have now been measured and they span
+ * 378 ns to 4 838 ns on 17-digit values and 118 ns to 1 467 ns on a realistic invoice mix
+ * -- a factor of TWELVE, in both directions around the reference of ADR 0004. Quoting one
+ * of them as "the" cost would mislead whoever sizes a timeout against it.
+ *
+ * What holds across all five, and what lot E8 actually needs: a `round` node costs
+ * **21x to 110x** an arithmetic node in wall time -- one to two orders of magnitude --
+ * while spending the SAME single step of the budget. Not a bound problem, since the bound
+ * counts steps; a worker-timeout problem.
  */
 export function roundDecimal(value: number, decimals: number, mode: RoundMode): number {
   // A non-finite input leaves UNCHANGED, and this guard is load-bearing rather than
