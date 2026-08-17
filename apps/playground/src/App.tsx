@@ -21,7 +21,13 @@ import {
   type RoundExpression,
   RoundExpressionSchema,
   type RoundMode,
+  type TableCell,
+  type TableColumn,
+  type TableColumnAlignment,
+  type TableNode,
+  type TableRowNode,
   type Template,
+  type TextNode,
   type TextSegment,
   visitSegment,
   walk,
@@ -143,6 +149,13 @@ const lignesRemisees: PrintableExpression = {
   },
 };
 
+/** Un bloc texte d'un seul segment littéral — un intitulé de colonne, un libellé de total. */
+const txt = (id: string, text: string): TextNode => ({
+  type: 'text',
+  id,
+  content: [{ kind: 'literal', text }],
+});
+
 /** Explicit stringification: `concat` refuses a number, and `text()` is where one becomes text. */
 const titre: PrintableExpression = {
   kind: 'concat',
@@ -170,32 +183,147 @@ const sampleTemplate = parseTemplate({
     id: 'root',
     children: [
       { type: 'text', id: 'title', content: [{ kind: 'binding', value: titre }] },
+      // Les cinq identifiants de colonne ci-dessous — `sku`, `quantite`, `prixUnitaire`,
+      // `montant`, `remise` — appellent le même avertissement que les noms de champs plus
+      // haut, adapté : ce sont un JEU D'ÉPREUVE, choisis par l'auteur du modèle. Openview
+      // n'impose aucun identifiant de colonne, et le premier tableau réellement décrit est
+      // celui qui sera recopié — le dépôt nomme déjà ce mécanisme, « position par défaut de
+      // fait ». Un relevé bancaire ou un bordereau se décrivent avec un tout autre
+      // vocabulaire, et le contrat est le même.
+      //
+      // Avant le lot C3, une ligne entière de facture était UN SEUL nœud texte dont les
+      // segments mimaient des colonnes (`line-label`). Rien ne disait qu'il y avait des
+      // colonnes, aucune largeur, aucun alignement, et l'en-tête n'existait pas.
       {
-        type: 'loop',
-        id: 'lines',
-        each: { kind: 'path', path: 'commande.lignes' },
-        as: 'line',
-        children: [
+        type: 'table',
+        id: 'lignes',
+        columns: [
+          { id: 'sku', width: 6, align: 'start' },
+          { id: 'quantite', width: 2, align: 'end' },
+          { id: 'prixUnitaire', width: 3, align: 'end' },
+          { id: 'montant', width: 3, align: 'end' },
+          { id: 'remise', width: 4, align: 'start' },
+        ],
+        header: [
           {
-            type: 'text',
-            id: 'line-label',
-            content: [
-              { kind: 'binding', value: { kind: 'path', path: 'line.sku' } },
-              { kind: 'literal', text: ' — montant ' },
-              { kind: 'binding', value: lineAmount },
-              { kind: 'literal', text: ' — remise ' },
-              { kind: 'binding', value: { kind: 'path', path: 'line.discount' } },
+            type: 'tableRow',
+            id: 'entete',
+            cells: [
+              { columnId: 'sku', children: [txt('th-sku', 'Référence')] },
+              { columnId: 'quantite', children: [txt('th-quantite', 'Qté')] },
+              { columnId: 'prixUnitaire', children: [txt('th-prix', 'Prix unitaire')] },
+              { columnId: 'montant', children: [txt('th-montant', 'Montant')] },
+              { columnId: 'remise', children: [txt('th-remise', 'Remise')] },
             ],
           },
+        ],
+        body: [
           {
-            type: 'condition',
-            id: 'discounted',
-            when: discountApplies,
-            children: [
+            type: 'tableRowGroup',
+            id: 'corps',
+            each: { kind: 'path', path: 'commande.lignes' },
+            as: 'line',
+            rows: [
               {
-                type: 'text',
-                id: 'discount-note',
-                content: [{ kind: 'literal', text: 'Remise appliquée' }],
+                type: 'tableRow',
+                id: 'ligne-detail',
+                cells: [
+                  {
+                    columnId: 'sku',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'td-sku',
+                        content: [{ kind: 'binding', value: { kind: 'path', path: 'line.sku' } }],
+                      },
+                    ],
+                  },
+                  {
+                    columnId: 'quantite',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'td-quantite',
+                        content: [
+                          { kind: 'binding', value: { kind: 'path', path: 'line.quantite' } },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    columnId: 'prixUnitaire',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'td-prix',
+                        content: [
+                          { kind: 'binding', value: { kind: 'path', path: 'line.prixUnitaire' } },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    columnId: 'montant',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'td-montant',
+                        content: [{ kind: 'binding', value: lineAmount }],
+                      },
+                    ],
+                  },
+                  // Une cellule contient des BLOCS, pas des segments : la condition qui
+                  // portait la note de remise vit désormais DANS la cellule, et le parcours
+                  // l'atteint quand même — `childrenOf` aplatit la frontière de cellule.
+                  {
+                    columnId: 'remise',
+                    children: [
+                      {
+                        type: 'condition',
+                        id: 'discounted',
+                        when: discountApplies,
+                        children: [
+                          {
+                            type: 'text',
+                            id: 'discount-note',
+                            content: [
+                              { kind: 'literal', text: 'Remise appliquée : ' },
+                              {
+                                kind: 'binding',
+                                value: { kind: 'path', path: 'line.discount' },
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        footer: [
+          // UNE LIGNE COURTE : deux cellules pour cinq colonnes. Licite par construction, et
+          // c'est exactement la forme d'une ligne de total — l'appariement positionnel que ce
+          // contrat a refusé aurait exigé trois cellules de remplissage vides ici.
+          //
+          // Le total est une EXPRESSION DU MODÈLE, visible dans l'arbre. Le tableau ne somme
+          // rien : son `footer` n'a nulle part où poser un agrégat.
+          {
+            type: 'tableRow',
+            id: 'ligne-total',
+            cells: [
+              { columnId: 'sku', children: [txt('tf-libelle', 'Total HT')] },
+              {
+                columnId: 'montant',
+                children: [
+                  {
+                    type: 'text',
+                    id: 'tf-montant',
+                    content: [{ kind: 'binding', value: totalHT }],
+                  },
+                ],
               },
             ],
           },
@@ -338,17 +466,33 @@ function requireTextNode(root: DocumentNode, id: string): readonly TextSegment[]
   return node.content;
 }
 
+/**
+ * La même discipline, pour un tableau — et le TYPE DE RETOUR compte.
+ *
+ * Un `const` module dont on rétrécit le type par un `if` ne reste pas rétréci dans le corps
+ * du composant : une fermeture ne porte pas le flux de contrôle du module. Une fonction qui
+ * rend `TableNode` le fait, elle.
+ */
+function requireTableNode(root: DocumentNode, id: string): TableNode {
+  const node = requireNode(root, id);
+  if (node.type !== 'table') {
+    throw new Error(`« ${id} » devrait être un tableau, pas un ${node.type}.`);
+  }
+  return node;
+}
+
 const nodeIds = [...walk(sampleTemplate.root)].map((node) => `${node.id} (${node.type})`);
 const dataPaths = collectDataPaths(sampleTemplate.root);
 
-// Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de boucle,
-// la condition sur le nœud de condition. Les expressions déclarées plus haut ne
-// servent qu'à construire le template ; l'évaluation ci-dessous n'y touche pas.
-const loopNode = requireNode(sampleTemplate.root, 'lines');
-if (loopNode.type !== 'loop') {
-  throw new Error(`« lines » devrait être une boucle, pas un ${loopNode.type}.`);
-}
-
+// Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de groupe, la
+// condition sur le nœud de condition. Les expressions déclarées plus haut ne servent qu'à
+// construire le template ; l'évaluation ci-dessous n'y touche pas.
+//
+// Ce `requireNode` vaut une démonstration à lui seul : `discounted` vit désormais DANS une
+// cellule du tableau, et `findNodeById` l'atteint quand même. `childrenOf` aplatit la
+// frontière de cellule, donc rien de ce qu'un tableau contient n'est invisible au parcours —
+// un sous-arbre que le parcours ne rendrait pas serait invisible à `walk`, à `findNodeById` et
+// à `collectDataPaths` SANS erreur nulle part.
 const conditionNode = requireNode(sampleTemplate.root, 'discounted');
 if (conditionNode.type !== 'condition') {
   throw new Error(`« discounted » devrait être une condition, pas un ${conditionNode.type}.`);
@@ -364,16 +508,106 @@ const countSegments = rawSegments(
   budgetFacture,
 );
 
-const lineLabelContent = requireTextNode(root, 'line-label');
-const lineRows = evaluateSequence(loopNode.each, renderData, { budget: budgetFacture }).map(
-  (item) => {
-    const lineScope = childScope(renderData, loopNode.as, item);
-    return {
-      label: rawSegments(lineLabelContent, lineScope, budgetFacture).join(' + '),
-      discounted: evaluatePredicate(conditionNode.when, lineScope, { budget: budgetFacture }),
-    };
-  },
-);
+/* ------------------------------------------------------------------------------------- *
+ * La section facture, décrite par un vrai tableau
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * Une part de largeur, `width / Σ width`, en pourcentage.
+ *
+ * Le poids est un ENTIER, donc la somme est exacte en binary64 et la part est UNE division
+ * correctement arrondie — le même nombre à l'écran et dans le PDF. C3 ne déclare nulle part
+ * la largeur du tableau lui-même : seul le RAPPORT inter-colonnes est déclaré, et c'est le
+ * conteneur qui donne la largeur.
+ */
+function partsDeLargeur(columns: readonly TableColumn[]): readonly string[] {
+  const total = columns.reduce((somme, column) => somme + column.width, 0);
+  return columns.map((column) => `${((column.width / total) * 100).toFixed(2)}%`);
+}
+
+/** `start | center | end` se traduisent sans information supplémentaire. C'est le point. */
+const alignementCss = (align: TableColumnAlignment): 'start' | 'center' | 'end' => align;
+
+/**
+ * Ce qu'une cellule affiche, dans la portée qu'on lui donne.
+ *
+ * Une cellule contient des BLOCS : un texte rend ses segments, une condition rend ses enfants
+ * si son prédicat est strictement vrai. Tout autre bloc est hors de cette démonstration et le
+ * dit plutôt que de rendre du vide — le playground ne dégrade pas.
+ */
+function texteDeCellule(cell: TableCell, scope: EvaluationScope, budget: EvaluationBudget): string {
+  return cell.children
+    .map((block) => {
+      if (block.type === 'text') {
+        return rawSegments(block.content, scope, budget).join(' ');
+      }
+      if (block.type === 'condition') {
+        if (!evaluatePredicate(block.when, scope, { budget })) {
+          return '';
+        }
+        return block.children
+          .map((child) =>
+            child.type === 'text' ? rawSegments(child.content, scope, budget).join(' ') : '',
+          )
+          .join(' ');
+      }
+      throw new Error(`Bloc « ${block.type} » hors de la démonstration de la section facture.`);
+    })
+    .filter((text) => text !== '')
+    .join(' ');
+}
+
+/** Une ligne prête à afficher : une case par colonne déclarée, vide là où la ligne est courte. */
+function casesDeLigne(
+  row: TableRowNode,
+  columns: readonly TableColumn[],
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+): readonly string[] {
+  // La cellule NOMME sa colonne : on cherche par `columnId`, jamais par position. C'est ce qui
+  // rend une ligne courte naturelle au lieu d'une suite de remplissages.
+  return columns.map((column) => {
+    const cell = row.cells.find((candidate) => candidate.columnId === column.id);
+    return cell === undefined ? '' : texteDeCellule(cell, scope, budget);
+  });
+}
+
+const tableauLignes = requireTableNode(root, 'lignes');
+const largeurs = partsDeLargeur(tableauLignes.columns);
+
+const lignesEntete = tableauLignes.header.map((row) => ({
+  id: row.id,
+  cases: casesDeLigne(row, tableauLignes.columns, renderData, budgetFacture),
+}));
+
+// Le corps : une portée dérivée par élément, exactement comme une boucle, et l'alias est
+// déclaré par le GROUPE. L'en-tête et le pied ne le voient pas — c'est la raison pour laquelle
+// la répétition vit sur `tableRowGroup` et non sur le tableau.
+const lignesCorps = tableauLignes.body.flatMap((entry) => {
+  if (entry.type === 'tableRow') {
+    return [
+      {
+        id: entry.id,
+        cases: casesDeLigne(entry, tableauLignes.columns, renderData, budgetFacture),
+      },
+    ];
+  }
+  return evaluateSequence(entry.each, renderData, {
+    budget: budgetFacture,
+    caller: 'tableRowGroup',
+  }).flatMap((item) => {
+    const itemScope = childScope(renderData, entry.as, item);
+    return entry.rows.map((row) => ({
+      id: row.id,
+      cases: casesDeLigne(row, tableauLignes.columns, itemScope, budgetFacture),
+    }));
+  });
+});
+
+const lignesPied = tableauLignes.footer.map((row) => ({
+  id: row.id,
+  cases: casesDeLigne(row, tableauLignes.columns, renderData, budgetFacture),
+}));
 
 /* ------------------------------------------------------------------------------------- *
  * Trois modèles, un jeu de données, trois totaux
@@ -750,6 +984,15 @@ const cellStyle = {
 /** L'écart d'un centime se lit sur cette ligne : elle est mise en évidence pour cela. */
 const totalCellStyle = { ...cellStyle, background: '#f0f6ff', fontWeight: 'bold' } as const;
 
+/**
+ * Le pied du tableau de lignes, et il ne réutilise PAS `totalCellStyle`.
+ *
+ * Celui-ci existe pour une raison nommée — « l'écart d'un centime se lit sur cette ligne » —
+ * et l'emprunter pour une ligne de total ordinaire rendrait ce commentaire faux. Deux raisons,
+ * deux constantes.
+ */
+const pieceDePiedStyle = { ...cellStyle, fontWeight: 'bold' } as const;
+
 export default function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '2rem' }}>
@@ -769,10 +1012,12 @@ export default function App() {
       <h2>Données requises (analyse statique des expressions)</h2>
       <p>
         Aucun alias n'y figure : <code>line</code> est déclaré par le template, qu'il soit lié par
-        la boucle, par l'agrégat ou par le filtre. Les autres chemins sont les noms choisis par
-        l'application intégratrice — c'est la liste que le moteur <em>rend</em> à l'appelant, pas
-        une liste qu'il lui <em>impose</em>. Remarquez qu'<code>traitement.effectueLe</code> y
-        figure comme n'importe quelle autre clé : « aujourd'hui » est une donnée, pas une horloge.
+        le groupe de lignes du tableau, par l'agrégat ou par le filtre — <strong>quatre</strong>{' '}
+        sites d'alias depuis le lot C3, et le quatrième ne fuit pas plus que les trois autres. Les
+        autres chemins sont les noms choisis par l'application intégratrice — c'est la liste que le
+        moteur <em>rend</em> à l'appelant, pas une liste qu'il lui <em>impose</em>. Remarquez qu'
+        <code>traitement.effectueLe</code> y figure comme n'importe quelle autre clé : « aujourd'hui
+        » est une donnée, pas une horloge.
       </p>
       <ul>
         {dataPaths.map((dataPath) => (
@@ -787,26 +1032,89 @@ export default function App() {
         <code>{titleSegments.join(' + ')}</code>
       </p>
 
-      <h2>Boucle : une portée dérivée par élément, et un montant calculé</h2>
+      <h2>Tableau de lignes : trois sections nommées, et rien de deviné</h2>
+      <p>
+        Le <code>&lt;table&gt;</code> ci-dessous est <strong>intégralement dérivé</strong> du nœud{' '}
+        <code>table</code> du modèle validé : le <code>&lt;thead&gt;</code> depuis{' '}
+        <code>header</code>, le <code>&lt;tbody&gt;</code> depuis <code>body</code>, le{' '}
+        <code>&lt;tfoot&gt;</code> depuis <code>footer</code>, les largeurs en{' '}
+        <code>width / Σ width</code> et les alignements lus sur <code>align</code>. Aucune cellule
+        n'est écrite à la main, et <em>aucune information n'est inventée en chemin</em> — c'est
+        exactement ce que cette démonstration doit prouver, et qu'aucun test de <code>core</code> ne
+        peut prouver, puisque <code>core</code> ne rend rien.
+      </p>
       <p>
         Aucun montant de ligne n'est fourni par le jeu de données : chacun est le produit d'une
-        quantité par un prix unitaire, calculé par le modèle.
+        quantité par un prix unitaire, calculé par le modèle. La dernière ligne est une{' '}
+        <strong>ligne courte</strong> — deux cellules pour cinq colonnes — et son total est une{' '}
+        <em>expression du modèle</em>, pas une somme que le tableau saurait faire : son{' '}
+        <code>footer</code> n'a nulle part où poser un agrégat.
       </p>
-      <ol>
-        {/*
-          Les lignes d'une boucle sont positionnelles : elles ne sont jamais
-          réordonnées, et deux lignes de facture identiques doivent rester deux
-          entrées distinctes. L'index est donc ici la clé juste — une clé dérivée du
-          contenu les confondrait, et la composer avec l'index ne fait que sortir du
-          champ de vision de la règle sans la satisfaire.
-        */}
-        {lineRows.map((row, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
-          <li key={index /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
-            <code>{row.label}</code> — remise {row.discounted ? 'appliquée' : 'absente'}
-          </li>
-        ))}
-      </ol>
+      <table style={tableStyle}>
+        <colgroup>
+          {tableauLignes.columns.map((column, index) => (
+            <col key={column.id} style={{ width: largeurs[index] }} />
+          ))}
+        </colgroup>
+        <thead>
+          {lignesEntete.map((row) => (
+            <tr key={row.id}>
+              {row.cases.map((texte, index) => (
+                <th
+                  key={tableauLignes.columns[index]?.id ?? index}
+                  style={{
+                    ...cellStyle,
+                    textAlign: alignementCss(tableauLignes.columns[index]?.align ?? 'start'),
+                  }}
+                >
+                  {texte}
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {/*
+            Une clé de ligne est positionnelle par nature : les lignes ne sont jamais
+            réordonnées, deux lignes de facture identiques doivent rester deux entrées
+            distinctes, et une clé dérivée du contenu les confondrait. La composer avec
+            l'index ne ferait que sortir du champ de vision de la règle sans la satisfaire.
+          */}
+          {lignesCorps.map((row, rowIndex) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
+            <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
+              {row.cases.map((texte, index) => (
+                <td
+                  key={tableauLignes.columns[index]?.id ?? index}
+                  style={{
+                    ...cellStyle,
+                    textAlign: alignementCss(tableauLignes.columns[index]?.align ?? 'start'),
+                  }}
+                >
+                  {texte}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          {lignesPied.map((row) => (
+            <tr key={row.id}>
+              {row.cases.map((texte, index) => (
+                <td
+                  key={tableauLignes.columns[index]?.id ?? index}
+                  style={{
+                    ...pieceDePiedStyle,
+                    textAlign: alignementCss(tableauLignes.columns[index]?.align ?? 'start'),
+                  }}
+                >
+                  {texte}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tfoot>
+      </table>
 
       <h2>Les quatre montants, tous calculés par le modèle</h2>
       <p>
