@@ -4,6 +4,7 @@ import { ExpressionSchema } from '../expression/expression.js';
 import {
   assertBoundedShape,
   DEFAULT_SHAPE_LIMITS,
+  parseBlockNode,
   parseDocumentNode,
   parseExpression,
   resolveShapeLimits,
@@ -253,5 +254,26 @@ describe('the bounded entry points', () => {
   it('refuses a malformed expression after the shape passes', () => {
     expect(() => parseExpression({ kind: 'path', path: '1nope' })).toThrow();
     expect(() => parseDocumentNode({ type: 'barcode', id: 'b' })).toThrow();
+  });
+
+  it('parses a block node, and the two node doors differ on a bare row', () => {
+    // `parseBlockNode`'s SUCCESS path had no test at all: its only caller passed a
+    // 5 000-deep payload, which `assertBoundedShape` refuses first, so `BlockNodeSchema.parse`
+    // never ran. A `DocumentNodeSchema.parse` there -- a plausible copy-paste from the sibling
+    // three lines above -- would have made the block-only door accept a bare row with all four
+    // gates green. That is what the first assertion here exists for.
+    expect(parseBlockNode({ type: 'text', id: 't', content: [] })).toStrictEqual({
+      type: 'text',
+      id: 't',
+      content: [],
+    });
+
+    // And the difference lot C3 introduced between the two doors, pinned at the doors
+    // themselves rather than left to a docstring: `parseDocumentNode` WIDENED to the whole
+    // eight-member union, so it takes a bare row that no block flow will accept.
+    const bareRow = { type: 'tableRow', id: 'r', cells: [] };
+
+    expect(parseDocumentNode(bareRow)).toStrictEqual(bareRow);
+    expect(() => parseBlockNode(bareRow)).toThrow();
   });
 });

@@ -265,13 +265,31 @@ export function parseExpression(raw: unknown, limits?: Partial<ShapeLimits>): Ex
   return ExpressionSchema.parse(raw);
 }
 
-/** Parses a standalone document node WHILE BOUNDING IT. See {@link parseExpression}. */
+/**
+ * Parses a standalone document node WHILE BOUNDING IT. See {@link parseExpression}.
+ *
+ * **Lot C3 WIDENED what this accepts, and a caller written before it should be re-read.** It
+ * now takes any of the eight node types, `tableRow` and `tableRowGroup` included, because
+ * `DocumentNodeSchema` is the whole union. Until C3 there was one node union, so this door also
+ * happened to answer "may this stand in a container's children" -- and it no longer does.
+ *
+ * That question is now {@link parseBlockNode}. A caller that parses something it intends to
+ * INSERT into a block flow -- a paste handler, an import, a Designer validating a subtree --
+ * wants that one: a bare row parses here and is then refused by `parseTemplate` on save, on a
+ * path like `root.children.2.type`, far from the code that accepted it.
+ */
 export function parseDocumentNode(raw: unknown, limits?: Partial<ShapeLimits>): DocumentNode {
   assertBoundedShape(raw, limits);
   return DocumentNodeSchema.parse(raw);
 }
 
-/** Parses a standalone BLOCK node WHILE BOUNDING IT. See {@link parseExpression}. */
+/**
+ * Parses a standalone BLOCK node WHILE BOUNDING IT. See {@link parseExpression}.
+ *
+ * The door for anything destined for a BLOCK FLOW, and therefore the one that refuses a bare
+ * `tableRow` or `tableRowGroup` -- see {@link parseDocumentNode} for why the distinction has to
+ * be made by choosing a function rather than by reading a docstring.
+ */
 export function parseBlockNode(raw: unknown, limits?: Partial<ShapeLimits>): BlockNode {
   assertBoundedShape(raw, limits);
   return BlockNodeSchema.parse(raw);

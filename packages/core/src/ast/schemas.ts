@@ -95,6 +95,17 @@ export const BlockNodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
  * Every node type, rows included. A row is only ever reached through its table when a
  * template is parsed; this union exists for `parseDocumentNode`, for a Designer validating a
  * subtree it holds in hand, and so `DocumentNode` has one schema.
+ *
+ * **`.parse` on this schema bounds nothing**, exactly as on {@link BlockNodeSchema}: it is
+ * `z.lazy` and recursive, so a deep enough payload raises a bare `RangeError` from Zod's own
+ * recursion rather than a typed refusal. Use `parseDocumentNode` from `template/guard.ts` for
+ * the bounded door. The warning has to be repeated here rather than left on the sibling union:
+ * the sentence above invites a Designer to parse a subtree it holds in hand, which is the very
+ * call that overflows, and every other unbounded schema in this package carries the same note.
+ *
+ * **And this union is WIDER than a block flow.** It accepts a bare `tableRow` or
+ * `tableRowGroup` at top level, which no container, loop, condition or cell will take. A
+ * consumer validating something it intends to insert into a block flow wants `parseBlockNode`.
  */
 export const DocumentNodeSchema: z.ZodType<DocumentNode> = z.lazy(() =>
   z.discriminatedUnion('type', [...blockMembers(), ...rowMembers()]),
@@ -215,6 +226,10 @@ function checkCells(
 
 function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   const declared = new Set<string>();
+  // The general rule, and it is deliberately NOT "the set is empty": the rows are walked only
+  // when the COLUMN LIST ITSELF is sound. Any fault under `columns` makes every cell of the
+  // table look like an orphan, so reporting them would bury the one fault the author has to fix.
+  let columnsAreSound = table.columns.length > 0;
   for (const [index, column] of table.columns.entries()) {
     if (declared.has(column.id)) {
       ctx.addIssue({
@@ -223,16 +238,25 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
         message:
           'Two columns of this table share an id. A cell names its column, so the ids have to be unique within a table.',
       });
+      columnsAreSound = false;
+    }
+    // An empty id was already refused by the field schema, but `too_small` is CONTINUABLE, so
+    // the column still arrives here carrying `''` and would silently "declare" that name.
+    if (column.id === '') {
+      columnsAreSound = false;
     }
     declared.add(column.id);
   }
 
-  if (declared.size === 0) {
-    // `columns.min(1)` has already named the one fault -- and it does NOT stop this function
-    // from running, because `too_small` is a continuable issue in zod 4. Walking the rows now
-    // would report every cell in the table as an orphan and bury that one fault: measured, 13
-    // issues instead of 1 on a twelve-cell table. An author who forgot to declare the columns
-    // has ONE thing to fix, and lot C8 has to say it once.
+  if (!columnsAreSound) {
+    // Whatever is wrong with the column list has already been named -- by `columns.min(1)`, by
+    // the `id` bound, or by the uniqueness check above -- and NONE of those stops this function
+    // from running, because `too_small` and `custom` are continuable issues in zod 4.
+    //
+    // Measured, on the twelve-cell recipe table: walking the rows anyway yields 13 issues
+    // instead of 1 for `columns: []`, and 13 instead of 1 for a single column whose `id` is the
+    // empty string. An author who has one thing to fix must be told once, and lot C8 has to be
+    // able to say it once.
     return;
   }
 
@@ -247,8 +271,13 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
     //
     // What holds this branch to the union is NOT this line: measured, a third member carrying
     // `rows: readonly TableRowNode[]` compiles here at exit 0 and is silently absorbed by the
-    // `else`. `TABLE_BODY_MEMBERS_IN_STEP` in `ast/__tests__/nodes.test.ts` is what fails to
-    // compile the day the union gains any third member at all.
+    // `else`.
+    //
+    // Two assertions in `ast/__tests__/nodes.test.ts` cover the two directions, and neither
+    // covers the other -- an earlier version of this comment credited the first with both.
+    // `TABLE_BODY_MEMBERS_IN_STEP` fails to compile the day the TYPE union gains a third
+    // member; `TABLE_BODY_SCHEMA_IN_STEP` fails the day `rowMembers()` loses one, which is a
+    // change this file can make on its own and which no type gate would otherwise see.
     if (entry.type === 'tableRow') {
       checkCells(entry.cells, declared, ['body', index], ctx);
     } else {

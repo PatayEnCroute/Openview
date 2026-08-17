@@ -1,4 +1,5 @@
 import {
+  type BlockNode,
   CURRENT_SCHEMA_VERSION,
   childScope,
   collectDataPaths,
@@ -23,12 +24,12 @@ import {
   type RoundMode,
   type TableCell,
   type TableColumn,
-  type TableColumnAlignment,
   type TableNode,
   type TableRowNode,
   type Template,
   type TextNode,
   type TextSegment,
+  visitNode,
   visitSegment,
   walk,
 } from '@openview/core';
@@ -519,56 +520,125 @@ const countSegments = rawSegments(
  * correctement arrondie — le même nombre à l'écran et dans le PDF. C3 ne déclare nulle part
  * la largeur du tableau lui-même : seul le RAPPORT inter-colonnes est déclaré, et c'est le
  * conteneur qui donne la largeur.
+ *
+ * **Aucun second arrondi ici, et c'est le point.** Un `.toFixed(2)` appliqué à la part
+ * détruirait l'exactitude que le poids entier existe pour donner : trois colonnes de poids 1
+ * rendraient `33.33 % × 3 = 99.99 %`, et une colonne légale de poids 1 à côté de vingt et une
+ * de poids 1 000 rendrait `0.00 %` — une largeur déclarée non nulle affichée à zéro. La
+ * division est émise telle quelle ; c'est au moteur de rendu, et non à ce calcul, de décider
+ * d'une précision d'affichage.
  */
 function partsDeLargeur(columns: readonly TableColumn[]): readonly string[] {
   const total = columns.reduce((somme, column) => somme + column.width, 0);
-  return columns.map((column) => `${((column.width / total) * 100).toFixed(2)}%`);
+  return columns.map((column) => `${(column.width / total) * 100}%`);
 }
 
-/** `start | center | end` se traduisent sans information supplémentaire. C'est le point. */
-const alignementCss = (align: TableColumnAlignment): 'start' | 'center' | 'end' => align;
+/**
+ * Les segments d'un bloc texte, en TEXTE D'AFFICHAGE.
+ *
+ * Distinct de `rawSegments`, et la distinction est la correction d'un vrai défaut : celui-ci
+ * est une sonde de diagnostic qui passe chaque run par `JSON.stringify` et les joint par
+ * ` + `, ce qui est juste dans un `<code>` et faux dans une cellule — l'en-tête rendait
+ * `"Référence"`, guillemets compris, sous une phrase affirmant qu'aucune information n'est
+ * inventée en chemin.
+ *
+ * Les segments d'UN nœud texte sont des runs EN LIGNE : ils se concatènent sans séparateur.
+ * C'est exactement ce que dit la docstring de `TextSegment` — « "Total: " et la valeur
+ * appartiennent à la même ligne » —, et tout séparateur ajouté ici serait inventé.
+ */
+function texteDeSegments(
+  segments: readonly TextSegment[],
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+): string {
+  return segments
+    .map((segment) =>
+      visitSegment(segment, {
+        literal: (literal) => literal.text,
+        binding: (binding) => {
+          const value = evaluateExpression(binding.value, scope, { budget });
+          // Une donnée absente rend une cellule vide. L'ADR 0001 laisse la politique de la
+          // valeur absente ouverte, et une cellule de tableau n'est pas l'endroit où la
+          // trancher : `rawSegments` garde le `(absent)` explicite pour les sections de dump.
+          return value === undefined ? '' : String(value);
+        },
+      }),
+    )
+    .join('');
+}
 
 /**
- * Ce qu'une cellule affiche, dans la portée qu'on lui donne.
+ * Ce qu'un bloc affiche, dans la portée qu'on lui donne.
  *
- * Une cellule contient des BLOCS : un texte rend ses segments, une condition rend ses enfants
- * si son prédicat est strictement vrai. Tout autre bloc est hors de cette démonstration et le
- * dit plutôt que de rendre du vide — le playground ne dégrade pas.
+ * **Le parcours passe par `visitNode`, et les huit branches sont nommées.** C'est la règle
+ * qu'`AGENTS.md` §3.B pose et que ce fichier applique déjà aux segments (`rawSegments`) :
+ * un neuvième type de bloc casse la compilation ICI, à un site unique, au lieu de se
+ * découvrir à l'exécution.
+ *
+ * Aucune branche ne lève et aucune ne rend le vide en silence, et les deux moitiés de cette
+ * phrase ont été des défauts. Un `throw` était atteint depuis la portée de MODULE — les
+ * constantes ci-dessous sont évaluées avant que React existe —, si bien qu'une image dans une
+ * cellule rendait une page BLANCHE plutôt qu'une section dégradée. Et la branche `condition`
+ * rendait `''` pour tout enfant non textuel, exactement ce que la docstring promettait de ne
+ * pas faire. Les trois blocs que cette démonstration ne sait pas mettre en page rendent
+ * désormais un MARQUEUR VISIBLE : ni exception, ni silence.
  */
+function texteDeBloc(block: BlockNode, scope: EvaluationScope, budget: EvaluationBudget): string {
+  const descendre = (blocs: readonly BlockNode[]): string =>
+    blocs
+      .map((enfant) => texteDeBloc(enfant, scope, budget))
+      .filter((texte) => texte !== '')
+      .join(' ');
+
+  return visitNode<string>(block, {
+    text: (texte) => texteDeSegments(texte.content, scope, budget),
+    image: (image) => image.alt ?? `[image ${image.src}]`,
+    container: (conteneur) => descendre(conteneur.children),
+    // Récursive, et c'est la correction : un `container`, une seconde condition ou une image
+    // sous une condition descendent par le même chemin que partout ailleurs.
+    condition: (condition) =>
+      evaluatePredicate(condition.when, scope, { budget }) ? descendre(condition.children) : '',
+    loop: (boucle) => `[loop ${boucle.as} non mis en page par cette démonstration]`,
+    table: (imbrique) => `[tableau imbriqué ${imbrique.id} non mis en page ici]`,
+    tableRow: (ligne) => `[ligne ${ligne.id} hors d'un tableau]`,
+    tableRowGroup: (groupe) => `[groupe ${groupe.id} hors d'un tableau]`,
+  });
+}
+
 function texteDeCellule(cell: TableCell, scope: EvaluationScope, budget: EvaluationBudget): string {
   return cell.children
-    .map((block) => {
-      if (block.type === 'text') {
-        return rawSegments(block.content, scope, budget).join(' ');
-      }
-      if (block.type === 'condition') {
-        if (!evaluatePredicate(block.when, scope, { budget })) {
-          return '';
-        }
-        return block.children
-          .map((child) =>
-            child.type === 'text' ? rawSegments(child.content, scope, budget).join(' ') : '',
-          )
-          .join(' ');
-      }
-      throw new Error(`Bloc « ${block.type} » hors de la démonstration de la section facture.`);
-    })
+    .map((block) => texteDeBloc(block, scope, budget))
     .filter((text) => text !== '')
     .join(' ');
 }
 
-/** Une ligne prête à afficher : une case par colonne déclarée, vide là où la ligne est courte. */
+/** Une case prête à afficher : sa COLONNE et son texte, appariés une seule fois. */
+interface CaseAffichee {
+  readonly column: TableColumn;
+  readonly texte: string;
+}
+
+/**
+ * Une ligne prête à afficher : une case par colonne déclarée, vide là où la ligne est courte.
+ *
+ * Rend la **colonne avec son texte** plutôt qu'un texte seul, et ce n'est pas une commodité :
+ * en ne rendant que des chaînes, l'affichage devait retrouver la colonne PAR POSITION —
+ * `columns[index]?.align ?? 'start'`, six fois — c'est-à-dire recroiser deux tableaux par
+ * index, exactement ce que la docstring de `TableCell` dit que l'appariement par clé a
+ * supprimé. Le `?? 'start'` inventait de surcroît un alignement que le modèle n'a pas déclaré,
+ * dans une section qui affirme que rien n'est inventé en chemin.
+ */
 function casesDeLigne(
   row: TableRowNode,
   columns: readonly TableColumn[],
   scope: EvaluationScope,
   budget: EvaluationBudget,
-): readonly string[] {
+): readonly CaseAffichee[] {
   // La cellule NOMME sa colonne : on cherche par `columnId`, jamais par position. C'est ce qui
   // rend une ligne courte naturelle au lieu d'une suite de remplissages.
   return columns.map((column) => {
     const cell = row.cells.find((candidate) => candidate.columnId === column.id);
-    return cell === undefined ? '' : texteDeCellule(cell, scope, budget);
+    return { column, texte: cell === undefined ? '' : texteDeCellule(cell, scope, budget) };
   });
 }
 
@@ -993,6 +1063,23 @@ const totalCellStyle = { ...cellStyle, background: '#f0f6ff', fontWeight: 'bold'
  */
 const pieceDePiedStyle = { ...cellStyle, fontWeight: 'bold' } as const;
 
+/**
+ * Le style du tableau de lignes, et il est SÉPARÉ de `tableStyle` pour deux raisons.
+ *
+ * `tableLayout: 'fixed'` plus une largeur définie sont ce qui rend les pourcentages de
+ * `<colgroup>` **autoritaires**. Sans eux, l'algorithme de table automatique traite une
+ * largeur de colonne en pourcentage comme une simple suggestion et la fait perdre contre le
+ * minimum de contenu : mesuré, un conteneur contraint rendait 24,79 / 14,10 / 19,06 / 21,59 /
+ * 20,47 % là où le modèle déclare 33,33 / 11,11 / 16,67 / 16,67 / 22,22 %. La section affirme
+ * que les largeurs sont `width / Σ width` ; il faut donc que ce soit vrai, et pas seulement
+ * dans une fenêtre assez large pour que le tableau puisse grandir.
+ *
+ * Et c'est une constante distincte parce que le `<table>` comparatif des trois arrondis
+ * partage `tableStyle` et doit rester inchangé — il agrège trois documents et porte un
+ * `colSpan` que le contrat ne décrit pas.
+ */
+const tableauLignesStyle = { ...tableStyle, width: '100%', tableLayout: 'fixed' } as const;
+
 export default function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '2rem' }}>
@@ -1050,23 +1137,27 @@ export default function App() {
         <em>expression du modèle</em>, pas une somme que le tableau saurait faire : son{' '}
         <code>footer</code> n'a nulle part où poser un agrégat.
       </p>
-      <table style={tableStyle}>
+      <table style={tableauLignesStyle}>
         <colgroup>
           {tableauLignes.columns.map((column, index) => (
             <col key={column.id} style={{ width: largeurs[index] }} />
           ))}
         </colgroup>
+        {/*
+          Une clé de ligne est positionnelle par nature, et c'est vrai des TROIS sections. Les
+          lignes ne sont jamais réordonnées, deux lignes identiques doivent rester deux entrées
+          distinctes, et une clé dérivée du contenu les confondrait. `row.id` n'est PAS une clé
+          valide : `nodeIdSchema` est un simple `z.string().min(1)`, rien dans `core` n'impose
+          l'unicité des ids de nœud, et `TableNode.header` déclare explicitement que plusieurs
+          lignes d'en-tête sont licites — deux lignes portant le même id passent le schéma et
+          donneraient à React deux clés identiques.
+        */}
         <thead>
-          {lignesEntete.map((row) => (
-            <tr key={row.id}>
-              {row.cases.map((texte, index) => (
-                <th
-                  key={tableauLignes.columns[index]?.id ?? index}
-                  style={{
-                    ...cellStyle,
-                    textAlign: alignementCss(tableauLignes.columns[index]?.align ?? 'start'),
-                  }}
-                >
+          {lignesEntete.map((row, rowIndex) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
+            <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
+              {row.cases.map(({ column, texte }) => (
+                <th key={column.id} style={{ ...cellStyle, textAlign: column.align }}>
                   {texte}
                 </th>
               ))}
@@ -1074,23 +1165,11 @@ export default function App() {
           ))}
         </thead>
         <tbody>
-          {/*
-            Une clé de ligne est positionnelle par nature : les lignes ne sont jamais
-            réordonnées, deux lignes de facture identiques doivent rester deux entrées
-            distinctes, et une clé dérivée du contenu les confondrait. La composer avec
-            l'index ne ferait que sortir du champ de vision de la règle sans la satisfaire.
-          */}
           {lignesCorps.map((row, rowIndex) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
             <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
-              {row.cases.map((texte, index) => (
-                <td
-                  key={tableauLignes.columns[index]?.id ?? index}
-                  style={{
-                    ...cellStyle,
-                    textAlign: alignementCss(tableauLignes.columns[index]?.align ?? 'start'),
-                  }}
-                >
+              {row.cases.map(({ column, texte }) => (
+                <td key={column.id} style={{ ...cellStyle, textAlign: column.align }}>
                   {texte}
                 </td>
               ))}
@@ -1098,16 +1177,11 @@ export default function App() {
           ))}
         </tbody>
         <tfoot>
-          {lignesPied.map((row) => (
-            <tr key={row.id}>
-              {row.cases.map((texte, index) => (
-                <td
-                  key={tableauLignes.columns[index]?.id ?? index}
-                  style={{
-                    ...pieceDePiedStyle,
-                    textAlign: alignementCss(tableauLignes.columns[index]?.align ?? 'start'),
-                  }}
-                >
+          {lignesPied.map((row, rowIndex) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
+            <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
+              {row.cases.map(({ column, texte }) => (
+                <td key={column.id} style={{ ...pieceDePiedStyle, textAlign: column.align }}>
                   {texte}
                 </td>
               ))}

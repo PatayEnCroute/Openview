@@ -198,15 +198,19 @@ describe('expression error payload', () => {
     );
   });
 
-  it('adds no error code: C3 widens a SITE, never a catalogue', () => {
-    // Le meilleur résultat qu'un lot puisse offrir à C8. Rien n'interdit mécaniquement
-    // d'ajouter une entrée à l'un des trois catalogues ; c'est le test de complétude
-    // ci-dessus qui rougirait, et seulement pour un code effectivement produit.
-    const operand: readonly string[] = OPERAND_ERROR_CODES;
-    const limit: readonly string[] = LIMIT_ERROR_CODES;
-
-    expect(EXPRESSION_ERROR_CODES).toHaveLength(operand.length + limit.length);
-  });
+  // Un `it('adds no error code')` vivait ici et il est SUPPRIMÉ, pas corrigé. Il assertait
+  // `EXPRESSION_ERROR_CODES.toHaveLength(OPERAND.length + LIMIT.length)` sur une liste que
+  // `errors.ts` DÉFINIT comme la concaténation de ces deux-là : ajouter un code déplaçait les
+  // deux membres de l'égalité, donc le test ne pouvait pas rougir, et la seule chose que son
+  // nom promettait était la seule qu'il ne vérifiait pas. Ses trois lignes étaient de surcroît
+  // le duplicata exact de la fin de « keeps the two catalogues disjoint and their union whole »
+  // plus haut, où elles voisinent au moins un contrôle falsifiable.
+  //
+  // La propriété « C3 n'ajoute aucun code » est réellement tenue par le test de complétude
+  // `produces every code the catalogue declares, and no other` : il compare les clés de
+  // `PRODUCED_CODES` au catalogue, donc un code ajouté et non produit le fait rougir. C'est là
+  // qu'il faut regarder, et c'est pourquoi il n'y a rien à remplacer ici (AGENTS.md §5 : un
+  // test qui n'assure aucun contrat est pire que pas de test).
 
   it('points at the operand index of a logical, as a number and not a string', () => {
     expect(

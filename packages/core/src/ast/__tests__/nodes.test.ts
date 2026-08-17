@@ -5,8 +5,17 @@ import {
   type DocumentNode,
   DocumentNodeSchema,
   type TableBodyNode,
+  type TableBodyNodeSchema,
+  type TableCell,
+  type TableCellSchema,
   type TableColumn,
   type TableColumnSchema,
+  type TableNode,
+  type TableNodeSchema,
+  type TableRowGroupNode,
+  type TableRowGroupNodeSchema,
+  type TableRowNode,
+  type TableRowNodeSchema,
   TextNodeSchema,
   type TextSegment,
   type TextSegmentSchema,
@@ -66,6 +75,67 @@ export const TABLE_COLUMN_SCHEMA_IN_STEP: MutuallyAssignable<
 export const TABLE_BODY_MEMBERS_IN_STEP: MutuallyAssignable<
   TableBodyNode['type'],
   'tableRow' | 'tableRowGroup'
+> = true;
+
+/**
+ * The body SCHEMA held to the body TYPE, and it is not the same guard as the one above.
+ *
+ * `TABLE_BODY_MEMBERS_IN_STEP` constrains the hand-written union. It says nothing about
+ * `rowMembers()`, and measured: reducing that factory to `[TableRowNodeSchema]` compiles at
+ * exit 0 under both tsconfigs -- `TableBodyNodeSchema` narrows, `DocumentNodeSchema` absorbs
+ * the loss by covariance, and `checkTableWiring` stays assignable to `.superRefine` because a
+ * `tableRow`-only array still satisfies `readonly TableBodyNode[]`. `tableRowGroup` would
+ * simply stop being parseable in a table body, and every stored document carrying a repeated
+ * section would answer `invalid_union`.
+ *
+ * Compared on the DISCRIMINANT rather than the whole node, because that is the part a lost
+ * factory member removes, and comparing whole recursive unions drags `z.lazy` inference in.
+ */
+export const TABLE_BODY_SCHEMA_IN_STEP: MutuallyAssignable<
+  z.infer<typeof TableBodyNodeSchema>['type'],
+  TableBodyNode['type']
+> = true;
+
+/**
+ * The four remaining new pairs, held KEY BY KEY.
+ *
+ * `MutuallyAssignable` on the objects themselves is not enough, and measured: under
+ * `exactOptionalPropertyTypes`, `{ columnId, children }` and
+ * `{ columnId, children, rowSpan?: number | undefined }` are mutually assignable, so an
+ * OPTIONAL field added to one side only -- precisely the shape a backward-compatible new field
+ * takes -- slips through. A field present in the TYPE and absent from the SCHEMA is worse than
+ * a compile error: `parseTemplate` strips it at runtime (measured), so an editor writes it, the
+ * next open erases it, `onSave` persists the loss, and `schemaVersion` never moves. That is the
+ * *perte silencieuse* AGENTS.md 1.2 exists to prevent.
+ *
+ * `keyof` includes optional keys, so comparing key sets catches both directions for required
+ * and optional fields alike. `TableCell` is first because it is the likeliest site: a per-cell
+ * alignment override is lot C5's declared future.
+ */
+export const TABLE_CELL_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TableCellSchema>,
+  keyof TableCell
+> = true;
+
+export const TABLE_ROW_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TableRowNodeSchema>,
+  keyof TableRowNode
+> = true;
+
+export const TABLE_ROW_GROUP_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TableRowGroupNodeSchema>,
+  keyof TableRowGroupNode
+> = true;
+
+export const TABLE_NODE_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TableNodeSchema>,
+  keyof TableNode
+> = true;
+
+/** The same key-set guard on the column, beside the assignability one it strengthens. */
+export const TABLE_COLUMN_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TableColumnSchema>,
+  keyof TableColumn
 > = true;
 
 describe('DocumentNodeSchema', () => {
