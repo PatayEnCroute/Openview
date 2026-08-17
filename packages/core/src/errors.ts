@@ -72,12 +72,12 @@ export type ExpressionErrorCode = (typeof EXPRESSION_ERROR_CODES)[number];
 /**
  * Where the failure happened.
  *
- * `ExpressionKind` alone does not cover it: `LoopNode.each` and `ConditionNode.when`
- * carry an expression without BEING one, so a failure evaluating a loop source has no
- * expression kind to report. The field is called `site` and not `kind` for that
- * reason.
+ * `ExpressionKind` alone does not cover it: `LoopNode.each`, `ConditionNode.when` and
+ * `TableRowGroupNode.each` carry an expression without BEING one, so a failure evaluating a
+ * table body's list source has no expression kind to report. The field is called `site` and
+ * not `kind` for that reason.
  */
-export type ExpressionErrorSite = ExpressionKind | 'loop' | 'condition';
+export type ExpressionErrorSite = ExpressionKind | 'loop' | 'condition' | 'tableRowGroup';
 
 /** What EVERY expression failure carries, whichever branch it is on. */
 interface ExpressionErrorLocation {

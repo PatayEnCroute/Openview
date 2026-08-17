@@ -5,7 +5,17 @@
 > `docs/roadmap/` — ni les *décisions* structurantes, qui se consignent dans `docs/adr/`. Il est
 > **périssable** : une fois le lot livré, il ne fait plus foi, et c'est l'ADR 0005 qui reste.
 >
-> **Statut à l'exécution :** ✅ **prêt à exécuter.** Les sept arbitrages de la [§8] ont été tranchés
+> **Statut :** ⛔ **PÉRIMÉ — lot livré.** Ce document ne fait plus foi. Les treize décisions, leurs
+> motifs, leurs alternatives écartées, leurs verdicts de réversibilité et leurs signaux de
+> réouverture vivent désormais dans
+> [docs/adr/0005-le-tableau-de-lignes.md](../adr/0005-le-tableau-de-lignes.md), **qui est la seule
+> référence**. Ce qui suit est conservé comme journal de conception — utile pour comprendre *comment*
+> le lot a été découpé et *ce qui a été mesuré en chemin*, jamais pour savoir *ce que le contrat dit
+> aujourd'hui*. Trois critères mécaniques de la [§6.4] se sont d'ailleurs révélés faux ou trop
+> étroits à l'exécution, et l'ADR 0005 les corrige dans sa section « Les corrections nées de
+> l'exécution du lot » : ne recopiez pas la [§6.4] sans la lire.
+>
+> **Statut à l'exécution (historique) :** ✅ **prêt à exécuter.** Les sept arbitrages de la [§8] ont été tranchés
 > par le propriétaire du produit le **2026-08-17**, conformément aux sept recommandations de ce
 > plan : **1-A** (« typé » veut dire *décrit dans un contrat typé* — les cinq colonnes sont un jeu
 > d'épreuve, aucune ne porte de type de donnée), **2-A** (C3 possède l'alignement **de colonne** ;

@@ -160,6 +160,18 @@ dernière ligne peut être une somme de ce qui précède.
 
 **Poids :** M — **Dépend de :** C1
 
+> ✅ **Livré.** Les treize décisions du lot — les trois types de nœud, la coupure
+> `BlockNode`, l'appariement de cellule **par clé**, l'en-tête comme section de
+> lignes, le poids entier borné, l'alignement `start | center | end`, le refus
+> structurel de l'auto-somme et l'estampille `schemaVersion` 4 — vivent dans
+> [ADR 0005](../adr/0005-le-tableau-de-lignes.md), qui fait foi. Le mot « typé » du
+> critère ci-dessus se lit « **décrit dans un contrat typé** » : les cinq colonnes
+> sont un **jeu d'épreuve**, et aucune ne porte de type de donnée (arbitrage n° 1,
+> tranché le 2026-08-17). Le *comment* — découpage en incréments, contrat définitif,
+> plan de test — vit dans
+> [docs/plans/c3-tableau-de-lignes.md](../plans/c3-tableau-de-lignes.md), périmé
+> depuis la livraison comme le dit son propre en-tête.
+
 ### C4. La page
 
 **Pourquoi.** Rien ne décrit aujourd'hui la feuille : format, orientation, marges,

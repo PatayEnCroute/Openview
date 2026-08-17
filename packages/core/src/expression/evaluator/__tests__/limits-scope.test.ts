@@ -181,6 +181,37 @@ describe('expression error payload', () => {
     ).toStrictEqual({ code: 'not-a-list', site: 'loop', at: [], actualType: 'number' });
   });
 
+  it('names a TABLE BODY, and not "an expression", when its list source is not a list', () => {
+    // Le détail ci-dessus n'épingle pas le MESSAGE, et c'est le message que le libellé change.
+    // `LIST_CALLER_SUBJECTS` est un `Partial` : ajouter le site sans le libellé ne casse rien,
+    // ni à la compilation ni au lint, et la chaîne retombe silencieusement sur « An
+    // expression » -- dit à un auteur qui n'a écrit aucune expression, mais un tableau.
+    // L'assertion porte donc sur la chaîne ENTIÈRE, faute de quoi elle resterait verte le jour
+    // où le libellé disparaît.
+    expect(() =>
+      evaluateSequence(path('invoice.total'), scope, { caller: 'tableRowGroup' }),
+    ).toThrow('A table body needs a list to iterate over, got a number.');
+
+    // Le contrôle croisé est gratuit et vaut d'être écrit à côté : deux sites, deux sujets.
+    expect(() => evaluateSequence(path('invoice.total'), scope, { caller: 'loop' })).toThrow(
+      'A loop needs a list to iterate over, got a number.',
+    );
+  });
+
+  // Un `it('adds no error code')` vivait ici et il est SUPPRIMÉ, pas corrigé. Il assertait
+  // `EXPRESSION_ERROR_CODES.toHaveLength(OPERAND.length + LIMIT.length)` sur une liste que
+  // `errors.ts` DÉFINIT comme la concaténation de ces deux-là : ajouter un code déplaçait les
+  // deux membres de l'égalité, donc le test ne pouvait pas rougir, et la seule chose que son
+  // nom promettait était la seule qu'il ne vérifiait pas. Ses trois lignes étaient de surcroît
+  // le duplicata exact de la fin de « keeps the two catalogues disjoint and their union whole »
+  // plus haut, où elles voisinent au moins un contrôle falsifiable.
+  //
+  // La propriété « C3 n'ajoute aucun code » est réellement tenue par le test de complétude
+  // `produces every code the catalogue declares, and no other` : il compare les clés de
+  // `PRODUCED_CODES` au catalogue, donc un code ajouté et non produit le fait rougir. C'est là
+  // qu'il faut regarder, et c'est pourquoi il n'y a rien à remplacer ici (AGENTS.md §5 : un
+  // test qui n'assure aucun contrat est pire que pas de test).
+
   it('points at the operand index of a logical, as a number and not a string', () => {
     expect(
       expectEvaluationError(() =>

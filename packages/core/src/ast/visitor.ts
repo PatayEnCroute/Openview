@@ -6,6 +6,9 @@ import type {
   DocumentNode,
   ImageNode,
   LoopNode,
+  TableNode,
+  TableRowGroupNode,
+  TableRowNode,
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
@@ -30,6 +33,9 @@ export interface NodeVisitor<TResult> {
   readonly container: (node: ContainerNode) => TResult;
   readonly loop: (node: LoopNode) => TResult;
   readonly condition: (node: ConditionNode) => TResult;
+  readonly table: (node: TableNode) => TResult;
+  readonly tableRowGroup: (node: TableRowGroupNode) => TResult;
+  readonly tableRow: (node: TableRowNode) => TResult;
 }
 
 export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TResult>): TResult {
@@ -44,6 +50,12 @@ export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TRes
       return visitor.loop(node);
     case 'condition':
       return visitor.condition(node);
+    case 'table':
+      return visitor.table(node);
+    case 'tableRowGroup':
+      return visitor.tableRowGroup(node);
+    case 'tableRow':
+      return visitor.tableRow(node);
     default: {
       // Adding a member to DocumentNode without handling it here fails to
       // compile: `node` is only assignable to `never` when every case is covered.
@@ -56,7 +68,28 @@ export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TRes
   }
 }
 
-/** The direct children of a node; leaves report none. */
+/**
+ * The direct children of a node; leaves report none.
+ *
+ * A table reports its three sections in flow order, a group its rows, and a row the blocks
+ * of its cells. The column boundary is flattened here on purpose: this function answers a
+ * question about DESCENT and SCOPE, not about layout. What matters is that everything a
+ * table contains is reachable -- a subtree this function does not report is invisible to
+ * `walk`, `findNodeById` and `collectDataPaths` alike, with no error anywhere.
+ *
+ * Two consequences a consumer has to know.
+ *
+ * **Only four of the eight branches return the stored reference.** `container`, `loop`,
+ * `condition` and `tableRowGroup` do. `table` builds a fresh array by spread and `tableRow`
+ * builds one by `flatMap`; and the two leaves return an empty literal, which is a fresh array
+ * on every call as well -- `childrenOf(text) === childrenOf(text)` is FALSE. So the identity
+ * of the result is not stable between two calls, and NOTHING MAY BE MEMOISED ON IT.
+ *
+ * **Attributing a node to a COLUMN does not go through here.** The cell boundary is erased
+ * by the flattening, so a consumer that needs the column of a node reads the table node
+ * itself -- table id plus the cell's `columnId` -- and never the traversal. No precomputed
+ * index is provided, because no consumer exists yet to need one.
+ */
 export function childrenOf(node: DocumentNode): readonly DocumentNode[] {
   return visitNode<readonly DocumentNode[]>(node, {
     text: () => [],
@@ -64,6 +97,9 @@ export function childrenOf(node: DocumentNode): readonly DocumentNode[] {
     container: (container) => container.children,
     loop: (loop) => loop.children,
     condition: (condition) => condition.children,
+    table: (table) => [...table.header, ...table.body, ...table.footer],
+    tableRowGroup: (group) => group.rows,
+    tableRow: (row) => row.cells.flatMap((cell) => cell.children),
   });
 }
 
@@ -148,6 +184,13 @@ const READS_VISITOR: NodeVisitor<NodeReads> = {
   container: () => NO_READS,
   loop: (loop) => ({ reads: [loop.each], binds: loop.as }),
   condition: (condition) => ({ reads: [condition.when], binds: undefined }),
+  // A table reads nothing and binds nothing: its geometry holds no expression, and its
+  // header and footer must not see a row alias. The repetition is one level down, which is
+  // the whole reason `tableRowGroup` is a node of its own.
+  table: () => NO_READS,
+  tableRowGroup: (group) => ({ reads: [group.each], binds: group.as }),
+  // A cell holds nodes, and each of them reports its own reads.
+  tableRow: () => NO_READS,
 };
 
 /**
@@ -227,7 +270,7 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
  * 0001), the engine can tell a caller which keys a template needs before
  * rendering anything.
  *
- * THREE limits, all deliberate, and all narrower than an earlier version of this
+ * FOUR limits, all deliberate, and all narrower than an earlier version of this
  * docstring claimed.
  *
  * Paths rooted at a loop alias are excluded, because they are internal
@@ -247,6 +290,12 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
  * documented and not fixed, for the same reason as the other two -- but leaving it
  * unwritten would restart exactly the defect ADR 0002 reproached the old docstring for:
  * *it promised, and it lied.*
+ *
+ * Lot C3 adds a FOURTH site, and it is the same one again: `TableRowGroupNode.as`. It
+ * shadows exactly as a loop alias does -- innermost wins -- and it is reported here exactly
+ * as little. What it does NOT do is widen the hole: a group binds over its own rows and over
+ * nothing else, so a heading or a total that names the alias stays a caller key and is still
+ * demanded from the integrator.
  *
  * What is NOT a limit, and cost nothing: an alias bound inside an expression never leaks
  * out of it. `pathsOf` carries its own alias context, so `line` in

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Expression } from '../expression/expression.js';
-import type { DocumentNode, TextSegment } from './nodes.js';
+import type { Expression } from '../../expression/expression.js';
+import type { DocumentNode, TextSegment } from '../nodes.js';
 import {
   childrenOf,
   collectDataPaths,
@@ -9,7 +9,8 @@ import {
   visitNode,
   visitSegment,
   walk,
-} from './visitor.js';
+} from '../visitor.js';
+import { RECIPE_TABLE, RECIPE_TEMPLATE } from './fixtures.js';
 
 const discountApplies: Expression = {
   kind: 'compare',
@@ -59,6 +60,9 @@ describe('visitNode', () => {
         container: (n) => `container:${n.children.length}`,
         loop: (n) => `loop:${n.each.kind}`,
         condition: (n) => `condition:${n.when.kind}`,
+        table: (n) => `table:${n.columns.length}`,
+        tableRowGroup: (n) => `tableRowGroup:${n.as}`,
+        tableRow: (n) => `tableRow:${n.cells.length}`,
       });
 
     expect(describeNode(tree)).toBe('container:2');
@@ -85,6 +89,9 @@ describe('visitNode', () => {
         container: () => 'x',
         loop: () => 'x',
         condition: () => 'x',
+        table: () => 'x',
+        tableRowGroup: () => 'x',
+        tableRow: () => 'x',
       }),
     ).toThrow(TypeError);
   });
@@ -155,6 +162,58 @@ describe('childrenOf', () => {
   it('reports the direct children of every container kind', () => {
     expect(childrenOf(tree).map((child) => child.id)).toStrictEqual(['title', 'lines']);
   });
+
+  it('reports the three sections of a table in flow order', () => {
+    expect(childrenOf(RECIPE_TABLE).map((child) => `${child.type}:${child.id}`)).toStrictEqual([
+      'tableRow:entete',
+      'tableRowGroup:corps',
+      'tableRow:ligne-total',
+    ]);
+  });
+
+  it('reports the rows of a group as the STORED reference, and computes the rest', () => {
+    const group = RECIPE_TABLE.body[0];
+    if (group?.type !== 'tableRowGroup') {
+      throw new Error('the recipe body should carry a row group');
+    }
+
+    // Four of the eight branches hand back the stored array; the four others allocate. A
+    // consumer that memoised on the identity of the result would be wrong six times out of
+    // eight, and `childrenOf(text) === childrenOf(text)` is what says so.
+    expect(childrenOf(group)).toBe(group.rows);
+    expect(childrenOf(RECIPE_TABLE)).not.toBe(RECIPE_TABLE.header);
+    const leaf = RECIPE_TABLE.header[0]?.cells[0]?.children[0];
+    if (leaf === undefined) {
+      throw new Error('the recipe header should carry a cell holding a block');
+    }
+    expect(childrenOf(leaf)).not.toBe(childrenOf(leaf));
+  });
+
+  it('flattens the cells of a row, so every block of a table is reachable', () => {
+    const group = RECIPE_TABLE.body[0];
+    if (group?.type !== 'tableRowGroup') {
+      throw new Error('the recipe body should carry a row group');
+    }
+    const detail = group.rows[0];
+    if (detail === undefined) {
+      throw new Error('the group should carry a detail row');
+    }
+
+    // Five cells, one block each, flattened: the column boundary is erased on purpose, and
+    // attributing a node to a column goes through the table node instead.
+    expect(childrenOf(detail).map((child) => child.id)).toStrictEqual([
+      'td-designation',
+      'td-quantite',
+      'td-prix',
+      'td-remise',
+      'td-montant',
+    ]);
+    const total = RECIPE_TABLE.footer[0];
+    expect(childrenOf(total ?? detail).map((child) => child.id)).toStrictEqual([
+      'tf-libelle',
+      'tf-montant',
+    ]);
+  });
 });
 
 describe('walk', () => {
@@ -183,6 +242,20 @@ describe('findNodeById', () => {
 
   it('returns undefined rather than throwing when the id is absent', () => {
     expect(findNodeById(tree, 'nope')).toBeUndefined();
+  });
+
+  it('reaches every node of the table through childrenOf, cells included', () => {
+    // Un sous-arbre que `childrenOf` ne rend pas est invisible pour `walk`, `findNodeById` et
+    // `collectDataPaths` -- sans erreur nulle part. C'est l'assertion qui l'interdit.
+    // 17 = le tableau (1) + l'en-tête et ses cinq textes (6) + le groupe, sa ligne et ses
+    // cinq textes (7) + la ligne de pied et ses deux textes (3). 19 pour la racine du
+    // modèle : les deux de plus sont la racine et le titre.
+    expect([...walk(RECIPE_TABLE)]).toHaveLength(17);
+    expect([...walk(RECIPE_TEMPLATE.root)]).toHaveLength(19);
+    expect(findNodeById(RECIPE_TABLE, 'td-montant')?.type).toBe('text');
+    // Sans cette seconde assertion, un `childrenOf` qui oublierait la section `footer`
+    // passerait la première.
+    expect(findNodeById(RECIPE_TABLE, 'tf-montant')?.type).toBe('text');
   });
 });
 
@@ -258,6 +331,51 @@ describe('collectDataPaths', () => {
     };
 
     expect(collectDataPaths(nested)).toStrictEqual(['invoice.groups', 'company.name']);
+  });
+
+  it('asks the integrator for two keys, and for no per-item field', () => {
+    // La garantie de l'ADR 0002, sur la forme qui la met le plus à l'épreuve : HUIT lectures
+    // enracinées sur `ligne` sont écrites dans ce modèle, six dans le corps et deux sous
+    // l'agrégat du pied, et aucune ne sort. Deux mécanismes distincts les filtrent -- les six
+    // du corps parce que `nodeReads(group)` déclare `binds: 'ligne'`, les deux du pied parce
+    // que `pathsOf` porte son PROPRE contexte d'alias -- et si l'un tombait, l'autre ne
+    // rattraperait rien.
+    expect(collectDataPaths(RECIPE_TEMPLATE.root)).toStrictEqual([
+      'facture.numero',
+      'facture.lignes',
+    ]);
+    // Le tableau seul : il ne lit rien de son côté, `nodeReads(table)` est NO_READS.
+    expect(collectDataPaths(RECIPE_TABLE)).toStrictEqual(['facture.lignes']);
+  });
+
+  it('reports a group alias used outside its group as a caller key', () => {
+    // La contre-épreuve, et c'est le vrai test : si le TABLEAU liait l'alias -- la forme que
+    // le plan écarte --, cette lecture serait filtrée en silence et l'intégrateur ne serait
+    // jamais interrogé sur une donnée que le document lit réellement. C'est exactement le
+    // défaut que l'ADR 0002 a corrigé pour les boucles.
+    const leaky: DocumentNode = {
+      ...RECIPE_TABLE,
+      footer: [
+        {
+          type: 'tableRow',
+          id: 'fuite',
+          cells: [
+            {
+              columnId: 'montant',
+              children: [
+                {
+                  type: 'text',
+                  id: 'tf-fuite',
+                  content: [{ kind: 'binding', value: { kind: 'path', path: 'ligne.montant' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(collectDataPaths(leaky)).toStrictEqual(['facture.lignes', 'ligne.montant']);
   });
 
   it('reports an alias-rooted path used outside its loop', () => {

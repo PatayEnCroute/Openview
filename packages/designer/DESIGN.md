@@ -119,13 +119,33 @@ Les champs manipulables dans l'éditeur sont ceux du **catalogue déclaré par l
    - **Blocs Standards (Texte, Image, Tableau)** : Contour bleu Indigo (`#4F46E5`) lors de la sélection.
    - **Blocs Logiques (Boucle `for-each`, Condition `if/else`)** : Marqueurs et badges en Ambre (`#F59E0B`) ou Cyan (`#0EA5E9`) pour faire ressortir la structure logique du modèle d'un coup d'œil.
 
-> ⚠️ **Le bloc Tableau n'existe pas encore dans le modèle.** L'AST de
-> `@openview/core` définit `text`, `image`, `container`, `loop` et `condition` ;
-> `BlockType` dans [`src/types.ts`](src/types.ts) y ajoute `table` sans
-> contrepartie côté cœur. Deux options, à trancher : un tableau est un
-> `container` conventionnel avec un style dédié, ou c'est un type de nœud à part
-> entière — auquel cas il faut l'ajouter à `DocumentNode`, à son schéma Zod et au
-> `NodeVisitor`, dont la branche `never` rendra l'oubli impossible à ignorer.
+> ✅ **Le bloc Tableau existe dans le modèle depuis le lot C3**, et l'option retenue est la
+> seconde de celles que cet encadré laissait ouvertes : un tableau est un **type de nœud à part
+> entière**, pas un `container` conventionnel avec un style. Les treize décisions sont dans
+> [ADR 0005](../../docs/adr/0005-le-tableau-de-lignes.md).
+>
+> Ce que l'éditeur peut désormais lire dans le contrat, et qu'un `container` stylé n'aurait
+> jamais pu exprimer : une liste de **colonnes** déclarées portant chacune un id, un **poids**
+> entier borné `[1, 1000]` et un **alignement** `start | center | end` ; trois sections nommées
+> `header` / `body` / `footer` ; un `tableRowGroup` qui répète ses lignes sur une expression ; et
+> des **cellules qui nomment leur colonne**, ce qui rend une ligne courte — un libellé et un
+> montant, sans cellules de remplissage — licite par construction.
+>
+> Deux conséquences pour l'éditeur, à ne pas découvrir en codant :
+>
+> - **`BlockType` est maintenant DÉRIVÉ** de `BlockNodeType` ([`src/types.ts`](src/types.ts)). La
+>   liste écrite à la main contenait déjà `table` alors que le cœur n'avait pas ce nœud : elle
+>   était juste **par accident**. Ne la réécrivez pas à la main.
+> - **`tableRow` et `tableRowGroup` ne sont PAS des `BlockType`.** L'union des nœuds est scindée :
+>   `BlockNode` est ce qu'un flux de blocs accepte, `DocumentNode` est tout, lignes comprises. Une
+>   ligne s'insère dans un tableau, jamais dans un flux — et `allowedBlocks` ne peut plus proposer
+>   le contraire. Pour valider un sous-arbre destiné à un flux, c'est `parseBlockNode` ;
+>   `parseDocumentNode` accepte une ligne nue.
+>
+> Ce que le tableau **ne** porte **pas**, et qu'il ne faut donc pas chercher à éditer : ni filet,
+> ni fond, ni police, ni espacement (lot C5) ; ni format de nombre ni devise (C6) ; ni fusion de
+> cellules, ni colonne conditionnelle, ni champ de total — le total d'une facture est une
+> **expression du modèle** posée dans une cellule de pied, et l'ADR 0005 explique pourquoi.
 
 ---
 

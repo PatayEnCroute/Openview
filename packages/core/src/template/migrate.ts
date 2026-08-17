@@ -91,6 +91,32 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      */
     migrate: (input) => ({ ...input, schemaVersion: 3 }),
   },
+  {
+    from: 3,
+    to: 4,
+    /**
+     * Identity, except for the stamp -- and the stamp is the entire point, for the third
+     * time and for exactly the reason the 1 -> 2 entry states.
+     *
+     * A v3 document is STRUCTURALLY a v4 document: lot C3 only WIDENED the node union, so
+     * there is nothing to transform, and the shape it yields is bounded because it changes
+     * neither depth nor value count -- which is what the repository owes itself since the
+     * guard runs twice.
+     *
+     * The narrowing that comes with it -- a block flow no longer accepting a bare row --
+     * cannot bite an existing document either, since no v3 document can carry a row at all.
+     * Nor is the column width window retrofitted, for the same reason the `decimals` window
+     * was not: there is nothing to retrofit. That is the whole difference between adding a
+     * shape and tightening an existing one, and it is why lot C3 adds no fifth value
+     * narrowing to the four the pre-v1.0 assumption already carries.
+     *
+     * The reserve of the two entries above transposes word for word: the version guard reads
+     * the STAMP, not the content. A document stamped `3` but already holding a `table` node
+     * -- hand-made, or written by an unstamped mid-lot build -- is not refused. It parses,
+     * and comes out `schemaVersion: 4`.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 4 }),
+  },
 ];
 
 const recordSchema = z.record(z.string(), z.unknown());

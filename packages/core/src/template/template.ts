@@ -59,8 +59,25 @@ import { ContainerNodeSchema } from '../ast/nodes.js';
  *
  * Stamped ONCE, after the last persisted shape of the lot. No commit of C2 before that one
  * is publishable, for the reason version 2 already records.
+ *
+ * ## What version 4 means
+ *
+ * Version 4 is version 3 plus lot C3, the table of lines: THREE stored node types --
+ * `table`, `tableRowGroup` and `tableRow` -- a declared column list carrying an id, a
+ * whole-number width weight and an alignment, and cells keyed by column id. Eight document
+ * node types. It also SPLITS the node union in two: the children of a container, of a loop,
+ * of a condition and of a table cell are BLOCKS, so a bare row cannot stand in a document
+ * flow.
+ *
+ * It is the ILLEGIBLE REFUSAL case described above, a third time and unchanged: a version 3
+ * build meeting `{ type: 'table', ... }` answers `"No matching discriminator"` / `"Invalid
+ * input"` on a path like `root.children.0.type`, with no version named and no remedy.
+ * "Purely additive" is once more the argument FOR the bump, not against it.
+ *
+ * Stamped ONCE, after the last persisted shape of the lot. No commit of C3 before that one
+ * is publishable, for the reason version 2 already records.
  */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /**
  * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape

@@ -6,6 +6,9 @@
   évaluera ces arrondis, E6 les honorera « à la lettre », E8 dimensionnera un délai de worker
   avec le coût mesuré en décision 5), `@openview/designer` (D7 éditera `decimals` et `mode`),
   `@openview/core` lot C6 (le formatage hérite de la frontière écrite en décision 10)
+- **Complétée par :** [ADR 0005](0005-le-tableau-de-lignes.md) — sa **décision 8** transmettait la
+  contrainte « le tableau ne somme rien » au lot qui décrirait un tableau ; l'ADR 0005 l'honore **par
+  le type**, `TableNode.footer` n'ayant nulle part où poser un agrégat.
 - **Complète :** [ADR 0003](0003-formules-agregations-et-dates-civiles.md) — sa **décision 4**
   annonçait le kind enveloppe `{ kind: 'round'; value; decimals; mode }` dans sa *forme* et
   laissait à C2 sa *sémantique*, ses *modes* et la *nature* de `decimals`. Cette ADR les tranche.
