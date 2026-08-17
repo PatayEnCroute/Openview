@@ -15,12 +15,19 @@
  *   in the published package.
  */
 
-import type { BlockNode, ContainerNode, TextNode, TextSegment } from '../../ast/nodes.js';
+import type {
+  BlockNode,
+  ContainerNode,
+  PageField,
+  TextNode,
+  TextSegment,
+} from '../../ast/nodes.js';
 import type { PathExpression, PrintableExpression } from '../../expression/expression.js';
 import type { PageSetup } from '../page.js';
 
 const lit = (text: string): TextSegment => ({ kind: 'literal', text });
 const bind = (value: PrintableExpression): TextSegment => ({ kind: 'binding', value });
+const pageField = (field: PageField): TextSegment => ({ kind: 'pageField', field });
 const p = (path: string): PathExpression => ({ kind: 'path', path });
 const text = (id: string, content: readonly TextSegment[]): TextNode => ({
   type: 'text',
@@ -53,7 +60,12 @@ const container = (id: string, children: readonly BlockNode[]): ContainerNode =>
  * The one-page trap, written here because a fixture is what gets copied: on a single-page
  * invoice -- lot E1's case -- this model renders the `lastOnly` footer and NOT the
  * `exceptLast` one, because the only page IS the last. That is correct, and it is why BOTH
- * footers carry the numbering.
+ * footers carry the numbering. A model whose running footer alone carried it would print an
+ * invoice with no page number at all.
+ *
+ * The four `pageField` markers are PLACES, not values: `Page ⟨number⟩ / ⟨count⟩` computes
+ * nothing, reads no data, and demands no key of the integrator. The value is the paginator's
+ * (lot E2), and the language around it -- "sur" against "of" -- is lot C6's.
  *
  * It deliberately does NOT use `firstOnly` / `exceptFirst`, though the lot delivers them: the
  * criterion says "what repeats at the top of EVERY page", so the header has to be `every` to
@@ -73,12 +85,14 @@ export const RECIPE_PAGE: PageSetup = {
   footer: [
     {
       on: 'exceptLast',
-      content: container('ftr', [text('ftr-num', [lit('Page ')])]),
+      content: container('ftr', [
+        text('ftr-num', [lit('Page '), pageField('number'), lit(' / '), pageField('count')]),
+      ]),
     },
     {
       on: 'lastOnly',
       content: container('ftr-last', [
-        text('ftr-last-num', [lit('Page ')]),
+        text('ftr-last-num', [lit('Page '), pageField('number'), lit(' / '), pageField('count')]),
         text('ftr-last-note', [bind(p('facture.mentions'))]),
       ]),
     },

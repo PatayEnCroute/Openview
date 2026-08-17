@@ -12,6 +12,7 @@ import type {
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
+  TextPageFieldSegment,
   TextSegment,
 } from './nodes.js';
 
@@ -137,6 +138,7 @@ export function findNodeById(root: DocumentNode, id: string): DocumentNode | und
 export interface SegmentVisitor<TResult> {
   readonly literal: (segment: TextLiteralSegment) => TResult;
   readonly binding: (segment: TextBindingSegment) => TResult;
+  readonly pageField: (segment: TextPageFieldSegment) => TResult;
 }
 
 export function visitSegment<TResult>(
@@ -148,6 +150,8 @@ export function visitSegment<TResult>(
       return visitor.literal(segment);
     case 'binding':
       return visitor.binding(segment);
+    case 'pageField':
+      return visitor.pageField(segment);
     default: {
       const exhaustive: never = segment;
       throw new TypeError(`Unhandled text segment: ${kindOf(exhaustive, 'kind')}`);
@@ -167,6 +171,11 @@ const NO_READS: NodeReads = { reads: [], binds: undefined };
 const SEGMENT_EXPRESSIONS: SegmentVisitor<readonly Expression[]> = {
   literal: () => [],
   binding: (segment) => [segment.value],
+  // A page field reads no data: its value comes from the paginator, not from the caller's
+  // dataset. Returning `[]` is what keeps `collectDataPaths` from demanding a key no
+  // integrator can supply -- the exact defect that sinks the "reserved scope key" mechanism
+  // for page numbering.
+  pageField: () => [],
 };
 
 /**

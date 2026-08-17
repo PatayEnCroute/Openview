@@ -103,23 +103,26 @@ describe('visitSegment', () => {
       visitSegment(segment, {
         literal: (s) => `literal:${s.text}`,
         binding: (s) => `binding:${s.value.kind}`,
+        pageField: (s) => `pageField:${s.field}`,
       });
 
     expect(describeSegment({ kind: 'literal', text: 'Total' })).toBe('literal:Total');
     expect(describeSegment({ kind: 'binding', value: { kind: 'path', path: 'a.b' } })).toBe(
       'binding:path',
     );
+    expect(describeSegment({ kind: 'pageField', field: 'number' })).toBe('pageField:number');
+    expect(describeSegment({ kind: 'pageField', field: 'count' })).toBe('pageField:count');
   });
 
   it('throws on a segment kind it does not know', () => {
-    // The guarantee visitNode gives for node types, now given for runs: a third
+    // The guarantee visitNode gives for node types, now given for runs: a fourth
     // kind added to the union breaks compilation at this single site instead of
     // being silently skipped wherever segments are walked.
     const smuggled: TextSegment = JSON.parse('{"kind":"mark","text":"x"}');
 
-    expect(() => visitSegment(smuggled, { literal: () => 'x', binding: () => 'x' })).toThrow(
-      TypeError,
-    );
+    expect(() =>
+      visitSegment(smuggled, { literal: () => 'x', binding: () => 'x', pageField: () => 'x' }),
+    ).toThrow(TypeError);
   });
 });
 
@@ -437,5 +440,25 @@ describe('collectDataPaths', () => {
 
   it('returns nothing for an image, which reads no data yet', () => {
     expect(collectDataPaths({ type: 'image', id: 'i', src: 'logo.png' })).toStrictEqual([]);
+  });
+
+  it('demands NOTHING for a page marker, which is what sinks the reserved-key mechanism', () => {
+    // The alternative that cost the contract nothing -- injecting `{ page: { numero, total } }`
+    // into the scope -- would have made this function report `page.numero` to the integrator,
+    // a key no integrator can supply and which the playground displays on screen. A segment
+    // resolved by the paginator reads no data, so the branch yields `[]`.
+    const numbered: DocumentNode = {
+      type: 'text',
+      id: 'ftr',
+      content: [
+        { kind: 'literal', text: 'Page ' },
+        { kind: 'pageField', field: 'number' },
+        { kind: 'literal', text: ' / ' },
+        { kind: 'pageField', field: 'count' },
+      ],
+    };
+
+    expect(collectDataPaths(numbered)).toStrictEqual([]);
+    expect(nodeReads(numbered)).toStrictEqual({ reads: [], binds: undefined });
   });
 });

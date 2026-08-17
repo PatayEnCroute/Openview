@@ -500,6 +500,10 @@ function rawSegments(
         const value = evaluateExpression(binding.value, scope, { budget });
         return value === undefined ? '(absent)' : JSON.stringify(value);
       },
+      // Cette page N'A PAS DE PAGINATEUR : elle ne coupe rien, donc elle ne connaît ni le
+      // rang d'une page ni leur nombre. `1` est un ESPACE RÉSERVÉ affiché honnêtement, pas
+      // une valeur calculée — c'est le moteur (lot E2) qui substituera la vraie.
+      pageField: (marker) => `⟨${marker.field}⟩`,
     }),
   );
 }
@@ -620,6 +624,9 @@ function texteDeSegments(
           // trancher : `rawSegments` garde le `(absent)` explicite pour les sections de dump.
           return value === undefined ? '' : String(value);
         },
+        // Même raison qu'au-dessus : pas de paginateur, donc pas de valeur. `1` est un espace
+        // réservé, et la page le dit en toutes lettres plutôt que de faire croire à un calcul.
+        pageField: () => '1',
       }),
     )
     .join('');

@@ -31,6 +31,25 @@ const accepts = (occurrences: readonly PageBandOccurrence[]): boolean =>
   PageSetupSchema.safeParse(withFooter(occurrences)).success;
 
 /**
+ * Whether an occurrence covers a given rank, out of a given page count.
+ *
+ * A `Record` over the union rather than a `switch`, for two reasons. It gives the same
+ * exhaustiveness guarantee -- a member added to `PAGE_BAND_OCCURRENCES` and not here does not
+ * compile, `TS2741` -- and it does NOT open a second traversal of occurrences, which the
+ * lot's mechanical criteria count. It is also the idiom `BAND_OCCURRENCE_CONFLICTS` already
+ * uses, one file over.
+ */
+const APPLIES_TO: Readonly<
+  Record<PageBandOccurrence, (rank: number, pageCount: number) => boolean>
+> = {
+  every: () => true,
+  firstOnly: (rank) => rank === 1,
+  exceptFirst: (rank) => rank !== 1,
+  exceptLast: (rank, pageCount) => rank !== pageCount,
+  lastOnly: (rank, pageCount) => rank === pageCount,
+};
+
+/**
  * The pages an occurrence applies to, on a document of `pageCount` pages.
  *
  * The derivation the schema's table PRECOMPUTES. Written out here so the two can be compared:
@@ -38,26 +57,9 @@ const accepts = (occurrences: readonly PageBandOccurrence[]): boolean =>
  * test says it is.
  */
 function domainOf(on: PageBandOccurrence, pageCount: number): ReadonlySet<number> {
+  const applies = APPLIES_TO[on];
   const ranks = Array.from({ length: pageCount }, (_unused, index) => index + 1);
-  const applies = (rank: number): boolean => {
-    switch (on) {
-      case 'every':
-        return true;
-      case 'firstOnly':
-        return rank === 1;
-      case 'exceptFirst':
-        return rank !== 1;
-      case 'exceptLast':
-        return rank !== pageCount;
-      case 'lastOnly':
-        return rank === pageCount;
-      default: {
-        const exhaustive: never = on;
-        throw new TypeError(`Unhandled occurrence: ${String(exhaustive)}`);
-      }
-    }
-  };
-  return new Set(ranks.filter(applies));
+  return new Set(ranks.filter((rank) => applies(rank, pageCount)));
 }
 
 /** Disjoint for EVERY page count, which is what save time has to decide without knowing `n`. */
