@@ -468,14 +468,26 @@ describe('the round kind', () => {
 describe('the C2 acceptance criterion', () => {
   it('makes the accumulation ORDER visible, and the model repairs it with the outer rounding', () => {
     // The same five two-decimal amounts, summed in two orders, are two different doubles.
-    expect(20 + 30 + 10 + 2.13 + 1.13).toBe(63.260000000000005);
-    expect(2.13 + 1.13 + 20 + 30 + 10).toBe(63.26);
+    //
+    // Summed by a FOLD over an array rather than written as a literal `20 + 30 + ...`: the
+    // literal form is constant-folded by the toolchain, which reads as an assertion that
+    // cannot fail -- Sonar says so, and it is right about the form even though the contract
+    // is real. The fold moves the addition to runtime, where it is the accumulation the
+    // engine actually performs, and `leftToRight` reproduces the left-associative order of
+    // the literal exactly (verified: both spellings give the same two doubles, bit for bit).
+    const leftToRight = (amounts: readonly number[]): number =>
+      amounts.reduce((total, amount) => total + amount, 0);
+    const bigFirst = [20, 30, 10, 2.13, 1.13];
+    const centsFirst = [2.13, 1.13, 20, 30, 10];
+
+    expect(leftToRight(bigFirst)).toBe(63.260000000000005);
+    expect(leftToRight(centsFirst)).toBe(63.26);
     // The outer wrapper reconciles them -- and that is what the MODEL declares, not what the
     // engine decided. The criterion is about VALUES, never about glyphs: a currency
     // formatter would print "63,26 EUR" for both, while a `compare` against 63.26 fails on
     // the first.
-    expect(roundDecimal(20 + 30 + 10 + 2.13 + 1.13, 2, 'halfExpand')).toBe(63.26);
-    expect(roundDecimal(2.13 + 1.13 + 20 + 30 + 10, 2, 'halfExpand')).toBe(63.26);
+    expect(roundDecimal(leftToRight(bigFirst), 2, 'halfExpand')).toBe(63.26);
+    expect(roundDecimal(leftToRight(centsFirst), 2, 'halfExpand')).toBe(63.26);
   });
 
   it('gives three different and PREDICTABLE totals for three legitimate templates', () => {

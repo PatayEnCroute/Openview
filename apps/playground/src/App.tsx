@@ -483,7 +483,7 @@ const modeles: readonly ModeleArrondi[] = [
 /** La liaison d'un nœud de texte à une seule liaison. Tombe plutôt que de dégrader. */
 function premiereLiaison(segments: readonly TextSegment[], quoi: string): PrintableExpression {
   const segment = segments[0];
-  if (segment === undefined || segment.kind !== 'binding') {
+  if (segment?.kind !== 'binding') {
     throw new Error(`« ${quoi} » devrait porter une liaison : contrat de core cassé.`);
   }
   return segment.value;
@@ -491,7 +491,9 @@ function premiereLiaison(segments: readonly TextSegment[], quoi: string): Printa
 
 function nombre(value: unknown, quoi: string): number {
   if (typeof value !== 'number') {
-    throw new Error(`« ${quoi} » aurait dû être un nombre : contrat de core cassé.`);
+    // `TypeError` plutôt qu'`Error` : ce qui échoue ici est un contrôle de type, et la classe
+    // le dit à qui inspecte l'erreur — comme `goesUp` le fait dans `core`.
+    throw new TypeError(`« ${quoi} » aurait dû être un nombre : contrat de core cassé.`);
   }
   return value;
 }
