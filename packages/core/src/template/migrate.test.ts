@@ -140,8 +140,78 @@ describe('parseTemplate', () => {
     expect(TEMPLATE_MIGRATIONS.map((step) => [step.from, step.to])).toStrictEqual([
       [1, 2],
       [2, 3],
+      [3, 4],
     ]);
     expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
+  });
+
+  it('brings a document written before C3 up to the current stamp, table or no table', () => {
+    // La moitié du contrat que « purement additif » recouvre : rien de ce qui existait ne
+    // devient irrecevable. Ce document ne porte aucun tableau, et il sort estampillé 4.
+    const beforeC3 = {
+      ...validTemplate,
+      schemaVersion: CURRENT_SCHEMA_VERSION - 1,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [{ type: 'text', id: 'titre', content: [{ kind: 'literal', text: 'Facture' }] }],
+      },
+    };
+
+    expect(parseTemplate(beforeC3).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it('parses a C3 table nested where a document really carries one', () => {
+    // Le tableau au bout du chemin où un document réel le porte -- dans le flux de blocs de la
+    // racine -- et non à la racine, qui reste un conteneur : le changement de type de
+    // `ContainerNode.children` suffit à faire entrer un tableau dans un document, sans toucher
+    // une ligne du schéma de `Template`.
+    const withTable = {
+      ...validTemplate,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'table',
+            id: 'lignes',
+            columns: [{ id: 'montant', width: 1, align: 'end' }],
+            header: [],
+            body: [
+              {
+                type: 'tableRowGroup',
+                id: 'corps',
+                each: { kind: 'path', path: 'facture.lignes' },
+                as: 'ligne',
+                rows: [
+                  {
+                    type: 'tableRow',
+                    id: 'detail',
+                    cells: [
+                      {
+                        columnId: 'montant',
+                        children: [
+                          {
+                            type: 'text',
+                            id: 'td',
+                            content: [
+                              { kind: 'binding', value: { kind: 'path', path: 'ligne.montant' } },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+            footer: [],
+          },
+        ],
+      },
+    };
+
+    expect(parseTemplate(withTable).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   it('parses a current-stamp document carrying a C1 kind', () => {
