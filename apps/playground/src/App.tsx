@@ -2,7 +2,7 @@ import {
   type BlockNode,
   CURRENT_SCHEMA_VERSION,
   childScope,
-  collectDataPaths,
+  collectTemplateDataPaths,
   createBudget,
   type DocumentNode,
   type EvaluationBudget,
@@ -16,12 +16,17 @@ import {
   findNodeById,
   MAX_ROUND_DECIMALS,
   MIN_ROUND_DECIMALS,
+  type PageBand,
+  type PageBandOccurrence,
+  type PageSetup,
   type PrintableExpression,
   parseTemplate,
+  printableAreaOf,
   ROUND_MODES,
   type RoundExpression,
   RoundExpressionSchema,
   type RoundMode,
+  STANDARD_SHEETS_MM,
   type TableCell,
   type TableColumn,
   type TableNode,
@@ -157,6 +162,24 @@ const txt = (id: string, text: string): TextNode => ({
   content: [{ kind: 'literal', text }],
 });
 
+/**
+ * « Page ⟨number⟩ / ⟨count⟩ » — quatre segments, dont deux MARQUEURS.
+ *
+ * Rien ici n'est calculé : un `pageField` déclare OÙ un numéro s'imprime, jamais sa valeur.
+ * Celle-ci vient du paginateur (lot E2), et la langue autour — « / », « sur », « of » — est
+ * du lot C6, qui se branchera sur ces `literal` sans position de contenu nouvelle.
+ *
+ * Écrit une fois et partagé par les deux pieds : sur une facture d'UNE page, seule la bande
+ * `lastOnly` est rendue, donc un modèle qui ne numéroterait que le pied courant sortirait
+ * une facture sans numéro de page.
+ */
+const PAGINATION: readonly TextSegment[] = [
+  { kind: 'literal', text: 'Page ' },
+  { kind: 'pageField', field: 'number' },
+  { kind: 'literal', text: ' / ' },
+  { kind: 'pageField', field: 'count' },
+];
+
 /** Explicit stringification: `concat` refuses a number, and `text()` is where one becomes text. */
 const titre: PrintableExpression = {
   kind: 'concat',
@@ -181,10 +204,12 @@ const sampleTemplate = parseTemplate({
   version: '1.0.0',
   // La feuille, ses marges et ses bandes — lot C4. Les dimensions ci-dessous sont celles
   // d'une A4 PARCE QUE L'AUTEUR DU MODÈLE L'A ÉCRIT : Openview n'impose aucun format, n'en
-  // réserve aucun nom et n'en déduit aucun d'une locale. `STANDARD_SHEETS_MM` est une
-  // commodité d'écriture, et le document, lui, n'enregistre que deux nombres.
+  // réserve aucun nom et n'en déduit aucun d'une locale — même règle que pour les noms de
+  // champs et les identifiants de colonnes. `STANDARD_SHEETS_MM` est une COMMODITÉ
+  // D'ÉCRITURE : elle est étalée ici, et le document, lui, n'enregistre que deux nombres.
+  // Ajouter un format à cette table ne change ni le schéma, ni la version, ni un document.
   page: {
-    sheet: { width: 210, height: 297 },
+    sheet: { ...STANDARD_SHEETS_MM.a4 },
     margins: { top: 18, right: 15, bottom: 18, left: 15 },
     header: [
       {
@@ -215,9 +240,7 @@ const sampleTemplate = parseTemplate({
         content: {
           type: 'container',
           id: 'pied',
-          children: [
-            { type: 'text', id: 'pied-num', content: [{ kind: 'literal', text: 'Page ' }] },
-          ],
+          children: [{ type: 'text', id: 'pied-num', content: PAGINATION }],
         },
       },
       {
@@ -226,11 +249,17 @@ const sampleTemplate = parseTemplate({
           type: 'container',
           id: 'pied-dernier',
           children: [
-            { type: 'text', id: 'pied-dernier-num', content: [{ kind: 'literal', text: 'Page ' }] },
+            { type: 'text', id: 'pied-dernier-num', content: PAGINATION },
+            // Cette liaison est lue PAR LA BANDE ET PAR ELLE SEULE : aucun bloc du flux ne la
+            // porte. C'est ce qui rend visible, sur l'écran « Données requises » plus haut, la
+            // différence entre `collectTemplateDataPaths` et `collectDataPaths(root)` — sans
+            // elle, l'appelant ne fournirait pas la clé et le pied s'imprimerait vide.
             {
               type: 'text',
               id: 'pied-mentions',
-              content: [{ kind: 'literal', text: 'Escompte pour paiement anticipé : néant.' }],
+              content: [
+                { kind: 'binding', value: { kind: 'path', path: 'societe.mentionsLegales' } },
+              ],
             },
           ],
         },
@@ -462,6 +491,9 @@ const renderData = {
   },
   // « Aujourd'hui » est une donnée, sous un nom que l'intégrateur choisit.
   traitement: { effectueLe: '2026-03-10' },
+  // Lu par le PIED DE DERNIÈRE PAGE et par lui seul. Aucun bloc du flux ne le lit, donc cette
+  // clé n'apparaît dans « Données requises » que parce que l'analyse descend dans les bandes.
+  societe: { mentionsLegales: 'Escompte pour paiement anticipé : néant.' },
 };
 
 /**
@@ -545,7 +577,16 @@ function requireTableNode(root: DocumentNode, id: string): TableNode {
 }
 
 const nodeIds = [...walk(sampleTemplate.root)].map((node) => `${node.id} (${node.type})`);
-const dataPaths = collectDataPaths(sampleTemplate.root);
+
+/**
+ * `collectTemplateDataPaths` et NON `collectDataPaths(sampleTemplate.root)`.
+ *
+ * Depuis le lot C4 les bandes vivent hors de `root`, donc la seconde forme omettrait
+ * `commande.numero` lu par l'en-tête — et cet écran dirait au visiteur « voici ce que ce
+ * modèle lit » en mentant. Le symptôme ne serait pas une erreur mais un BLANC : l'appelant
+ * ne fournirait pas la clé, et le bandeau s'imprimerait vide.
+ */
+const dataPaths = collectTemplateDataPaths(sampleTemplate);
 
 // Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de groupe, la
 // condition sur le nœud de condition. Les expressions déclarées plus haut ne servent qu'à
@@ -1153,6 +1194,100 @@ const pieceDePiedStyle = { ...cellStyle, fontWeight: 'bold' } as const;
  */
 const tableauLignesStyle = { ...tableStyle, width: '100%', tableLayout: 'fixed' } as const;
 
+/* ------------------------------------------------------------------------------------- *
+ * La page : une feuille dessinée à l'échelle, et rien de plus
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * La page du modèle VALIDÉ, lue comme tout le reste de cette section.
+ *
+ * `sampleTemplate.page` et non le littéral écrit plus haut : ce qui est dessiné est ce que
+ * le parse a rendu, pas ce que l'auteur croyait avoir écrit.
+ */
+const pageModele: PageSetup = sampleTemplate.page;
+
+/**
+ * L'aire imprimable, obtenue de `printableAreaOf` et JAMAIS recalculée ici.
+ *
+ * Le playground devient ainsi le troisième consommateur de cette fonction, après le moteur
+ * (E1) et le viewer (V1). C'est tout l'argument rendu visible : `largeur - gauche - droite`
+ * n'est pas UNE opération — mesuré, `215.9 - (25.4 + 25.4)` rend `165.10000000000002` et
+ * `(215.9 - 25.4) - 25.4` rend `165.1`. Deux implémentations qui écrivent la soustraction
+ * chacune de leur côté n'écrivent pas la même formule ; une fonction exportée fait de cet
+ * accord une DÉPENDANCE.
+ */
+const aireImprimable = printableAreaOf(pageModele);
+
+/** Le facteur d'échelle du dessin : la feuille tient dans 320 px de large. */
+const ECHELLE = 320 / pageModele.sheet.width;
+
+/**
+ * L'occurrence en clair, et les CINQ ont un libellé.
+ *
+ * Un `Record` sur l'union plutôt qu'un `switch` : un membre ajouté à
+ * `PAGE_BAND_OCCURRENCES` et pas ici ne compile pas. Sans cela, le playground montrerait un
+ * tuple partiel sans que rien ne le signale.
+ */
+const LIBELLE_OCCURRENCE: Readonly<Record<PageBandOccurrence, string>> = {
+  every: 'sur toutes les pages',
+  firstOnly: 'première page seulement',
+  exceptFirst: 'sauf la première',
+  exceptLast: 'sauf la dernière',
+  lastOnly: 'dernière page seulement',
+};
+
+/** Ce qu'une bande affiche dans le dessin : son rang d'application et son contenu résolu. */
+interface BandeAffichee {
+  readonly cle: string;
+  readonly occurrence: string;
+  readonly texte: string;
+}
+
+function bandesAffichees(cote: 'header' | 'footer'): readonly BandeAffichee[] {
+  return pageModele[cote].map((bande: PageBand, index: number) => ({
+    cle: `${cote}-${index}`,
+    occurrence: LIBELLE_OCCURRENCE[bande.on],
+    texte: texteDeBloc(bande.content, renderData, budgetFacture),
+  }));
+}
+
+const bandesHaut = bandesAffichees('header');
+const bandesBas = bandesAffichees('footer');
+
+const feuilleStyle = {
+  position: 'relative',
+  width: `${pageModele.sheet.width * ECHELLE}px`,
+  height: `${pageModele.sheet.height * ECHELLE}px`,
+  border: '1px solid #999',
+  background: '#fff',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+} as const;
+
+/**
+ * La zone imprimable, positionnée par les marges et DIMENSIONNÉE par `printableAreaOf`.
+ *
+ * Les décalages viennent des marges, les dimensions de la fonction : c'est ce qui rend le
+ * dessin faux si quelqu'un « corrige » la soustraction ailleurs.
+ */
+const zoneImprimableStyle = {
+  position: 'absolute',
+  left: `${pageModele.margins.left * ECHELLE}px`,
+  top: `${pageModele.margins.top * ECHELLE}px`,
+  width: `${aireImprimable.width * ECHELLE}px`,
+  height: `${aireImprimable.height * ECHELLE}px`,
+  border: '1px dashed #6a9fd4',
+  background: '#f6faff',
+} as const;
+
+const bandeStyle = {
+  background: '#fff8e6',
+  border: '1px solid #e8d5a0',
+  borderRadius: '4px',
+  padding: '0.4rem 0.6rem',
+  marginBottom: '0.4rem',
+  fontSize: '0.85rem',
+} as const;
+
 export default function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '2rem' }}>
@@ -1179,6 +1314,14 @@ export default function App() {
         <code>traitement.effectueLe</code> y figure comme n'importe quelle autre clé : « aujourd'hui
         » est une donnée, pas une horloge.
       </p>
+      <p>
+        Depuis le lot C4, cette liste vient de <code>collectTemplateDataPaths</code> et non de{' '}
+        <code>collectDataPaths(root)</code> : les bandes de page vivent <em>hors</em> de{' '}
+        <code>root</code>, donc la seconde forme omettrait <code>societe.mentionsLegales</code> — lu
+        par le pied de dernière page et par lui seul. Le symptôme ne serait pas une erreur mais un{' '}
+        <strong>blanc</strong> : on aurait dit à l'appelant de fournir six clés, jamais la septième,
+        et le pied s'imprimerait vide.
+      </p>
       <ul>
         {dataPaths.map((dataPath) => (
           <li key={dataPath}>
@@ -1186,6 +1329,76 @@ export default function App() {
           </li>
         ))}
       </ul>
+
+      <h2>La page : une feuille, des marges, et ce qui se répète</h2>
+      <p>
+        Le rectangle ci-dessous est <strong>dessiné à l'échelle</strong> depuis{' '}
+        <code>page.sheet</code> et <code>page.margins</code> du modèle validé, et la zone en
+        pointillés est obtenue de <code>printableAreaOf</code> — <em>jamais recalculée ici</em>.
+        Cette page est donc le <strong>troisième consommateur</strong> de cette fonction, après le
+        moteur et le viewer, et c'est tout son argument rendu visible :{' '}
+        <code>largeur − gauche − droite</code> n'est pas <em>une</em> opération.{' '}
+        <code>215,9 − (25,4 + 25,4)</code> vaut <code>165.10000000000002</code> quand{' '}
+        <code>(215,9 − 25,4) − 25,4</code> vaut <code>165.1</code> : deux implémentations qui
+        écrivent la soustraction chacune de leur côté n'écrivent pas la même formule.
+      </p>
+      <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <div style={feuilleStyle}>
+          <div style={zoneImprimableStyle} />
+        </div>
+        <div style={{ flex: '1 1 20rem' }}>
+          <p style={{ marginTop: 0 }}>
+            Feuille <code>{pageModele.sheet.width}</code> × <code>{pageModele.sheet.height}</code>{' '}
+            mm — marges <code>{pageModele.margins.top}</code> /{' '}
+            <code>{pageModele.margins.right}</code> / <code>{pageModele.margins.bottom}</code> /{' '}
+            <code>{pageModele.margins.left}</code> mm — zone imprimable{' '}
+            <code>{aireImprimable.width}</code> × <code>{aireImprimable.height}</code> mm.
+          </p>
+          <p>
+            <strong>En haut</strong>
+          </p>
+          {bandesHaut.map((bande) => (
+            <div key={bande.cle} style={bandeStyle}>
+              <em>{bande.occurrence}</em> — {bande.texte}
+            </div>
+          ))}
+          <p>
+            <strong>En bas</strong>
+          </p>
+          {bandesBas.map((bande) => (
+            <div key={bande.cle} style={bandeStyle}>
+              <em>{bande.occurrence}</em> — {bande.texte}
+            </div>
+          ))}
+        </div>
+      </div>
+      <p>
+        Le pied courant est <code>exceptLast</code> et non <code>every</code>, et ce n'est pas un
+        choix de style : ce modèle porte <em>aussi</em> un pied de dernière page, et{' '}
+        <code>every</code> recoupant tout, la paire <code>every</code> + <code>lastOnly</code> est{' '}
+        <strong>refusée par le schéma</strong> — elle poserait deux bandes sur la dernière feuille.
+        Sur les vingt-cinq couples d'occurrences, <strong>deux seulement</strong> sont compatibles :{' '}
+        <code>firstOnly</code> + <code>exceptFirst</code> et <code>exceptLast</code> +{' '}
+        <code>lastOnly</code>. Comme elles ne partagent aucun membre, un côté ne peut jamais porter
+        plus de deux bandes.
+      </p>
+      <p>
+        Le <code>1 / 1</code> des pieds est un <strong>espace réservé</strong>.{' '}
+        <em>Cette page n'a pas de paginateur</em> : elle ne coupe rien, donc elle ne connaît ni le
+        rang d'une page ni leur nombre. Ce que le modèle déclare est un <strong>marqueur</strong> —{' '}
+        <code>pageField</code>, un emplacement — et la valeur viendra du moteur (lot E2), la langue
+        autour de C6. Rien n'est calculé ici, et <code>collectTemplateDataPaths</code> le confirme :
+        les quatre marqueurs de ce modèle ne réclament <em>aucune</em> clé à l'application
+        intégratrice.
+      </p>
+      <p>
+        Et ce que cette démonstration <strong>ne peut pas</strong> montrer, dit franchement : la
+        répétition (il n'y a qu'une page), la dernière page (il n'y en a pas d'autre), le
+        débordement, le report et la moindre coupure. Après C4,{' '}
+        <strong>aucun document ne sort sur deux pages</strong> : le lot livre les faits qu'un
+        paginateur devra respecter, et le paginateur est le lot E2. Un visiteur qui voudrait voir
+        une bande se répéter devra l'attendre.
+      </p>
 
       <h2>Titre : concaténation, mise en chaîne explicite et majuscules</h2>
       <p>

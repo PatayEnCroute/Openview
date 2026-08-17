@@ -15,6 +15,7 @@ export type {
   DocumentNodeType,
   ImageNode,
   LoopNode,
+  PageField,
   TableBodyNode,
   TableCell,
   TableColumn,
@@ -25,6 +26,7 @@ export type {
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
+  TextPageFieldSegment,
   TextSegment,
 } from './ast/nodes.js';
 export {
@@ -36,6 +38,7 @@ export {
   LoopNodeSchema,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
+  PAGE_FIELDS,
   TABLE_COLUMN_ALIGNMENTS,
   TableBodyNodeSchema,
   TableCellSchema,
@@ -46,6 +49,7 @@ export {
   TextBindingSegmentSchema,
   TextLiteralSegmentSchema,
   TextNodeSchema,
+  TextPageFieldSegmentSchema,
   TextSegmentSchema,
 } from './ast/nodes.js';
 export type { NodeReads, NodeVisitor, SegmentVisitor } from './ast/visitor.js';
@@ -166,6 +170,26 @@ export {
 export type { ExpressionValueType } from './expression/value-type.js';
 export { EXPRESSION_VALUE_TYPES, kindOf, valueTypeOf } from './expression/value-type.js';
 
+export type {
+  PageBand,
+  PageBandOccurrence,
+  PageMargins,
+  PageSetup,
+  PrintableArea,
+  Sheet,
+  StandardSheetName,
+} from './page/page.js';
+export {
+  MAX_SHEET_MM,
+  MIN_SHEET_MM,
+  PAGE_BAND_OCCURRENCES,
+  PageBandSchema,
+  PageMarginsSchema,
+  PageSetupSchema,
+  printableAreaOf,
+  SheetSchema,
+  STANDARD_SHEETS_MM,
+} from './page/page.js';
 export type { RenderFormat, RenderPort, RenderRequest, RenderResult } from './ports/render.js';
 export type { TemplateStoragePort } from './ports/storage.js';
 export type { ShapeLimits } from './template/guard.js';
@@ -175,9 +199,11 @@ export {
   parseBlockNode,
   parseDocumentNode,
   parseExpression,
+  parsePageSetup,
   resolveShapeLimits,
 } from './template/guard.js';
 export type { TemplateMigration } from './template/migrate.js';
 export { migrateToCurrent, parseTemplate, TEMPLATE_MIGRATIONS } from './template/migrate.js';
+export { collectTemplateDataPaths } from './template/paths.js';
 export type { Template, TemplateSummary } from './template/template.js';
 export { CURRENT_SCHEMA_VERSION, TemplateSchema } from './template/template.js';
