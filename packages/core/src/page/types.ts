@@ -92,9 +92,10 @@ export type PageBandOccurrence = (typeof PAGE_BAND_OCCURRENCES)[number];
  * NOTHING BOUNDS WHAT A BAND CONTAINS, and its height can therefore depend on the data: the
  * children of `content` are the whole `BlockNode` union, `loop` and `table` included. That is
  * not an oversight -- refusing it would take a recursive walk of every band, and a header
- * repeating two or three customer references is legitimate. The failure mode is named and it
- * belongs to E2/E3: a band measuring taller than the printable area makes pagination
- * impossible, and the engine must refuse cleanly rather than loop.
+ * repeating two or three customer references is legitimate. No field of this contract could
+ * catch it either, because catching it would mean MEASURING. What follows for a renderer is
+ * recorded in ADR 0006, which is where an expectation of the engine belongs: writing engine
+ * behaviour into the contract is the mistake lot C3 had to undo in its own docstrings.
  */
 export interface PageBand {
   readonly on: PageBandOccurrence;
@@ -143,8 +144,8 @@ export const MIN_SHEET_MM = 1;
  * EXTERNAL KNOWLEDGE, not verified in this repository: no engine exists yet, so nothing here
  * confirms the figure, and lot E1 owes it a throwaway probe -- against the PDF adapter
  * actually chosen, not against a specification. What the bound protects is independent of
- * its exact value: without a ceiling, `1e308` mm is a valid document whose printable area
- * the engine will compute as infinite.
+ * its exact value: without a ceiling, `1e308` mm is a valid document whose printable area is
+ * infinite.
  */
 export const MAX_SHEET_MM = 5080;
 
