@@ -77,8 +77,37 @@ import { PageSetupSchema } from '../page/page.js';
  *
  * Stamped ONCE, after the last persisted shape of the lot. No commit of C3 before that one
  * is publishable, for the reason version 2 already records.
+ *
+ * ## What version 5 means
+ *
+ * Version 5 is version 4 plus TWO stored shapes, and they move in opposite directions.
+ *
+ * TOWARDS THE WIDE -- `TextSegment` gains `pageField`, a marker the paginator substitutes.
+ * A version 4 build meeting one answers `"No matching discriminator"` / `"Invalid input"`
+ * on a path like `root.children.0.content.1.kind`: no version named, no remedy, and a path
+ * pointing at a `kind` that is spelt correctly.
+ *
+ * The path is in `root` and not under `page`, and the reason matters: a version 4 build does
+ * not KNOW the `page` key, so it strips the whole field without validating anything inside
+ * it. Measured -- a marker written under `page.footer` yields no issue at all. The marker is
+ * legal wherever a `TextNode` lives, `root` included, so the widening is detectable exactly
+ * where real templates write it.
+ *
+ * TOWARDS THE NARROW -- `Template.page` becomes REQUIRED. This is the SILENT case, and it
+ * is the dangerous one: a version 4 build does not refuse the field, it STRIPS it, and an
+ * editor that opens then saves erases the page with no error at all.
+ *
+ * One version, two directions, one number. And unlike versions 2, 3 and 4, this one comes
+ * with a migration that TRANSFORMS rather than stamps: `page` being required, a v4
+ * document with no page would otherwise be refused outright -- a real narrowing, and the
+ * first that would not be vacuous.
+ *
+ * Stamped ONCE, after the last persisted shape of the lot. No commit of C4 before that one
+ * is publishable -- and "not publishable" is STRICTER here than it was for C1, C2 and C3,
+ * which were purely widening: a build taken between the `page` field and this stamp refuses
+ * EVERY existing v4 document, not merely the documents of the build that follows.
  */
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /**
  * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape

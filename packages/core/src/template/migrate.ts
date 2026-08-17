@@ -1,7 +1,27 @@
 import { z } from 'zod/v4';
 import { TemplateMigrationError } from '../errors.js';
+import type { PageSetup } from '../page/page.js';
 import { assertBoundedShape, type ShapeLimits } from './guard.js';
 import { CURRENT_SCHEMA_VERSION, type Template, TemplateSchema } from './template.js';
+
+/**
+ * The sheet the 4 -> 5 migration writes on a document that has none: A4 portrait, 20 mm all
+ * round, no band. Not a default -- see the migration's own docstring for why the distinction
+ * is measurable rather than rhetorical.
+ *
+ * ANNOTATED, and the annotation is the only thing that checks it. `TemplateMigration.migrate`
+ * is typed `(input: Record<string, unknown>) => Record<string, unknown>`, so whatever is
+ * written into `page` arrives as `unknown` and the registry verifies nothing. Measured: with
+ * the annotation, a constant missing its `footer` is `TS2741` at gate 2; without it, the same
+ * constant passes every gate in silence and the migration produces a page the parse refuses
+ * AFTERWARDS -- with a message accusing the document while the fault is in the migration.
+ */
+const COMPATIBILITY_PAGE: PageSetup = {
+  sheet: { width: 210, height: 297 },
+  margins: { top: 20, right: 20, bottom: 20, left: 20 },
+  header: [],
+  footer: [],
+};
 
 /**
  * One step of the upgrade chain. Steps are applied in sequence until the document
@@ -116,6 +136,58 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      * and comes out `schemaVersion: 4`.
      */
     migrate: (input) => ({ ...input, schemaVersion: 4 }),
+  },
+  {
+    from: 4,
+    to: 5,
+    /**
+     * The first TRANSFORMING migration of this repository, and the reason `parseTemplate`
+     * guards the shape twice.
+     *
+     * `Template.page` is required, so a v4 document carries nothing that satisfies it.
+     * Stamping alone would refuse every v4 document with `Invalid input: expected object,
+     * received undefined` on the path `page` -- a fifth narrowing on the pre-v1.0
+     * assumption, and the first one that is not vacuous: the four existing ones refuse
+     * values no document could hold, this one would refuse EVERY document.
+     *
+     * So it writes a compatibility page. Openview therefore CHOOSES a sheet, once, for
+     * documents written before the question existed, and that has to be said in those
+     * terms:
+     *
+     * - it is NOT an environment read -- A4 is a constant of this file, not the machine's
+     *   locale, and the difference is exactly what makes it deterministic. The other half
+     *   has to be conceded too: A4 is the format of PART of the world, so writing it here
+     *   is a locale disguised as a constant, and no tool will ever see that. It is a
+     *   product decision, taken by the product owner on 2026-08-18, not a deduction;
+     * - it is NOT a schema default -- a `z.default()` would rewrite the document at every
+     *   parse, in silence, forever; this writes it once, on a document stamped 4, and the
+     *   result is visible in what gets saved;
+     * - it is NOT a de-facto default for new templates -- no template written after this
+     *   lot goes through this migration, because the field is required and its author
+     *   fills it in. What WILL be copied is the page of the delivered template of designer
+     *   lot D9, and that choice belongs to that lot.
+     *
+     * The `'page' in input` test is not defensive noise, and it is not replaceable by a
+     * spread order. A hand-made document stamped 4 may already carry a page -- the stamp
+     * only ever guards upward, see the 1 -> 2 entry -- and MEASURED, the two spellings do
+     * opposite things: `{ ...input, page: DEFAULT }` OVERWRITES the author's page, while
+     * `{ page: DEFAULT, ...input }` preserves it. The second one happens to be right, which
+     * is worse than being wrong: it is correct BY KEY ORDER, so the next reader who reorders
+     * the object for tidiness silently destroys layouts. The explicit test says what it
+     * means, and a test pins it.
+     *
+     * Measured: a v4 document of 7 JSON levels and 16 values comes out at 7 levels and 27
+     * values. The page adds eleven values and NO level, because `page.margins` is exactly as
+     * deep as `root.children`. So the rule this repository owes itself -- a migration never
+     * yields an out-of-bounds shape -- holds for this entry, and the SECOND pass of the
+     * guard in `parseTemplate` verifies it at runtime rather than on trust. This is the lot
+     * where that second pass finally earns its place.
+     */
+    migrate: (input) => ({
+      ...input,
+      page: 'page' in input ? input.page : COMPATIBILITY_PAGE,
+      schemaVersion: 5,
+    }),
   },
 ];
 
