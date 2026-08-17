@@ -5,27 +5,36 @@
 > `docs/roadmap/` — ni les *décisions* structurantes, qui se consignent dans `docs/adr/`. Il est
 > **périssable** : une fois le lot livré, il ne fait plus foi, et c'est l'ADR 0005 qui reste.
 >
-> **Statut :** ⏸ **EN ATTENTE D'ARBITRAGE.** Sept arbitrages sont ouverts [§8], **tous les sept
-> gatent INC-1**, et **trois sont marqués ⛔ parce que leur option non recommandée réécrit du
-> contrat déjà rédigé** :
+> **Statut à l'exécution :** ✅ **prêt à exécuter.** Les sept arbitrages de la [§8] ont été tranchés
+> par le propriétaire du produit le **2026-08-17**, conformément aux sept recommandations de ce
+> plan : **1-A** (« typé » veut dire *décrit dans un contrat typé* — les cinq colonnes sont un jeu
+> d'épreuve, aucune ne porte de type de donnée), **2-A** (C3 possède l'alignement **de colonne** ;
+> C5 garde l'alignement de bloc et la surcharge par cellule s'il la décide), **3-A** (une cellule
+> contient des `BlockNode[]`, pas des `TextSegment[]`), **4-A** (le `superRefine` de
+> `TableNodeSchema` est retenu), **5-A** (`start | center | end`), **6-A** (`MAX_COLUMN_WIDTH = 1000`
+> conservé), **7-A** (le test de discriminant de `checkTableWiring` n'est pas un second parcours du
+> Composite : **aucun amendement d'`AGENTS.md`, aucun commit `chore(governance)`**). **INC-1 n'est
+> plus gaté par un arbitrage**, et le contrat de la [§3] tient tel qu'il est rédigé — aucune ligne
+> n'est à rejouer. Ce qui est levé est le gate **produit** ; l'ordre technique ne l'est pas :
+> **INC-1 démarre après INC-0**, qui crée les deux fichiers dans lesquels il écrit
+> ([§4], `INC-0 ──► INC-1`).
 >
-> - **n° 1 — « typé ».** Si le mot, dans le critère de recette « un tableau à cinq colonnes **typé**
->   (désignation, quantité, prix unitaire, remise, montant) » (`docs/roadmap/core.md:157-159`), veut
->   dire « chaque colonne porte un type de donnée » plutôt que « décrit dans un contrat typé », alors
->   le contrat de la [§3] est **à rejouer, pas à amender** : un type de colonne appelle une échelle
->   et un symbole, donc un arrondi implicite, donc il préempte par la porte de service la question
->   que C2 a explicitement laissée ouverte — qui déclare l'échelle d'**affichage** d'un montant.
->   **C'est le seul qui puisse renvoyer le lot entier à sa table de travail.**
-> - **n° 3 — blocs ou segments dans une cellule.** L'option « segments » ne change pas un type : elle
->   réécrit `TableCell`, la branche `tableRow` de `childrenOf`, **toutes** les mesures de profondeur
->   du lot, l'argument « zéro position de contenu nouvelle pour C6 » de D4, la fixture de recette et
->   le décompte de nœuds. C'est **la moitié de la [§3]**.
-> - **n° 7 — le mandat de gouvernance.** Son option B inverse un couplage entre `ast/schemas.ts` et
->   `ast/visitor.ts` ; son option C ajoute un commit `chore(governance)` et un mandat daté au
->   découpage de la [§4]. Il déplace du travail, il ne le refait pas.
+> **Ce que les décisions ne referment pas**, et qui doit être lu avant d'écrire l'ADR 0005. Trois
+> d'entre elles portent un **signal de réouverture**, à recopier dans l'ADR [§8] : le n° 1 se rouvre
+> si la question ouverte de C2 sur l'échelle d'**affichage** d'un montant est tranchée en faveur
+> d'une table de devises ; le n° 5 si le RTL est déclaré hors périmètre à jamais ; le n° 6 sur une
+> demande citant un rapport plus fin que 1:1 000 ou une largeur physique imposée. Et la question que
+> le n° 5 laisse derrière lui — **« qui déclare la direction d'écriture d'un document ? »** — entre
+> dans « Ce qui reste ouvert » de l'ADR 0005 **sans recommandation** : la décision 5-A *diffère*
+> cette résolution, elle ne l'attribue à personne [§2, D7].
 >
-> **INC-0 peut démarrer sans aucun des sept** : c'est un refactor pur, sans changement de surface
-> publique, et il est juste quelle que soit la lecture retenue [§4, INC-0]. **INC-1 ne le peut pas.**
+> **Le marquage ⛔ de la [§8] reste, et il change de sens.** Avant la décision, il signalait les
+> trois arbitrages dont l'option non recommandée réécrivait du contrat déjà rédigé ; ce coût ne
+> disparaît pas avec la décision, il devient le **coût de réouverture** — n° 1 (le lot est rejoué :
+> D1, D6, D7, D10 et D13 se reprennent avec un axiome différent), n° 3 (la moitié de la [§3] se
+> réécrit) et n° 7 (le découpage change, ou un couplage s'inverse entre `ast/schemas.ts` et
+> `ast/visitor.ts`). Rouvrir l'un des quatre autres ne coûterait qu'un champ, une borne, une
+> étiquette ou un contrôle — nommé et localisé.
 >
 > **Date :** 2026-08-16 · **Brique :** `@openview/core`, vague 1 · **Jalon visé :** J1
 >
@@ -138,9 +147,11 @@
 > la chaîne de migration rend `[[1,2],[2,3],[3,4]]`, un document estampillé 3 sort à 4 et un
 > estampillé 5 rend `TemplateMigrationError` ; une ligne nue dans `root.children` est refusée sur
 > `root.children.2.type` / « No matching discriminator » ; le libellé
-> `A table body needs a list to iterate over, got a number.` ; **le trou de covariance est réel** —
-> retirer `TableNodeSchema` de `blockMembers()` laisse `tsc -p tsconfig.typecheck.json` **et**
-> `tsc -p tsconfig.json` à exit 0, seul le test de parsing rougit [§5.2] ; retirer `align` casse en
+> `A table body needs a list to iterate over, got a number.` ; **le trou de covariance est réel, et
+> il porte sur trois membres et deux fabriques** — retirer `TableNodeSchema` de `blockMembers()`, ou
+> `TableRowGroupNodeSchema`, ou `TableRowNodeSchema` de `rowMembers()`, laisse
+> `tsc -p tsconfig.typecheck.json` **et** `tsc -p tsconfig.json` à exit 0, seul le test de parsing
+> rougit [§3.2 ; §5.2] ; retirer `align` casse en
 > revanche **quatre** sites à la porte 2, plus un cinquième à la porte 3 ; élargir `DocumentNode` seul rend **1** erreur, et **4** une fois les
 > trois membres et les trois `case` ajoutés ; un `superRefine` laisse un `ZodObject` en zod 4, donc
 > `TableNodeSchema` reste membre légal des deux unions discriminées, `lazy` comprises.
@@ -153,9 +164,37 @@
 > remplacement de `charCodeAt` par `codePointAt` derrière un helper local `codeAt`, **sans aucun
 > rapport avec C3**. INC-0 est un refactor de déplacement dont le critère de sortie est que
 > `git diff --stat` ne montre **que** des déplacements et que `packages/core/src/index.ts` soit
-> inchangé octet pour octet [§4, INC-0] : le lancer sur cet arbre mêle deux diffs dans une revue dont
-> le travail est précisément de vérifier que **rien n'a changé**. À commiter ou à remiser avant la
-> première ligne du lot.
+> inchangé octet pour octet [§4, INC-0] : le lancer sur cet arbre mêlait deux diffs dans une revue
+> dont le travail est précisément de vérifier que **rien n'a changé**.
+>
+> **La condition est levée pour les trois fichiers de C2 — re-relevé le 2026-08-17.** Ils ont été
+> commités dans `af04818` (« fix(core): fermer le dispatch de mode, et deux chemins rapides
+> mesurés »), et `git status --porcelain` sur `main` ne rend plus que **ce plan**. **Le critère de
+> sortie ne change pas** : c'est celui de [§4, INC-0], et il reste à vérifier une fois l'incrément
+> écrit.
+>
+> **Mais « un arbre propre » est le mot faux, et le relevé du jour le montre deux fois.** Mesuré au
+> cours de la revue de contradiction du **2026-08-17**, `git status --short --branch` rend
+> `## main...origin/main` puis **quatre** fichiers modifiés et non commités : ce plan
+> (`docs/plans/c3-tableau-de-lignes.md`) et **trois nouveaux fichiers de C2** —
+> `packages/core/src/expression/evaluator/operations/round.ts`, son test, et
+> `apps/playground/src/App.tsx` — portant un refactor `digitAt` / `Number(text[index])`, un
+> `TypeError` à la place d'un `Error` et un chaînage optionnel. **Sans aucun rapport avec C3**, comme
+> la fois précédente.
+>
+> **La leçon n'est donc pas « attendre un arbre vide », c'est que le critère doit être scopé.** Un
+> arbre de travail actif ne reste pas vide, et un critère de sortie qui l'exige se fait démentir deux
+> fois en deux jours. Le critère d'INC-0 était écrit **deux fois** sur un `git diff --stat` **non
+> scopé** — « ne montre que des déplacements et le fichier façade » ([§4, INC-0] et [§6.4]) — donc
+> faux dès qu'un fichier de `docs/` ou d'`expression/` est modifié, pour une raison qui n'a rien à
+> voir avec l'incrément. Il porte désormais son pathspec, `-- packages/core/src/ast`, et **les quatre
+> fichiers ci-dessus tombent tous en dehors** : INC-0 est lisible tel quel. Ce qui restait dû, et qui
+> l'était de toute façon — **commiter ce plan avant la première ligne d'INC-0**, parce que le relevé
+> des sept décisions de la [§8] ne vivait que dans un fichier non commité alors que l'ADR 0005 qui le
+> reprendra n'arrive qu'en INC-5 —, **est fait par le commit qui porte ce paragraphe** ; les trois
+> fichiers de C2 partent dans la même revue, sous leur propre commit. La condition de lisibilité de la
+> revue d'INC-0 est que son diff ne contienne que des déplacements **là où l'incrément écrit** ; elle
+> ne demande pas un arbre vide, et elle n'a jamais eu besoin de le demander.
 
 ---
 
@@ -277,7 +316,8 @@ colonne doit exister comme entité adressable, sinon « filet vertical entre la 
 4 » est inexprimable — et **zéro champ d'apparence dans C3**, puisque déplacer un champ stocké est
 une migration transformante. Le recouvrement sur « alignements », qui figure dans le périmètre de C5
 (`core.md:179`) *et* dans celui de C3 (`core.md:153-154`), n'est arbitré par aucun texte du dépôt :
-c'est [§2, D7] qui le tranche, et [§8, arbitrage n° 2] qui le remonte.
+c'est [§2, D7] qui le tranche, et [§8, arbitrage n° 2] qui le relève — décision rendue le
+2026-08-17.
 
 **C6** (`core.md:186-200`) impose une conséquence dure : l'en-tête de colonne est un **libellé fixe
 du modèle**. Stocké comme un `label: string`, il obligerait C6 à une migration transformante sur tous
@@ -367,9 +407,10 @@ Leur réversibilité n'est pas uniforme, et le relevé compte, parce que l'ADR 0
 **trois sont strictement irréversibles** (D3, D9, D11), **quatre ne se rouvrent que dans un sens**
 (D2 vers l'élargissement du flux de blocs, D4 vers l'ajout d'un libellé de colonne, D6 vers
 l'élargissement de la fenêtre de largeur, D8 vers un site d'alias de plus), **cinq sont
-réversibles** (D1, D5, D10, D12, D13), et **une reste ouverte jusqu'à INC-1** — D7, dont l'arbitrage
-n°5 [§8] doit être rendu avant que le premier modèle ne soit stocké, parce qu'après, le revirement
-est à la fois transformant et **sémantiquement indécidable**. Trois d'entre elles méritent d'être
+réversibles** (D1, D5, D10, D12, D13), et **une est fermée par une décision plutôt que par une
+propriété** — D7, dont l'arbitrage n°5 a été tranché le 2026-08-17 [§8] : son jeu de valeurs
+s'élargit encore, mais renommer `start` en `left` serait à la fois transformant et **sémantiquement
+indécidable**, donc irréversible dans les faits. Trois d'entre elles méritent d'être
 nommées tout de suite, parce que ce sont celles dont un lecteur pressé sous-estimera le coût de
 retour.
 
@@ -402,9 +443,9 @@ obligatoire.
 | **D4** | L'en-tête est une section de lignes | **Dans un seul sens** : un libellé de colonne s'ajoute plus tard ; `header` ne se retire pas |
 | **D5** | Une cellule contient des blocs, pas des segments | **Oui**, et c'est le motif même de la décision : le revirement est un rétrécissement, jamais une transformation |
 | **D6** | La largeur est un poids entier borné à [1, 1000] | **Dans un seul sens** : la fenêtre s'élargit, l'unité ne change pas sans transformation |
-| **D7** | `start \| center \| end`, par colonne, et il appartient à C3 | **Ouverte jusqu'à INC-1** ([§8], arbitrage n°5) ; transformante et indécidable après |
+| **D7** | `start \| center \| end`, par colonne, et il appartient à C3 | **Tranchée** ([§8], arbitrage n°5, le 2026-08-17) — le jeu de valeurs s'élargit ; renommer est transformant *et* indécidable |
 | **D8** | La répétition vit sur `tableRowGroup` | **Dans un seul sens** : un site d'alias s'ajoute, celui-ci ne se déplace plus |
-| **D9** | Le pied ne contient que des lignes fixes | **Non, au sens fort** — un champ de total serait un revirement de doctrine, pas une évolution |
+| **D9** | Le pied n'accepte que des `TableRowNode` : aucune répétition de lignes, aucun champ d'agrégation | **Non, au sens fort** — un champ de total serait un revirement de doctrine, pas une évolution |
 | **D10** | Zéro code d'erreur nouveau ; un site `tableRowGroup` | **Oui** — aucune forme persistée n'est touchée par cette décision seule |
 | **D11** | `CURRENT_SCHEMA_VERSION` passe à 4 | **Non, par construction** : une estampille posée ne se retire pas |
 | **D12** | Aucun plafond nouveau | **Oui** — un plafond s'ajoute plus tard ; ce serait un rétrécissement, avec son signal nommé |
@@ -538,6 +579,17 @@ désigner un enregistrement inerte. C7 marque un bloc insécable (`core.md:204-2
 ligne sur quelle page » (`engine.md:89-97`). Et `childrenOf` doit pouvoir rendre une ligne, parce que
 c'est la **seule** voie par laquelle `collectDataPaths` traverse : un sous-arbre que `childrenOf` ne
 rend pas est invisible à `walk`, à `findNodeById` et à la collecte, **sans erreur nulle part**.
+
+**Ce que l'id identifie, et il faut le borner ici plutôt que le laisser déduire.**
+`TableRowNode.id` désigne la ligne **du modèle** — le gabarit —, pas chacune des occurrences qu'un
+`tableRowGroup` produit : N occurrences d'une même ligne répétée partagent un id, et le contrat
+n'en stocke aucune autre. L'identité d'une occurrence est donc *(id de ligne, rang d'itération)*, et
+le rang appartient au **moteur qui itère** : `engine.md:87-97` demande à E5 de « restituer la
+découpe qu'il a décidée », pas de la lire dans le document. C3 rend cette identité
+**constructible** et s'arrête là ; il ne la déclare pas, ne la promet pas, et n'engage E5 sur
+aucune forme — l'écrire serait exactement l'engagement envers un lot non écrit que la correction
+C-01 a retiré des docstrings [§2, D4]. Ce qu'il faut en retenir en aval : une table indexée par le
+seul `row.id` collisionne sur un corps répété, et ce n'est pas un défaut du contrat.
 
 **Pourquoi deux unions plutôt qu'une.** Une ligne hors d'un tableau ne veut rien dire, et un moteur
 qui en rencontrerait une dans un conteneur devrait deviner. Les deux unions le disent **au
@@ -857,10 +909,12 @@ porte, contournée par un `container`, et une règle non outillée n'est pas une
 **Conséquences.**
 
 - **E2 hérite de la pagination d'un tableau imbriqué.** C'est le seul coût réel que la décision
-  transfère à un lot non écrit, il est nommé ici et nulle part ailleurs, et il est remonté en [§8]
-  arbitrage n°3 : si le propriétaire du produit juge ce risque inacceptable, c'est la proposition à
-  segments qu'il faut rejouer, et il faut alors accepter par écrit qu'une cellule ne contiendra
-  jamais qu'un run de texte.
+  transfère à un lot non écrit, il est nommé ici et nulle part ailleurs, et il a été **arbitré** :
+  le n°3 de la [§8] a été tranché en A le 2026-08-17, ce risque étant **accepté par écrit** au motif
+  que le revirement inverse — des segments vers des blocs — serait la seule migration transformante
+  du contrat. Ce que E2 reçoit est donc une charge connue et consentie, pas une surprise ; et le jour
+  où la proposition à segments reviendrait sur la table, il faudrait accepter, par écrit lui aussi,
+  qu'une cellule ne contiendra jamais qu'un run de texte.
 - **Une cellule qui porte un `loop` lie un alias pour ses propres enfants.** Ce n'est **pas** un site
   de masquage supplémentaire au sens de [§2, D8] — c'est `LoopNode.as`, inchangé, dans une position
   nouvelle. Le mécanisme, la règle du plus interne et la limite consignée par `collectDataPaths` sont
@@ -926,6 +980,20 @@ moteur conforme. C'est l'unique manière trouvée d'adosser la décision produit
 démontrable plutôt qu'à un accord d'implémentation. Un poids réel strictement positif perd tout
 cela : `Σ` dépend alors de l'ordre de sommation, et la garantie redevient une approximation.
 
+> 🔑 **Ce que cette preuve donne, et ce qu'elle ne donne pas — trois niveaux, à ne pas empiler.** Il
+> faut le dire, parce que « adosser la décision produit 7 » se lirait comme « démontrer l'identité
+> d'aperçu et de PDF », et ce n'est pas ce qui est démontré. *(1)* **Ce que l'arithmétique
+> démontre** : `Σ` est exacte, donc `width / Σ widths` est **une** division correctement arrondie,
+> donc deux consommateurs qui divisent en binary64 obtiennent le **même nombre**, au bit près.
+> *(2)* **Ce que C3 promet** : ce nombre, et rien de plus — le contrat ne déclare ni la largeur du
+> tableau, ni l'unité de rendu, ni ce qui arrive au contenu qui dépasse sa part, et D6
+> conséquence *(2)* l'écrit déjà. *(3)* **Ce qui reste à vérifier ailleurs** : deux consommateurs
+> peuvent **quantifier** une part exacte en unités de rendu différemment, et l'identité au pixel ne
+> suit donc pas de l'identité du nombre. C'est V3 qui vérifie la décision produit 7 elle-même,
+> automatiquement (`viewer.md:71-85`, cité en [§2, D4]). Ce que D6 supprime, c'est l'accord
+> d'implémentation **sur le nombre** ; l'accord sur l'arrondi d'affichage n'est pas de son ressort,
+> et un poids réel aurait fait perdre les deux au lieu d'un.
+
 Reste à montrer que `Σ` ne peut pas sortir de l'exact. C'est là que la version précédente de cette
 preuve se trompait, trois fois dans une seule phrase.
 
@@ -963,6 +1031,16 @@ preuve se trompait, trois fois dans une seule phrase.
 >   « ce que cette décision tient pour acquis » de l'ADR 0005 : sans cette phrase, un relèvement de
 >   `DEFAULT_SHAPE_LIMITS` par E8 aurait l'air d'invalider la preuve, alors qu'aucune valeur
 >   admissible de `maxNodes` ne le peut.
+>
+> **Une précaution sur la forme de cette preuve, parce qu'elle part dans un `.d.ts` publié.** Elle
+> recopie en prose la **valeur** de `LIMIT_HARD_CEILING`, et `guard.ts:57-62` écrit la règle
+> contraire à trois lignes de là — « *The same schema and the same ceiling as `EvaluationLimits`,
+> **imported rather than restated**: two copies of one bound drift* ». C'est aussi exactement le
+> défaut que [§3.6] corrige sur `maxDepth`. La preuve, elle, survit à tout relèvement admissible du
+> plafond ; ce sont les **chiffres** qui ne survivent pas. Deux gestes : la docstring nomme la
+> constante avant de donner sa valeur, et le jour où `limits.ts` la relève, les trois nombres de ce
+> paragraphe se **redérivent** au lieu de se relire. À défaut, C3 aura écrit la docstring que sa
+> propre [§3.6] existe pour réparer.
 
 **Les cinq entrées refusées, et les QUATRE messages.** Une version antérieure annonçait que « **les
 cinq refus rendent cinq messages lisibles** » : c'est un décompte faux, et il aurait produit deux
@@ -1035,7 +1113,7 @@ C5 déclare « **Dépend de : C3** » (`core.md:184`) : une propriété dont le 
 besoin ne peut pas vivre dans le lot qui vient après, sous peine de rendre ce critère indémontrable.
 Le recouvrement entre `core.md:153-154` et `core.md:179` (« alignements » dans le périmètre de C5)
 n'est arbitré par **aucun texte du dépôt** : C3 l'arbitre, c'est une décision et non une lecture, et
-elle est remontée telle quelle [§8, arbitrage n°2].
+elle a été remontée telle quelle puis **tranchée** [§8, arbitrage n°2, le 2026-08-17].
 
 **Pourquoi `start`/`end` plutôt que `left`/`right` — et le motif n'est pas celui qui était écrit.**
 
@@ -1091,9 +1169,10 @@ elle est remontée telle quelle [§8, arbitrage n°2].
 > `engine` — `toLocale*`, `Intl.$f()` sans argument, `Intl.DateTimeFormat` sans `timeZone` littéral
 > (`biome.jsonc:198-199` et `:272-290`, `tools/biome/no-environment-read.grit:59-72`). La direction
 > ne sera donc jamais devinée ; elle sera déclarée par quelqu'un, ou elle aura un défaut écrit.
-> *(3)* L'arbitrage n°5 [§8] porte cette information nouvelle : sa recommandation initiale reposait
-> sur la prémisse « le moteur résout contre la direction d'écriture », qui suppose une direction
-> déclarée quelque part.
+> *(3)* L'arbitrage n°5 [§8] a été tranché **en connaissance de cette information** : sa
+> recommandation initiale reposait sur la prémisse « le moteur résout contre la direction
+> d'écriture », qui suppose une direction déclarée quelque part, et la décision 5-A retient
+> `start`/`end` sur le seul argument qui lui survit — l'indécidabilité du revirement.
 
 **Ce qui reste de l'argument, une fois la prémisse fausse retirée, et il est suffisant.** Il est de
 **réversibilité**, et il s'énonce sans savoir qui possède la direction. Stocker `left` inscrit dans
@@ -1131,7 +1210,8 @@ n'est pas tautologique parce que `TableColumnSchema` ne porte pas d'annotation.
 **Réversible dans le sens de l'élargissement du jeu de valeurs uniquement.** Ajouter un membre est
 un ajout ; renommer `start` en `left` est transformant et indécidable, donc, dans les faits,
 irréversible. *Signal de réouverture : une décision produit qui exclurait le RTL du périmètre à
-jamais* — auquel cas `left | right` redeviendrait défendable, et l'arbitrage n°5 se refermerait.
+jamais* — auquel cas `left | right` redeviendrait défendable, et l'arbitrage n°5, tranché le
+2026-08-17, **se rejouerait**.
 
 ---
 
@@ -1542,7 +1622,7 @@ Soit **4 + 3 + 1 + 1 + 3 + 8 = 20**.
 
 **2. La colonne conditionnelle** (« masquer Remise si aucune ligne n'en porte »). Elle demanderait d'évaluer une expression **par colonne** et de recalculer la géométrie **au rendu**, c'est-à-dire de faire entrer un calcul dans une déclaration de géométrie. Et elle casse D6 par un chemin que l'on n'attend pas : `Σ widths` deviendrait fonction du **jeu de données**, donc la part d'une colonne aussi, donc la garantie « même nombre dans l'aperçu et dans le PDF » ne tiendrait plus que si les deux côtés évaluaient la même expression de la même manière — un accord d'implémentation, exactement ce que D6 a été écrit pour remplacer par une propriété démontrable. **Contournement daté :** elle s'écrit **aujourd'hui**, en deux tableaux sous deux `condition` — c'est exprimable dès INC-1, puisque `ConditionNode.children` porte des blocs et que `TableNode ∈ BlockNode` [§2, D2]. **Le prix du contournement, nommé :** les deux tableaux doivent être maintenus en phase et **rien ne les lie** — c'est la même classe de divergence silencieuse que le recalcul parallèle du total [§2, D9], et c'est un lint d'éditeur, jamais un refus de `core`. **Signal de réouverture :** une facture réelle où les deux tableaux divergent en maintenance.
 
-**3. Le type de colonne** (monétaire, nombre, date, texte). Il appelle une **échelle** et un **symbole**, donc un arrondi implicite ; le formatage appartient à C6 ; et le trancher ici **préempterait par la porte de service** la question que C2 a explicitement laissée ouverte — *qui déclare l'échelle d'affichage d'un montant*. Il ferait de surcroît dépendre la mise en page du jeu de données de l'intégrateur, contre la règle de périmètre. **Ce refus est aussi un arbitrage à rendre, et il est remonté** : l'arbitrage n° 1 de [§8] porte sur le mot « **typé** » du critère de recette de la roadmap — « un tableau à cinq colonnes **typé** (désignation, quantité, prix unitaire, remise, montant) » (`core.md:157-159`). La lecture de ce plan est **A** : « décrit dans un contrat typé », les cinq colonnes ne portant aucun type de donnée. Si le propriétaire du produit lit **B**, « chaque colonne porte un type », **ce contrat est à rejouer, pas à amender** — c'est l'arbitrage à rendre **avant INC-1**. **Signal de réouverture :** la décision ouverte de C2, tranchée par le propriétaire du produit.
+**3. Le type de colonne** (monétaire, nombre, date, texte). Il appelle une **échelle** et un **symbole**, donc un arrondi implicite ; le formatage appartient à C6 ; et le trancher ici **préempterait par la porte de service** la question que C2 a explicitement laissée ouverte — *qui déclare l'échelle d'affichage d'un montant*. Il ferait de surcroît dépendre la mise en page du jeu de données de l'intégrateur, contre la règle de périmètre. **Ce refus a aussi été un arbitrage, et il a été rendu** : l'arbitrage n° 1 de [§8] portait sur le mot « **typé** » du critère de recette de la roadmap — « un tableau à cinq colonnes **typé** (désignation, quantité, prix unitaire, remise, montant) » (`core.md:157-159`). **Il a été tranché en A le 2026-08-17** : « décrit dans un contrat typé », les cinq colonnes ne portant aucun type de donnée. La lecture **B**, « chaque colonne porte un type », rendrait **ce contrat à rejouer, pas à amender** — c'est le coût de réouverture, et il est marqué ⛔ en [§8]. **Signal de réouverture :** la décision ouverte de C2, tranchée par le propriétaire du produit en faveur d'une table de devises.
 
 **Les cinq colonnes du critère de recette sont un JEU D'ÉPREUVE, et le plan le fait dire par trois gestes plutôt que par une phrase.** `designation`, `quantite`, `prixUnitaire`, `remise`, `montant` : c'est la vitrine du lot, donc c'est **ce qui sera recopié**. Le dépôt nomme déjà ce mécanisme, et il le nomme à propos d'autre chose — « c'est donc une **position par défaut de fait** : autant la choisir sciemment » (`docs/roadmap/README.md:189`). Une phrase dans un plan périmé à la livraison ne protège personne ; trois gestes dans le code, si.
 
@@ -1576,10 +1656,26 @@ la machine ci-dessus et que son résultat est reproduit ; **LU** signifie qu'une
 lue et qu'elle porte sa référence `fichier:ligne`. Les deux ne se mélangent pas, et un chiffre sans
 protocole est traité ici comme un défaut.
 
-Le lot touche **neuf fichiers de `packages/core`** — dont deux qu'il crée — et **un fichier hors
-`core`**. Les voici dans l'ordre où le contrat se lit, qui n'est pas l'ordre des incréments [§4] :
-le contrat se lit de la forme vers ses portes, les incréments se livrent du refactor vers
-l'estampille.
+Le contrat se documente sur **dix fichiers de production de `packages/core`** — dont deux qu'il
+crée — et **un fichier hors `core`**. Les voici dans l'ordre où le contrat se lit, qui n'est pas
+l'ordre des incréments [§4] : le contrat se lit de la forme vers ses portes, les incréments se
+livrent du refactor vers l'estampille.
+
+> ⚠️ **Correction d'un décompte périmé, à ne pas recopier.** Ce décompte annonçait « **neuf**
+> fichiers de `packages/core` », et il en documente **dix** : deux des sous-sections en portent deux
+> chacune — [§3.5] (`errors.ts` **et** `evaluator/evaluate.ts`) et [§3.7] (`template.ts` **et**
+> `migrate.ts`). Soit `ast/types.ts`, `ast/schemas.ts`, `ast/nodes.ts`, `ast/visitor.ts`,
+> `errors.ts`, `expression/evaluator/evaluate.ts`, `template/guard.ts`, `template/template.ts`,
+> `template/migrate.ts` et `index.ts` — dix, et [§4] en donne la même liste incrément par incrément.
+> **Le neuf datait d'avant l'entrée de `template/guard.ts` dans le lot**, ce que [§3.6] écrit
+> elle-même : « *C'est la sous-section que le découpage initial avait oubliée* ». Un décompte non
+> recompté est un décompte faux — la formule est celle que ce plan applique déjà aux 231 valeurs et
+> aux vingt symboles du barrel, et elle valait contre lui.
+>
+> Le « un fichier hors `core` » est juste **pour cette section** : seul `packages/designer/src/types.ts`
+> y a une sous-section [§3.9]. `apps/playground/src/App.tsx` est bien touché par le lot, mais par
+> INC-4 (c) et non par le contrat — il est décrit en [§4] et en [§6.3]. Le décompte des fichiers
+> **touchés** est donc de dix dans `core` et de **deux** hors `core`.
 
 ### 3.1 `packages/core/src/ast/types.ts` — nouveau (INC-0 le crée, INC-1 l'élargit)
 
@@ -2138,19 +2234,37 @@ export const ConditionNodeSchema = z.object({
 });
 ```
 
-> ⚠️ **C'est ici, et pas dans les types, que le lot est le plus fragile.** `blockMembers()` est le
-> seul endroit où l'oubli d'un membre ne casse **rien**. **MESURÉ, sur le contrat complet** : en
-> retirant `TableNodeSchema` de la liste, `tsc -p tsconfig.typecheck.json` rend **exit 0**,
-> `tsc -p tsconfig.json` rend **exit 0**, le build est propre, `biome check` est propre — et le seul
-> témoin est `parseTemplate` du modèle de recette, qui échoue au runtime sur
-> `{"code":"invalid_union","note":"No matching discriminator","path":["root","children",1,"type"],`
-> `"message":"Invalid input"}`. La raison est écrite dans le dépôt depuis C1 (`nodes.ts:124-131`) :
-> `z.ZodType<out Output>` est **covariant en sortie**, donc un `z.lazy` qui produit *moins* que son
-> annotation lui reste assignable. Et **aucune assertion `MutuallyAssignable` ne peut le rattraper
-> sur une union annotée** : `z.infer<typeof BlockNodeSchema>` **est** `BlockNode` par construction —
-> **MESURÉ**, l'assertion compile en exit 0 alors même que le membre manque. **Le test de parsing
-> d'INC-1 n'est donc pas une commodité, c'est l'unique protection**, et il vit dans le même commit
-> [§5.2].
+> ⚠️ **C'est ici, et pas dans les types, que le lot est le plus fragile — et il y a DEUX fabriques,
+> pas une.** Une version antérieure de cet encadré écrivait « *`blockMembers()` est le seul endroit où
+> l'oubli d'un membre ne casse **rien*** ». **Le mot « seul » est faux : `rowMembers()` a la même
+> propriété, par un mécanisme voisin, et le lot compte trois omissions silencieuses et non une.**
+>
+> **MESURÉ**, sur un contrat fidèle à cette section (types écrits à la main, les deux fabriques, les
+> deux `z.lazy` annotés, `TableBodyNodeSchema` non annoté, le `superRefine`), compilé par le `tsc`
+> 7.0.2 du dépôt sous `strict` + `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`, baseline
+> à exit 0, exécuté contre le `zod@3.25.76` du dépôt :
+>
+> | Membre retiré | `tsc` | L'`it` d'union de [§5.2] | L'assertion qui rougit |
+> | :--- | :--- | :--- | :--- |
+> | `TableNodeSchema` de `blockMembers()` | **exit 0** | **rouge** | `BlockNodeSchema.safeParse(RECIPE_TABLE)` et son homologue `Document…` |
+> | `TableRowGroupNodeSchema` de `rowMembers()` | **exit 0** | **rouge** | les deux mêmes — `RECIPE_TABLE` porte un groupe dans son `body` |
+> | `TableRowNodeSchema` de `rowMembers()` | **exit 0** | **rouge** | la **quatrième** : `DocumentNodeSchema.safeParse({ type: 'tableRow', … })` |
+>
+> Les deux mécanismes diffèrent, et les nommer évite de croire l'un couvert par l'autre. Sur
+> `BlockNodeSchema` et `DocumentNodeSchema`, c'est la **covariance de l'annotation** : la raison est
+> écrite dans le dépôt depuis C1 (`nodes.ts:124-131`), `z.ZodType<out Output>` est covariant en
+> sortie, donc un `z.lazy` qui produit *moins* que son annotation lui reste assignable — et **aucune
+> assertion `MutuallyAssignable` ne le rattrape sur une union annotée**, puisque
+> `z.infer<typeof BlockNodeSchema>` **est** `BlockNode` par construction (mesuré : l'assertion compile
+> en exit 0 alors même que le membre manque). Sur `TableBodyNodeSchema`, qui ne porte **aucune**
+> annotation, c'est le **rétrécissement de l'inférence** : la sortie inférée perd un membre, `body:
+> z.array(TableBodyNodeSchema)` la suit, et `checkTableWiring(table: TableNode, …)` reste assignable
+> au paramètre de `.superRefine` — mesuré, exit 0.
+>
+> **Le témoin au runtime est le même dans les trois cas** : `parseTemplate` du modèle de recette
+> échoue sur `{"code":"invalid_union","note":"No matching discriminator","path":["root","children",1,"type"],`
+> `"message":"Invalid input"}`. **Le test de parsing d'INC-1 n'est donc pas une commodité, c'est
+> l'unique protection des trois membres**, et il vit dans le même commit [§5.2].
 
 #### Le schéma de colonne, celui de cellule, ceux de ligne
 
@@ -2293,10 +2407,13 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   for (const [index, entry] of table.body.entries()) {
     // Not a second `switch (node.type)`, and not a traversal: this descends into no child,
     // it reads one node's own two-member body union, and Zod has already discriminated it.
-    // The guarantee the Visitor buys is bought here by the narrowing itself -- `entry.rows`
-    // only type-checks while `TableBodyNode` has exactly these two members, so widening it
-    // breaks the build at this line. Routing it through `visitNode` would make this module
-    // depend on the traversal module in order to dispatch two cases.
+    // Routing it through `visitNode` would make this module depend on the traversal module in
+    // order to dispatch two cases.
+    //
+    // What holds this branch to the union is NOT this line: measured, a third member carrying
+    // `rows: readonly TableRowNode[]` compiles here at exit 0 and is silently absorbed by the
+    // `else`. `TABLE_BODY_MEMBERS_IN_STEP` in `ast/__tests__/nodes.test.ts` is what fails to
+    // compile the day the union gains any third member at all.
     if (entry.type === 'tableRow') {
       checkCells(entry.cells, declared, ['body', index], ctx);
     } else {
@@ -2353,13 +2470,75 @@ export const TableNodeSchema = z
 **Un point de gouvernance, et un seul, à ne pas laisser implicite.** Le test
 `if (entry.type === 'tableRow')` de `checkTableWiring` **n'est pas** un second `switch (node.type)`
 au sens d'AGENTS.md §3.B : il ne descend dans aucun enfant, il lit l'union à deux membres du corps
-d'**un** nœud, dans le schéma de ce nœud, et Zod a déjà discriminé la valeur. La garantie qu'achète
-le Visitor est ici achetée par le rétrécissement lui-même — `entry.rows` ne type-check que tant que
-`TableBodyNode` a exactement ces deux membres, donc **élargir l'union casse le build à cette
-ligne**. Router le contrôle par `visitNode` obligerait `ast/schemas.ts` à dépendre de
-`ast/visitor.ts` et à écrire huit branches pour en dispatcher deux. C'est l'arbitrage n° 7 [§8], et
-**le plan ne se délivre pas la dérogation lui-même** : si le propriétaire du produit lit autrement,
-il faut le dire avant INC-1.
+d'**un** nœud, dans le schéma de ce nœud, et Zod a déjà discriminé la valeur. Router le contrôle par
+`visitNode` obligerait `ast/schemas.ts` à dépendre de `ast/visitor.ts` et à écrire huit branches
+pour en dispatcher deux. C'est l'arbitrage n° 7 [§8], **tranché en A par le propriétaire du produit
+le 2026-08-17** — et il a été tranché plutôt que présumé, parce qu'**un plan ne se délivre pas la
+dérogation lui-même**. La lecture est donc relevée, et elle ne demande aucun amendement
+d'`AGENTS.md`.
+
+> ⚠️ **Correction d'un raisonnement faux, à ne pas recopier — et il portait le motif de la décision
+> 7-A.** L'énoncé retiré : « *la garantie qu'achète le Visitor est ici achetée par le rétrécissement
+> lui-même — `entry.rows` ne type-check que tant que `TableBodyNode` a exactement ces deux membres,
+> donc **élargir l'union casse le build à cette ligne*** ». **La seconde moitié est fausse d'une
+> classe d'élargissement sur deux, et c'est la classe la plus probable.**
+>
+> **MESURÉ** (`tsc` 7.0.2 du dépôt, `--strict --exactOptionalPropertyTypes
+> --noUncheckedIndexedAccess`, la forme de `checkTableWiring` recopiée sans une ligne changée) :
+>
+> | Élargissement de `TableBodyNode` | `if / else` (la forme ci-dessus) | `else if` + `const exhaustive: never` | Assertion sur `TableBodyNode['type']` |
+> | :--- | :--- | :--- | :--- |
+> | un 3ᵉ membre **sans** `rows` | TS2339 | TS2322 | TS2322 |
+> | un 3ᵉ membre **avec** `rows: readonly TableRowNode[]` | **exit 0 — absorbé en silence** | TS2322 | **TS2322** |
+> | les deux membres seuls | exit 0 | exit 0 | exit 0 |
+>
+> Autrement dit : un membre qui ne porte pas `rows` casse bien à cette ligne, un membre qui en porte
+> un de forme compatible — un groupement par famille, une bande d'intitulé — est traité comme un
+> groupe **sans que rien ne le dise**. Un accident de compatibilité n'est pas une garantie.
+>
+> **Ce que le remède ne doit PAS être, et deux mesures l'écartent.** Ajouter au corps de la boucle
+> une branche `else` terminée par `const exhaustive: never = entry` puis `throw` restaure bien la
+> garantie de compilation, et coûte deux choses qu'il faut refuser. *(a)* La branche est
+> **inatteignable à l'exécution** : **MESURÉ**, une entrée de `body` au `type` inconnu rend
+> `invalid_union` sur `body.0.type`, code **abandonnant**, et le `superRefine` est **sauté** — donc
+> `checkTableWiring` ne voit jamais une troisième forme, et `checkTableWiring` est privée. Une
+> branche inatteignable est une branche non couvrable, contre un seuil `branches: 90`
+> (`vitest.config.ts:22`), et dans la fonction même dont [§6.4] exige que l'**autre** garde soit
+> couvert. *(b)* **MESURÉ** : un `throw` dans un `superRefine` **s'échappe de `safeParse`** —
+> `safeParse` lève le `TypeError` au lieu de rendre `{ success: false }`. C'est l'erreur non
+> enveloppée que les portes bornées de l'ADR 0003 décision 8 existent pour supprimer, rouverte au
+> cœur d'un chemin de validation.
+>
+> **Le remède retenu est l'idiome que le dépôt écrit déjà et documente**, et il ne touche pas une
+> ligne de production : une **troisième** assertion anti-dérive dans
+> `packages/core/src/ast/__tests__/nodes.test.ts`, sur le patron exact de `SEGMENT_SCHEMA_IN_STEP`
+> (`nodes.test.ts:11-37` : « *A `const` and not an `it`, because there is nothing to run […] The
+> guard is the ANNOTATION, and `pnpm run type-check` is what runs it […] Exported so it is not
+> reported unused* ») :
+>
+> ```ts
+> /**
+>  * The two members `checkTableWiring` discriminates by hand, held to the union.
+>  *
+>  * The narrowing at that site does NOT hold it: measured, a third member carrying
+>  * `rows: readonly TableRowNode[]` compiles there and is absorbed by the `else`. This
+>  * annotation collapses to `false` on any third member at all, and `false` does not assign to
+>  * `true`. A defensive `else` in the schema would buy the same guarantee at the price of a branch
+>  * no input can reach -- `invalid_union` on a body entry is abandoning, so the refinement never
+>  * runs -- and of a `throw` that escapes `safeParse`.
+>  */
+> export const TABLE_BODY_MEMBERS_IN_STEP: MutuallyAssignable<
+>   TableBodyNode['type'],
+>   'tableRow' | 'tableRowGroup'
+> > = true;
+> ```
+>
+> **La décision 7-A n'est pas entamée, et c'est le point** : ceci n'est ni un parcours du Composite,
+> ni un import de `ast/visitor.ts` dans `ast/schemas.ts`, ni un amendement d'`AGENTS.md`. Ce qui
+> change est le **motif** — la garantie n'est pas achetée par le rétrécissement, elle est achetée par
+> une annotation, à la porte 3, pour trois lignes de test et zéro ligne d'exécution. La règle du
+> plan C2 s'applique telle quelle : *une contre-mesure qui réfute un chiffre réécrit le motif ; une
+> contre-mesure qui réfute une prémisse rejoue l'option.* Ici c'est le motif.
 
 ### 3.3 `packages/core/src/ast/nodes.ts` — la façade
 
@@ -2911,8 +3090,17 @@ la porte bornée d'une union vit avec les autres portes bornées, pas avec les s
 > paquet ne s'en plaint. Le seul détecteur du dépôt est `apps/playground/src/App.tsx`, qui le dit de
 > lui-même (`App.tsx:36-37`) : « *the ONLY real consumer of the package barrel, so it is what reveals
 > an export forgotten in index.ts -- a blind spot of all four gates on the core side* ». **Encore
-> faut-il que le playground s'en serve** : c'est une raison de plus pour qu'INC-4 (c) existe [§4], et
-> c'est pourquoi son critère de sortie nomme les vingt symboles.
+> faut-il que le playground s'en serve, et il ne s'en servira que pour une partie** : il valide par
+> `parseTemplate`, donc il n'importe aucun schéma de nœud [§4, INC-4]. C'est une raison de plus pour
+> qu'INC-4 (c) existe, et une raison de ne pas lui prêter plus qu'il ne fait.
+>
+> ⚠️ **Un renvoi faux, corrigé ici : « son critère de sortie nomme les vingt symboles ».** La condition
+> de fin d'INC-4 ne les nomme pas — elle porte sur les quatre portes, sur l'origine des imports du
+> playground, sur le `<table>` dérivé et sur la liste du designer. Les vingt sont nommés **trois**
+> fois, ailleurs : dans le corps d'INC-4 (a), dans le résidu que la PR doit lister [§4, INC-4], et dans
+> le décompte de noms des trois blocs d'export en [§6.4]. Et ils ne sont **pas** dans le sommaire
+> obligatoire de l'ADR 0005, qui n'a aucune raison de le porter : une liste d'exports n'est pas une
+> décision.
 
 **Le critère d'export, et pourquoi il ne s'étend à rien de plus.** Le précédent est l'ADR 0004 sur
 `RoundExpressionSchema`, `MIN_ROUND_DECIMALS` et `MAX_ROUND_DECIMALS` : un symbole s'exporte quand il
@@ -3004,6 +3192,17 @@ INC-0 ──► INC-1 ──► INC-2 ──► INC-3 ──► INC-4 ──► 
 La chaîne est linéaire et **aucune parallélisation n'est utile**, mais elle ne l'est pas pour la
 raison qu'invoquait C2 (« le lot est S ») : C3 est un lot L, et ce qui interdit de le paralléliser
 est que ses quatre premiers incréments réécrivent les **mêmes cinq fichiers** dans un ordre imposé.
+
+> 🔑 **Le L de cette phrase n'est pas le M de la roadmap, et c'est une réestimation qu'il faut dire
+> plutôt que laisser trouver.** `core.md:161` écrit « **Poids :** M », et [§1] défend ce M tel quel —
+> « le poids décrit le coût, pas la position ». Le M est l'estimation **produit**, faite avant qu'un
+> contrat n'existe ; le L est ce que le lot pèse **après conception** : six incréments, dont un L
+> ([§4], INC-1), dix fichiers de production dans `core` [§3], cinq fichiers de test et une fixture
+> [§5]. Deux lettres pour deux objets, et la seconde n'annule pas la première. **La roadmap n'est pas
+> corrigée pour autant** : INC-5 ne touche `core.md` §C3 que pour son renvoi vers ce plan et sa
+> mention de livraison ([§4], INC-5), et une réestimation de poids n'est pas un mandat pour réécrire
+> le tableau des poids d'une brique entière — ce serait rouvrir l'ordonnancement de la vague 1 en
+> passant.
 Les trois commits d'INC‑4, eux, touchent trois paquets disjoints et pourraient se faire en parallèle
 — sauf que (b) et (c) ne compilent qu'après (a), ce qui est exactement leur intérêt [§3.8].
 
@@ -3042,10 +3241,13 @@ ordre :
 
 **Ne se coupe jamais**, et chacun pour une raison mesurée :
 
-- **L'`it` d'union d'INC‑1** (`nodes.test.ts`). Le trou de covariance est réel et re‑mesuré : en
-  retirant `TableNodeSchema` de `blockMembers()`, `tsc -p tsconfig.json` **et**
-  `tsc -p tsconfig.typecheck.json` sortent tous deux à 0 et le build est propre. Ce test est la
-  **seule** protection du dépôt sur ce point, et non une commodité.
+- **L'`it` d'union d'INC‑1** (`nodes.test.ts`). Le trou de covariance est réel, re‑mesuré, et il porte
+  sur **trois** membres répartis sur les **deux** fabriques : en retirant `TableNodeSchema` de
+  `blockMembers()`, ou `TableRowGroupNodeSchema`, ou `TableRowNodeSchema` de `rowMembers()`,
+  `tsc -p tsconfig.json` **et** `tsc -p tsconfig.typecheck.json` sortent tous deux à 0 et le build est
+  propre [§3.2]. Ce test est la **seule** protection du dépôt sur ces trois points, et non une
+  commodité — et ses **quatre** assertions sont toutes porteuses, la quatrième étant le seul témoin de
+  la troisième omission [§5.2].
 - **`parseBlockNode`** (INC‑1, [§3.6]). Trois lignes. Sans elles, l'union que le lot ajoute rouvre le
   `RangeError` nu que les portes bornées de l'ADR 0003 décision 8 existent pour supprimer — mesuré,
   `BlockNodeSchema.parse` d'une chaîne de 2 000 `container` imbriqués rend
@@ -3113,8 +3315,10 @@ après : c'est le critère de sortie.
 
 **Commit.** `refactor(core): scinder l'AST en types, schémas et façade`
 
-**Condition de fin.** Les quatre portes vertes. `git diff -M --stat` ne montre que des déplacements
-et le fichier façade. `git diff -- packages/core/src/index.ts` est vide. **Non publiable** au titre
+**Condition de fin.** Les quatre portes vertes. `git diff -M --stat -- packages/core/src/ast` ne
+montre que des déplacements et le fichier façade — **scopé**, sinon un fichier modifié ailleurs dans
+l'arbre le fait échouer sans rapport avec l'incrément [§6.4].
+`git diff -- packages/core/src/index.ts` est vide. **Non publiable** au titre
 de la règle de conduite de [§2, D11] — non parce qu'INC‑0 laisserait une forme persistée sans
 estampille, il n'en laisse aucune, mais parce que « le premier commit publiable du lot est INC‑3 » se
 vérifie d'un coup d'œil, là où « publiable sauf si le commit d'avant a élargi une union » demande de
@@ -3164,13 +3368,16 @@ d'interface et les trois `case` en rend **quatre**.
 | Le visiteur littéral du test de branche défensive | `packages/core/src/ast/__tests__/visitor.test.ts:82-88` | type-check (porte 3) |
 | L'annotation `z.ZodType<BlockNode>` / `z.ZodType<DocumentNode>` quand un champ dérive | `packages/core/src/ast/schemas.ts` | **build** (porte 2), TS2375 |
 | La signature `checkTableWiring(table: TableNode, …)` | `packages/core/src/ast/schemas.ts` | **build** (porte 2), TS2345 |
-| `entry.rows` dans `checkTableWiring` — ne type‑checke que tant que `TableBodyNode` a exactement deux membres | `packages/core/src/ast/schemas.ts` | **build** (porte 2) |
+| `entry.rows` dans `checkTableWiring` — ne type‑checke que tant qu'aucun membre neuf de `TableBodyNode` ne porte de `rows` compatible ; **mesuré, un membre qui en porte un passe** [§3.2] | `packages/core/src/ast/schemas.ts` | **build** (porte 2), *partiellement* |
 | `TABLE_COLUMN_SCHEMA_IN_STEP` — `MutuallyAssignable` s'effondre en `false`, qui n'assigne pas à `true` | `packages/core/src/ast/__tests__/nodes.test.ts` | type-check (porte 3) |
+| `TABLE_BODY_MEMBERS_IN_STEP` — la même annotation sur `TableBodyNode['type']`, et c'est elle qui tient l'union à deux membres, **quelle que soit** la forme du troisième [§3.2] | `packages/core/src/ast/__tests__/nodes.test.ts` | type-check (porte 3) |
 
 Soit **six coutures tenues par le compilateur** — les deux premières lignes couvrant à elles seules
-l'interface `NodeVisitor` et le `switch` de `visitNode`, que le `never` referme d'un coup — plus **quatre**
+l'interface `NodeVisitor` et le `switch` de `visitNode`, que le `never` referme d'un coup — plus **cinq**
 gardes de dérive de champ ou d'union : les deux annotations `z.ZodType`, la signature de
-`checkTableWiring`, le rétrécissement `entry.rows`, et l'assertion `TABLE_COLUMN_SCHEMA_IN_STEP`. Nuance de porte, identique à celle de C2 : `packages/core/tsconfig.json`
+`checkTableWiring`, le rétrécissement `entry.rows` — qui ne tient que la moitié de ce qu'une version
+antérieure lui prêtait —, l'assertion `TABLE_COLUMN_SCHEMA_IN_STEP` et l'assertion
+`TABLE_BODY_MEMBERS_IN_STEP` qui rattrape cette moitié manquante. Nuance de porte, identique à celle de C2 : `packages/core/tsconfig.json`
 **exclut** les `*.test.ts` (`:19`), `tsconfig.typecheck.json` les réinclut ; les trois premières
 lignes rougissent dès la porte 2, les harnais de test à la porte 3. Et la mesure du garde de dérive
 est vérifiée dans les deux sens : **retirer `align` du schéma casse quatre sites à la porte 2** —
@@ -3181,11 +3388,16 @@ cinquième qui attrape aussi la dérive inverse [§5.2].
 **Ce qui ne casse pas et que la revue seule porte.** Cinq sites, et le premier porte tout le risque
 du lot :
 
-- **Le membre `TableNodeSchema` de `blockMembers()`.** `z.ZodType` est covariant en sortie : une
-  union qui produit **moins** que son annotation reste assignable. Mesuré, en le retirant :
+- **Les membres de `blockMembers()` et de `rowMembers()` — trois omissions, pas une.**
+  `z.ZodType` est covariant en sortie : une union **annotée** qui produit **moins** que son annotation
+  reste assignable, ce qui couvre `BlockNodeSchema` et `DocumentNodeSchema` ; et
+  `TableBodyNodeSchema`, qui n'est **pas** annoté, rétrécit son inférence en silence sans rien casser
+  en aval. Mesuré, membre par membre — `TableNodeSchema` hors de `blockMembers()`,
+  `TableRowGroupNodeSchema` puis `TableRowNodeSchema` hors de `rowMembers()` : à chaque fois
   `tsc -p tsconfig.typecheck.json` **exit 0**, `tsc -p tsconfig.json` **exit 0**, build propre —
-  seul le test de parsing rougit. Ce test n'est donc pas une commodité, c'est la seule protection, et
-  il vit dans le même commit.
+  seul le test de parsing rougit. Ce test n'est donc pas une commodité, c'est la seule protection des
+  **trois**, et il vit dans le même commit. Le détail des deux mécanismes et le tableau des trois
+  ablations sont en [§3.2] ; ce que chacune des quatre assertions attrape est en [§5.2].
 - **`parseBlockNode`.** Son absence ne fait rougir rien du tout : `BlockNodeSchema` reste exporté et
   non borné, et le `RangeError` nu est reproductible à la demande (mesuré, 2 000 `container`).
 - **La quatrième limite de la docstring de `collectDataPaths`** ([§2, D8]). Aucune porte ne lit une
@@ -3198,10 +3410,11 @@ du lot :
   épingle un par un, avec leur chemin.
 
 **À faire une fois, à la main, et à consigner dans l'ADR plutôt qu'à commiter.** Retirer
-temporairement `TableNodeSchema` du corps de `blockMembers()`, constater que les portes 1, 2 et 3
-restent **vertes** et que la porte 4 rougit sur le seul `it` d'union, puis annuler. Le garde‑fou est
-alors **prouvé, pas supposé** — c'est le geste que le plan C2 a exécuté pour `printableMembers()`, et
-la propriété mesurée est la même.
+temporairement `TableNodeSchema` du corps de `blockMembers()`, **puis `TableRowGroupNodeSchema` et
+`TableRowNodeSchema` de celui de `rowMembers()`** — les **deux** fabriques ont la propriété, mesuré
+[§3.2] —, constater à chaque fois que les portes 1, 2 et 3 restent **vertes** et que la porte 4
+rougit sur le seul `it` d'union, puis annuler. Le garde‑fou est alors **prouvé, pas supposé** — c'est
+le geste que le plan C2 a exécuté pour `printableMembers()`, et la propriété mesurée est la même.
 
 **Tests.** Chacun nomme son fichier.
 
@@ -3219,9 +3432,25 @@ Dans **`packages/core/src/ast/__tests__/table.test.ts`** :
   un alias de groupe employé hors de son groupe redevient une clé d'appelant [§5.3] ;
 - `parseBlockNode` d'une chaîne profonde rend un `TemplateShapeError` `too-deep` là où
   `BlockNodeSchema.parse` rend un `RangeError` nu — le test épingle la **différence**, pas la
-  profondeur, qui est dépendante de la taille de pile [§5.2].
+  profondeur, qui est dépendante de la taille de pile [§5.2]. **Il se recopie sur le test qui existe
+  déjà**, `guard.test.ts:235-251` (« *bounds what the bare schemas do not, **on the SAME input*** »),
+  et il en reprend les trois disciplines écrites : *(1)* **le même payload aux deux portes**, sans
+  quoi le test ne démontre rien de la différence que son commentaire annonce — c'est l'erreur que ce
+  test-là a dû corriger ; *(2)* **une profondeur plusieurs fois au-delà du seuil**, pas juste
+  au-dessus : `guard.ts:252` relève « *around 1 874 levels* » et `guard.test.ts:243` « *stack-size
+  dependent (measured around 1 269 here), hence a payload **several times past it*** », d'où son
+  `nestedNot(5_000)` — les **2 000 `container`** que ce plan a mesurés suffisent à observer le
+  `RangeError`, ils ne suffisent pas comme marge, et c'est **5 000** qu'il faut écrire ; *(3)* **un
+  payload par ailleurs valide**, faute de quoi le schéma nu refuse le niveau supérieur sur un
+  discriminant manquant et ne récurse jamais assez loin.
+  Et la règle du jour où Zod cesserait de récurser : ce que le test doit à `core` est la porte
+  **bornée** — `TemplateShapeError` `too-deep` —, jamais le mode de défaillance du moteur. Le dépôt
+  s'est déjà brûlé exactement là (`value-type.test.ts:103-118` : une assertion `RangeError` sur
+  `JSON.stringify` « *pinned the ENGINE, not the code* » et est passée au rouge quand Node 26 a cessé
+  de récurser, « *so the leg went red on a premise* »). Si la jambe `RangeError` rougit, elle se
+  **retire avec son motif écrit**, comme celle-là ; elle ne se rattrape pas en montant la profondeur.
 
-Dans **`packages/core/src/ast/__tests__/nodes.test.ts`**, les **deux** gardes anti-dérive du paquet,
+Dans **`packages/core/src/ast/__tests__/nodes.test.ts`**, les **trois** gardes anti-dérive du paquet,
 et ils y vivent ensemble parce que c'est déjà ce fichier qui les porte :
 
 - `TABLE_COLUMN_SCHEMA_IN_STEP`, l'assertion `MutuallyAssignable` sur `TableColumnSchema`. Elle y vit
@@ -3229,6 +3458,13 @@ et ils y vivent ensemble parce que c'est déjà ce fichier qui les porte :
   avec le même argument de covariance ; et elle n'est **pas** tautologique, contrairement à la même
   assertion posée sur `DocumentNodeSchema` : `TableColumnSchema` ne porte aucune annotation
   `z.ZodType<TableColumn>`.
+- `TABLE_BODY_MEMBERS_IN_STEP`, la même annotation sur `TableBodyNode['type']` contre
+  `'tableRow' | 'tableRowGroup'`. Elle est **la** garantie que l'union du corps reste à deux
+  membres, et elle existe parce que le rétrécissement `entry.rows` de `checkTableWiring` ne la donne
+  qu'à moitié — mesuré, un troisième membre portant `rows: readonly TableRowNode[]` compile et se
+  fait absorber par le `else`. Trois lignes, porte 3, aucune ligne d'exécution et aucune branche à
+  couvrir : le détail, les deux mesures qui écartent la branche défensive et le rapport à la
+  décision 7-A sont en [§3.2].
 - **l'`it` d'union** — `BlockNodeSchema` accepte `RECIPE_TABLE`, `DocumentNodeSchema` aussi, une
   `tableRow` nue est refusée par le premier et acceptée par le second [§5.2]. Il consomme
   `RECIPE_TABLE`, qu'il importe de `fixtures.ts` comme `table.test.ts` le fait : c'est précisément
@@ -3473,11 +3709,17 @@ associé est en [§6.4].
 
 **Ce qui ne casse pas et que la revue seule porte.** La troisième ligne, et il faut la nommer par
 extension plutôt que par principe. Le résidu est exactement « les vingt, moins ce que (b) et (c)
-importent », et il contient **au moins les trois portes de validation** : `BlockNodeSchema`,
-`TableBodyNodeSchema` et `parseBlockNode`. Aucun consommateur du dépôt ne les exerce, par
-construction — le playground valide par `parseTemplate`, jamais par un schéma de nœud isolé, et c'est
-l'intégrateur hors dépôt qui en a l'usage. **La PR liste ce résidu nommément** ; c'est le seul
-contrôle qui existe.
+importent », et **il est plus large qu'une version antérieure de ce paragraphe ne l'annonçait** :
+celle-ci disait « au moins les trois portes de validation », et le compte réel est **les onze
+valeurs**. (b) n'importe qu'**un** symbole, `BlockNodeType`. Et (c) valide par `parseTemplate`,
+jamais par un schéma de nœud isolé, et calcule ses parts en `width / Σ width` : il n'a donc besoin
+**d'aucun** des sept schémas, ni de `parseBlockNode`, et pas nécessairement des deux bornes ni de
+`TABLE_COLUMN_ALIGNMENTS`. Ce qu'il importe est un jeu de **noms de type** — `TableNode`,
+`TableRowNode`, `TableCell`, `TableColumn`, `TableBodyNode` — pour signer ses fonctions de rendu.
+L'usage des onze valeurs est **hors du dépôt**, chez l'intégrateur ou l'éditeur qui construit un
+tableau par programme et le valide avant de le stocker. **La PR liste ce résidu nommément, et le
+décompte de noms des trois blocs d'export est ce qui reste de mécanique** ([§6.4]) ; il n'y a rien
+d'autre.
 
 **Ce qui vérifie `App.tsx`, et ce qui ne le vérifie pas.** `vitest.config.ts:27` déclare
 `projects: ['packages/*']` : **`apps/playground` n'est ni collecté, ni instrumenté, ni couvert**, et
@@ -3533,14 +3775,28 @@ réversibilité et, quand il y en a un, son signal de réouverture. Plus, nommé
    `git status` du dépôt identique avant et après.
 3. **« Ce que le lot refuse, par écrit »** — les vingt refus de [§2, D13], dont trois portent leur
    signal de réouverture : la fusion de cellules, la colonne conditionnelle et le type de colonne.
+   **Rangés en trois classes**, faute de quoi la liste se lit comme un hors-périmètre produit alors
+   qu'elle est un hors-périmètre de **champ** — la distinction que l'encadré de la [§7] rétablit :
+   *(i)* interdit définitivement pour tout le produit (l'auto-somme et tout champ de total, le report,
+   la répartition d'un résidu, un nom de colonne réservé, l'en-tête ou les colonnes déduits des clés
+   du jeu de données, l'alignement déduit du type, le vocabulaire réglementaire, la lecture
+   d'environnement) ; *(ii)* refusé **dans C3** et livré ailleurs sous une autre forme (l'apparence en
+   C5, le format en C6, la pagination en E2/E3, l'insécabilité en C7, le tri et le filtre déjà dans
+   l'algèbre C1) ; *(iii)* refusé aujourd'hui avec un signal de réouverture daté. Un refus de la
+   classe *(ii)* porte sur le **champ**, jamais sur la capacité, et le motif est toujours le même :
+   déplacer un champ stocké est une migration transformante.
 4. **« Ce que cette décision tient pour acquis »**, et il y a **deux** dépendances au comportement de
    Zod à rejouer à chaque montée, pas une :
    - un `z.object().superRefine()` reste un `ZodObject` en zod 4 — les refinements vivent **dans** le
      schéma —, donc `TableNodeSchema` demeure membre légal des deux unions discriminées, `lazy`
      comprises. Toute la propriété « zéro code d'erreur nouveau » repose là‑dessus ;
    - Zod ne saute un `superRefine` que sur une issue **abandonnante** — `invalid_type`,
-     `invalid_value` ; les issues **continuables** — `too_small`, `too_big`, `custom` — le laissent
-     tourner. C'est la raison pour laquelle `columns.min(1)` n'arrête pas `checkTableWiring` et pour
+     `invalid_value`, `invalid_union` ; les issues **continuables** — `too_small`, `too_big`,
+     `custom` — le laissent tourner. La conséquence à consigner avec : `invalid_union` étant
+     abandonnante, `checkTableWiring` ne voit jamais une entrée de `body` hors des deux membres, si
+     bien que l'exhaustivité de `TableBodyNode` se garde par une **assertion de type** à la porte 3 et
+     non par une branche défensive dans le schéma — laquelle serait inatteignable, et dont le `throw`
+     s'échapperait de `safeParse` (mesuré) [§3.2]. C'est la raison pour laquelle `columns.min(1)` n'arrête pas `checkTableWiring` et pour
      laquelle le garde `declared.size === 0` **existe** : sans lui, un tableau sans colonne rend une
      faute par cellule au lieu d'une seule (mesuré : **13 contre 1**) [§3.2 ; §5.1]. L'ADR consigne
      aussi que ce point a d'abord été tranché **dans l'autre sens** par la revue de contradiction,
@@ -3582,10 +3838,16 @@ réversibilité et, quand il y en a un, son signal de réouverture. Plus, nommé
 6. **Le point de gouvernance, argumenté et unique** : le test de discriminant
    `if (entry.type === 'tableRow')` dans `checkTableWiring` **n'est pas** un second parcours du
    Composite au sens d'`AGENTS.md` §3.B. Il ne descend dans aucun enfant, il lit l'union à deux
-   membres du corps d'**un** nœud, dans le schéma de ce nœud, et Zod l'a déjà discriminé ; la
-   garantie que le Visitor achèterait est achetée par le rétrécissement lui‑même, puisque
-   `entry.rows` ne type‑checke que tant que `TableBodyNode` a exactement ces deux membres. C'est la
-   lecture A de l'arbitrage n°7 [§8], et elle **ne demande aucun amendement**.
+   membres du corps d'**un** nœud, dans le schéma de ce nœud, et Zod l'a déjà discriminé. C'est la
+   **décision 7-A** [§8], relevée le 2026-08-17, et elle **ne demande aucun amendement**. L'ADR
+   consigne aussi que le **motif** de cette décision a été réécrit après mesure, l'option restant la
+   même : la garantie n'est **pas** achetée par le rétrécissement `entry.rows` — mesuré, un troisième
+   membre de `TableBodyNode` portant `rows: readonly TableRowNode[]` compile et se fait absorber par
+   le `else` —, elle est achetée par l'assertion de type `TABLE_BODY_MEMBERS_IN_STEP` à la porte 3.
+   Et les deux mesures qui écartent la variante intuitive y entrent avec elle, parce qu'elles seront
+   reproposées : `invalid_union` est abandonnante, donc une branche défensive dans le schéma est
+   inatteignable et non couvrable ; et un `throw` dans un `superRefine` **s'échappe de `safeParse`**,
+   ce qui rouvrirait l'erreur non enveloppée que l'ADR 0003 décision 8 existe pour supprimer [§3.2].
 7. **`errors.ts` est modifié alors que le plan C2 avait consigné « ne pas modifier ».** Ce n'est pas
    une contradiction, et l'ADR le dit plutôt que de laisser un lecteur la trouver : l'élargissement
    d'un **site** dérivé n'est pas l'ajout d'un **code**, et l'ADR 0003 l'avait déjà prévu.
@@ -3607,6 +3869,15 @@ réversibilité et, quand il y en a un, son signal de réouverture. Plus, nommé
     corps répété — et la mention que les chiffres de budget mesurent une boucle de rendu écrite à la
     main : `packages/engine` ne contient qu'une constante de version, et le `DataBindingStep` reste à
     écrire.
+12. **Le relevé des sept arbitrages, tranchés le 2026-08-17** ([§8]) — sur le patron exact de l'ADR
+    0004, qui a recopié les cinq de C2 : la question, l'option retenue, les options écartées, et le
+    **motif tel qu'il a été écrit avant la décision**, parce que c'est lui qu'il faudra relire le jour
+    d'une réouverture. Avec les **trois signaux de réouverture** qui survivent à la décision — n° 1
+    (la question ouverte de C2 sur l'échelle d'affichage tranchée en faveur d'une table de devises),
+    n° 5 (le RTL déclaré hors périmètre à jamais), n° 6 (un rapport plus fin que 1:1 000 ou une
+    largeur physique imposée) — et la note que le n° 5 est le seul dont la **prémisse** a été réfutée
+    sans que l'option change : ce qui a disparu est le destinataire de la résolution différée, d'où
+    l'entrée « Ce qui reste ouvert » du point 5 ci‑dessus.
 
 **Et l'ADR nomme trois contradictions constatées dans le dépôt, sans les corriger là où elles ne
 vivent pas** — une ADR est un journal, et un lot ne réécrit pas les documents d'un autre :
@@ -3627,7 +3898,10 @@ concerne est négatif — voir la condition de fin.
 sans la ligne « Complétée par » dans l'ADR 0004, celle‑ci ne pointe nulle part vers celle qui la
 complète. `docs/roadmap/core.md` §C3 porte le renvoi vers le plan, puis la mention de livraison. Ce
 plan est marqué périmé par son propre `**Statut :**`. Et le contrôle négatif, qui est le seul du
-lot : `git log --oneline -- AGENTS.md` ne montre **aucune entrée nouvelle** pour C3.
+lot : `AGENTS.md` est **inchangé depuis le point de branche du lot**, sous la forme rejouable que
+[§6.4] établit — `git diff --exit-code "$(git merge-base origin/main HEAD)" HEAD -- AGENTS.md`, exit
+0. *(Pas `git log --oneline -- AGENTS.md`, qui rend l'historique complet du fichier — huit lignes
+mesurées — et ne dit rien du delta du lot.)*
 
 **Clôture :** l'ADR 0005 passe en 🟢 avec ses liens d'implémentation.
 
@@ -3637,7 +3911,7 @@ lot : `git log --oneline -- AGENTS.md` ne montre **aucune entrée nouvelle** pou
 
 | Fichier | Consigne |
 | :--- | :--- |
-| `AGENTS.md` | **Zéro ligne, et c'est ce qui distingue C3 de C2.** C2 avait obtenu, pour sa D11, un mandat daté du propriétaire du produit et un commit `chore(governance)` séparé. **C3 n'amende aucune règle de gouvernance :** son seul point de gouvernance est tranché par la lecture A de l'arbitrage n°7 [§8], qui ne demande rien. Critère mécanique, en [§6.4] : `git log --oneline -- AGENTS.md` ne gagne aucune entrée. |
+| `AGENTS.md` | **Zéro ligne, et c'est ce qui distingue C3 de C2.** C2 avait obtenu, pour sa D11, un mandat daté du propriétaire du produit et un commit `chore(governance)` séparé. **C3 n'amende aucune règle de gouvernance :** son seul point de gouvernance est tranché par la **décision 7-A** [§8], relevée le 2026-08-17, qui ne demande rien. Critère mécanique, en [§6.4] : `AGENTS.md` inchangé depuis le point de branche, vérifié par `git diff --exit-code` sur `git merge-base` — jamais par `git log`, qui rend l'historique et non le delta. |
 | `tsconfig*.json`, `biome.jsonc`, `tools/biome/*.grit`, `turbo.json`, `.github/workflows/*`, `sonar-project.properties` | **AGENTS.md §7.** En particulier : **ne pas ajouter `src/**/__tests__/**` à l'`exclude` de `packages/core/tsconfig.json`** malgré le coût nommé plus haut sur `fixtures.ts` — cela demande un mandat explicite, hors périmètre de C3. |
 | `package.json`, `pnpm-workspace.yaml` | **Aucune dépendance nouvelle.** Le lot n'écrit que du TypeScript et du Zod déjà installés. |
 | `packages/core/src/expression/evaluator/operations/aggregate.ts` | **Ne pas modifier** ([§2, D9]). Le total d'une facture est une **expression du modèle** ; le tableau ne somme rien, et son `footer` n'a nulle part où poser un agrégat. |
@@ -3665,7 +3939,7 @@ Les tests se répartissent sur **cinq fichiers de test et une fixture**, et chac
 | :--- | :--- |
 | `packages/core/src/ast/__tests__/fixtures.ts` | `RECIPE_TABLE`, `RECIPE_TEMPLATE`, le type `MutuallyAssignable`. **Aucun `it`** — voir [§5.5] |
 | `packages/core/src/ast/__tests__/table.test.ts` | les onze refus [§5.1], le comptage d'issues, le critère de recette [§6.2] |
-| `packages/core/src/ast/__tests__/nodes.test.ts` | les deux gardes anti-dérive : l'`it` d'union et `TABLE_COLUMN_SCHEMA_IN_STEP` [§5.2] |
+| `packages/core/src/ast/__tests__/nodes.test.ts` | les **trois** gardes anti-dérive : l'`it` d'union, `TABLE_COLUMN_SCHEMA_IN_STEP` et `TABLE_BODY_MEMBERS_IN_STEP` [§5.2 ; §3.2] |
 | `packages/core/src/ast/__tests__/visitor.test.ts` | `childrenOf`, `walk`, `nodeReads`, `collectDataPaths`, la portée [§5.3] |
 | `packages/core/src/template/migrate.test.ts` | l'estampille et la chaîne [§5.4] |
 | `packages/core/src/expression/evaluator/__tests__/limits-scope.test.ts` | le libellé du site `tableRowGroup` [§5.3] |
@@ -3744,6 +4018,20 @@ aucune colonne, donc elle est aussi un orphelin. C'est correct et il faut le sav
 l'`it` : l'assertion porte sur `issues[0]`, ou sur `issues.length === 2`, jamais sur un unique
 message.
 
+**Et la portée exacte du garde, parce qu'elle est plus étroite que « un message à la fois ».** Le
+garde `declared.size === 0` tient le compte à un quand le tableau ne déclare **aucune** colonne. Il ne
+couvre pas la faute voisine : une colonne dont l'`id` échoue à sa propre borne entre quand même dans
+`declared` — sous la forme `''`, puisque `too_small` est continuable et que le champ garde sa valeur —
+si bien que **chaque cellule de cette colonne est rapportée comme orpheline**. **MESURÉ** sur le
+modèle de recette dont `columns[0].id` est mis à la chaîne vide : **4 issues** —
+`too_small@columns.0.id`, puis un `custom` sur `header.0.cells.0.columnId`, un sur
+`body.0.rows.0.cells.0.columnId` et un sur `footer.0.cells.0.columnId`. La cascade est donc
+proportionnelle au nombre de cellules **de la colonne fautive**, jamais au nombre de cellules du
+tableau, et la première issue désigne la vraie faute : c'est lisible, et c'est la même classe que le
+doublon ci-dessus. Ce qu'il ne faut pas en conclure, c'est que le garde promet « une issue » dans tous
+les cas — il la promet pour la **liste vide**, et [§2, D3] le borne déjà correctement (« *quand
+aucune colonne n'est déclarée* ») ; c'est en aval, chez qui résume, que la nuance se perd.
+
 > ⚠️ **Correction d'un raisonnement faux, à ne pas recopier — et celle-ci renverse une correction
 > antérieure.** Le dossier de revue conclut que le garde `if (declared.size === 0) return;` de
 > `checkTableWiring` est **du code mort à supprimer**, sur l'énoncé suivant : « *Zod n'exécute pas
@@ -3764,11 +4052,22 @@ message.
 > | `width: 1.5` | `invalid_type` | non | 1 |
 > | `width: NaN` | `invalid_type` | non | 1 |
 > | `align: 'left'` | `invalid_value` | non | 1 |
+> | une entrée de `body` au `type` inconnu | `invalid_union` | non | 1 |
 > | `width: 0` | `too_small` | **oui** | **2** |
 > | `width: 1001` | `too_big` | **oui** | **2** |
 > | `id: ''` sur une colonne | `too_small` | **oui** | **2** |
 > | `rows: []` sur un groupe | `too_small` | **oui** | **2** |
 > | `as: '1bad'` | `custom` | **oui** | **2** |
+>
+> **La cinquième ligne a été ajoutée après la revue de contradiction, et elle porte deux
+> conséquences.** `invalid_union` — le code qu'une entrée de `body` au discriminant inconnu rend sur
+> `body.0.type` — est **abandonnant** : le `superRefine` est sauté. *(a)* `checkTableWiring` ne reçoit
+> donc **jamais** une entrée de corps qui ne soit pas l'un des deux membres, ce qui est la raison pour
+> laquelle une branche défensive dans cette fonction serait inatteignable, donc non couvrable, et
+> pourquoi la garantie d'exhaustivité de l'union se prend à la porte 3 plutôt que dans le schéma
+> [§3.2]. *(b)* Le tableau ci-dessus n'énumérait que des fautes de **champ** ; une faute de **membre
+> d'union** relève de la même règle, et l'hypothèse 2 de la [§9] est d'autant mieux campée qu'elle
+> couvre les deux.
 >
 > **Donc `columns.min(1)` n'arrête rien**, et le garde n'est pas mort : c'est lui, et lui seul, qui
 > tient le compte à un. **Rejeu décisif** : le `dist` compilé du contrat a été dupliqué, les quatre
@@ -3853,7 +4152,8 @@ dit exactement où il s'arrête.
 | le visiteur en ligne du premier `it` | `ast/__tests__/visitor.test.ts:56` | **3** — `TS2741` |
 | le visiteur en ligne du second `it` | `ast/__tests__/visitor.test.ts:82` | **3** — `TS2741` |
 | `TABLE_COLUMN_SCHEMA_IN_STEP` | `ast/__tests__/nodes.test.ts` | **3** — l'annotation s'effondre en `false` |
-| **le membre `TableNodeSchema` de `blockMembers()`** | `ast/schemas.ts` | **4 seulement** — aucune porte de type |
+| `TABLE_BODY_MEMBERS_IN_STEP` | `ast/__tests__/nodes.test.ts` | **3** — idem, sur `TableBodyNode['type']` : c'est elle, et **non** `entry.rows`, qui tient l'union à deux membres [§3.2] |
+| **les membres de `blockMembers()` et de `rowMembers()`** — les **trois** omissions, mesurées | `ast/schemas.ts` | **4 seulement** — aucune porte de type, sur aucune des deux fabriques |
 | l'estampille `CURRENT_SCHEMA_VERSION` | `template/template.ts` | **4 seulement** — `migrate.test.ts` |
 | le libellé `tableRowGroup` de `LIST_CALLER_SUBJECTS` | `expression/evaluator/evaluate.ts` | **4 seulement** — la table est un `Partial` |
 | les deux barrels | `core/src/index.ts`, la façade `ast/nodes.ts` | **aucune** — voir [§5.5] |
@@ -3886,11 +4186,19 @@ attrape aussi la dérive **inverse**, un champ ajouté au schéma et oublié dan
 décompte qui annonce « quatre au total » a oublié la porte 3 ; la docstring de l'assertion doit donc
 lire « *and in four other places besides* », pas trois.
 
-> 🔑 **Le trou de covariance, et la manipulation qui le prouve.** Il reste **un** site que rien
-> n'atteint : le membre `TableNodeSchema` de `blockMembers()`. `z.ZodType<out Output>` est
-> **covariant** en sa sortie, donc une union qui produit *moins* que `BlockNode` reste assignable à
+> 🔑 **Le trou de covariance, et la manipulation qui le prouve. Il porte sur TROIS membres, répartis
+> sur les DEUX fabriques.** Une version antérieure de cet encadré écrivait « *il reste **un** site que
+> rien n'atteint : le membre `TableNodeSchema` de `blockMembers()`* ». **Le décompte est faux, et il
+> l'est du côté rassurant** : `rowMembers()` alimente `DocumentNodeSchema` — annoté, donc couvert par
+> le même argument de covariance — **et** `TableBodyNodeSchema`, qui ne porte **aucune** annotation et
+> dont l'inférence rétrécit en silence. Trois omissions, trois fois exit 0 [§3.2].
+>
+> Le mécanisme, pour les deux unions annotées : `z.ZodType<out Output>` est **covariant** en sa
+> sortie, donc une union qui produit *moins* que `BlockNode` reste assignable à
 > `z.ZodType<BlockNode>`, et une assertion de mutuelle assignabilité posée sur un schéma **annoté**
-> est tautologique. **Mesuré, en retirant le membre** : `tsc -p tsconfig.json` **exit 0**,
+> est tautologique. Pour `TableBodyNodeSchema` : la sortie inférée perd un membre, `body` la suit, et
+> `checkTableWiring(table: TableNode, …)` reste assignable au paramètre de `.superRefine`.
+> **Mesuré dans les trois cas** : `tsc -p tsconfig.json` **exit 0**,
 > `tsc -p tsconfig.typecheck.json` **exit 0**, build propre — **seul le test de parsing rougit**.
 > Le symptôme au runtime est le mode de défaillance nominal d'un oubli de schéma :
 > `DocumentNodeSchema.safeParse({ type: 'table', … })` rend `invalid_union` / « No matching
@@ -3898,15 +4206,17 @@ lire « *and in four other places besides* », pas trois.
 > version, ni remède, exactement le refus illisible que l'estampille de [§2, D11] existe pour
 > supprimer ailleurs.
 >
-> **À faire une fois, à la main, dans INC-1 :** retirer `TableNodeSchema` du corps de
-> `blockMembers()`, constater que les portes 1, 2 et 3 restent **vertes** et que le seul `it`
+> **À faire une fois, à la main, dans INC-1, et sur les DEUX fabriques :** retirer `TableNodeSchema`
+> du corps de `blockMembers()`, puis `TableRowGroupNodeSchema` et `TableRowNodeSchema` de celui de
+> `rowMembers()`, constater à chaque fois que les portes 1, 2 et 3 restent **vertes** et que l'`it`
 > d'union de `nodes.test.ts` **rougit**, puis annuler. Le garde-fou est alors **prouvé, pas
 > supposé** — et c'est le même geste que le plan C1 prescrivait sur `z.lazy` et le plan C2 sur
 > `printableMembers()`. Trois lots, trois fois le même trou : ce n'est pas une précaution, c'est la
-> propriété permanente de `z.ZodType`.
+> propriété permanente de `z.ZodType`, et C3 est le premier lot où elle porte sur **deux** listes.
 
 Le test qui l'occupe est celui-ci, et il vit dans `nodes.test.ts` parce que c'est ce fichier qui
-porte déjà les deux gardes anti-dérive du paquet :
+porte déjà les gardes anti-dérive du paquet — `SEGMENT_SCHEMA_IN_STEP` aujourd'hui,
+`TABLE_COLUMN_SCHEMA_IN_STEP` et `TABLE_BODY_MEMBERS_IN_STEP` après C3 :
 
 ```ts
 it('accepts a table through the block union, and a row only through its table', () => {
@@ -3917,11 +4227,26 @@ it('accepts a table through the block union, and a row only through its table', 
 });
 ```
 
-Les quatre assertions ne sont pas décoratives : les deux premières attrapent l'oubli dans
-`blockMembers()`, la troisième prouve que la coupure d'union **mord** — sans elle, `BlockNode`
-serait un alias verbeux de `DocumentNode` —, et la quatrième prouve qu'elle ne mord pas trop loin,
-puisque `parseDocumentNode` doit continuer à valider un sous-arbre de lignes que l'éditeur tient en
-main. **Et l'expression complète du refus se mesure au niveau du modèle** : une ligne nue glissée
+**Les quatre assertions ne sont pas décoratives, et chacune attrape quelque chose que les trois
+autres laissent passer — mesuré, omission par omission.** Les **deux premières** attrapent l'oubli de
+`TableNodeSchema` dans `blockMembers()` **et** celui de `TableRowGroupNodeSchema` dans `rowMembers()`.
+La **troisième** prouve que la coupure d'union **mord** — sans elle, `BlockNode` serait un alias
+verbeux de `DocumentNode`. La **quatrième** prouve qu'elle ne mord pas trop loin, puisque
+`parseDocumentNode` doit continuer à valider un sous-arbre de lignes que l'éditeur tient en main —
+**et c'est la seule qui attrape l'oubli de `TableRowNodeSchema` dans `rowMembers()`** : mesuré, les
+trois autres restent vertes dans ce cas. Elle a donc **deux** raisons d'être, et la seconde n'était
+pas écrite.
+
+> ⚠️ **Deux simplifications à ne jamais accepter sur ce test, parce qu'elles rouvriraient le trou en
+> silence.** *(a)* **Retirer la quatrième assertion comme « redondante »** : elle est le seul témoin
+> d'un `rowMembers()` amputé de `TableRowNodeSchema`. *(b)* **Retirer le `tableRowGroup` du `body` de
+> `RECIPE_TABLE`** — pour « simplifier la fixture », ou parce qu'une ligne fixe suffirait à démontrer
+> le parsing : les deux premières assertions ne détectent l'oubli de `TableRowGroupNodeSchema`
+> **que** parce que le modèle de recette en porte un. Une fixture sans groupe rendrait ce test vert
+> sur un contrat cassé, et rien d'autre ne le dirait. C'est une raison de plus, indépendante de la
+> recette, pour que le modèle de [§6.2] porte un groupe répété.
+
+**Et l'expression complète du refus se mesure au niveau du modèle** : une ligne nue glissée
 dans `root.children` est refusée sur `root.children.2.type` / « No matching discriminator »
 (mesuré), ce qui est le bon endroit — le flux de blocs — et non « quelque part dans un tableau ».
 
@@ -4141,8 +4466,10 @@ d'épreuve** et aucune ne portant de type de donnée. La seconde lecture — *ch
 type*, monétaire, nombre, texte, date, dont le moteur déduirait format et alignement — appelle une
 échelle et un symbole, donc un arrondi implicite, et préempterait par la porte de service la
 question que C2 a explicitement laissée ouverte : qui déclare l'échelle d'**affichage** d'un
-montant. **C'est l'arbitrage n°1 [§8], et il est à rendre avant INC-1** : s'il tombe sur la seconde
-lecture, ce contrat est à **rejouer**, pas à amender.
+montant. **C'est l'arbitrage n°1 [§8], et il a été tranché sur la première lecture le 2026-08-17** :
+c'est celle que tout ce plan applique. Son signal de réouverture est nommé — la question ouverte de
+C2 tranchée en faveur d'une table de devises — et le jour où il sonne, ce contrat est à **rejouer**,
+pas à amender.
 
 **« en-tête compris ».** C'est ce qui interdit de traiter l'en-tête comme une convention. Le
 critère ne demande pas qu'on puisse *afficher* des intitulés — un `TextNode` au-dessus du tableau
@@ -4189,8 +4516,9 @@ fichier porte aussi le type `MutuallyAssignable`, qui était jusqu'ici **local e
 `nodes.test.ts` (`nodes.test.ts:12-16`) : sans ce déplacement, l'assertion
 `TABLE_COLUMN_SCHEMA_IN_STEP` ne peut pas migrer sans dupliquer le type, et un type dupliqué est un
 type qui divergera. `SEGMENT_SCHEMA_IN_STEP`, qui l'utilisait déjà, l'importe désormais du même
-endroit : le type n'existe qu'une fois, et c'est la condition pour que les deux gardes anti-dérive
-soient réellement le même garde.
+endroit — `TABLE_BODY_MEMBERS_IN_STEP` aussi [§3.2] : le type n'existe qu'une fois, et c'est la
+condition pour que les **trois assertions** qui l'emploient — `SEGMENT_SCHEMA_IN_STEP`,
+`TABLE_COLUMN_SCHEMA_IN_STEP`, `TABLE_BODY_MEMBERS_IN_STEP` — soient réellement le même garde.
 
 **L'avertissement se recopie au-dessus de la fixture, et ce n'est pas de la décoration.** Le premier
 tableau réellement décrit est celui que tout le monde recopiera — le dépôt nomme déjà ce mécanisme,
@@ -4477,8 +4805,12 @@ ne porte pas, cela se voit là, et nulle part ailleurs.
   discriminée ([§8], arbitrage n°7).
 - `git grep -n "const exhaustive: never" -- packages/core/src | wc -l` rend **6** — inchangé : C3
   n'ajoute aucun `switch`, il complète celui qui existe.
-- **Les 20 symboles nouveaux sont importables depuis `@openview/core`** — vérifié par le playground,
-  aucune porte ne le voit ([§5.5]). Le compte se recompte : **9 types** (`BlockNode`,
+- **Les 20 symboles nouveaux sont importables depuis `@openview/core`.** Aucune porte ne le voit
+  ([§5.5]), et **le playground n'en vérifie qu'une partie** : (b) n'importe que `BlockNodeType`, et
+  (c) valide par `parseTemplate`, donc il n'importe **aucun schéma de nœud** — le résidu réellement
+  aveugle est de l'ordre des **onze valeurs**, nommé par extension en [§4, INC-4]. Ce qui est
+  mécanique ici est donc le **décompte de noms** des trois blocs d'export, pas une vérification par
+  le playground ; le reste est listé dans la PR. Le compte se recompte : **9 types** (`BlockNode`,
   `BlockNodeType`, `TableBodyNode`, `TableCell`, `TableColumn`, `TableColumnAlignment`, `TableNode`,
   `TableRowGroupNode`, `TableRowNode`), **10 valeurs** de `./ast/nodes.js` (`BlockNodeSchema`,
   `MAX_COLUMN_WIDTH`, `MIN_COLUMN_WIDTH`, `TABLE_COLUMN_ALIGNMENTS`, `TableBodyNodeSchema`,
@@ -4558,20 +4890,45 @@ ne porte pas, cela se voit là, et nulle part ailleurs.
   constantes (`MIN_COLUMN_WIDTH`, `MAX_COLUMN_WIDTH`) : **aucun message n'interpole le contenu du
   modèle** ([§5.1]). Les guillemets simples comptent — sous double quote, le shell mangerait le
   `${`.
-- **INC-0 est un déplacement et rien d'autre** : `git diff --stat` ne montre que des déplacements et
-  la façade, et `packages/core/src/index.ts` est **inchangé octet pour octet** — c'est la preuve
-  mécanique que la surface publique n'a pas bougé au refactor.
-- **Retirer `TableNodeSchema` du corps de `blockMembers()` laisse les portes 1, 2 et 3 vertes et
-  fait rougir la porte 4** — à vérifier une fois à la main, puis annuler ([§5.2]).
+- **INC-0 est un déplacement et rien d'autre** : `git diff -M --stat -- packages/core/src/ast` ne
+  montre que des déplacements et la façade, et `git diff -- packages/core/src/index.ts` est **vide**,
+  le fichier étant inchangé octet pour octet — c'est la preuve mécanique que la surface publique n'a
+  pas bougé au refactor. **Le pathspec n'est pas un ornement** : sans lui, tout fichier modifié
+  ailleurs dans l'arbre — ce plan lui-même, tant qu'il n'est pas commité — fait échouer un critère
+  qu'INC-0 satisfait par ailleurs [§0, l'état de l'arbre].
+- **Retirer un membre de `blockMembers()` ou de `rowMembers()` laisse les portes 1, 2 et 3 vertes et
+  fait rougir la porte 4** — les **trois** omissions mesurées (`TableNodeSchema`,
+  `TableRowGroupNodeSchema`, `TableRowNodeSchema`), à vérifier une fois à la main puis annuler
+  ([§3.2 ; §5.2]).
 - **La branche `declared.size === 0` de `checkTableWiring` est couverte**, et le rapport de
   couverture le dit : un tableau sans colonne l'atteint à chaque exécution de l'`it` de [§5.1]. Si
   elle apparaît à zéro passage, c'est que le garde a été retiré — et le compte d'issues aura sauté
   de 1 à 13 sans qu'aucune autre porte ne bronche.
 - `packages/core/package.json` **inchangé** ; `pnpm-workspace.yaml` **sans dérogation nouvelle** ;
   `biome.jsonc` et les `tsconfig*.json` **inchangés**.
-- `git log --oneline -- AGENTS.md` montre **zéro** entrée nouvelle pour ce lot. C3 n'amende aucune
-  règle de gouvernance : c'est la différence exacte avec C2, dont la définition de fini exigeait
-  **une** entrée, et c'est ce que l'arbitrage n°7 [§8] doit confirmer avant INC-1.
+- **`AGENTS.md` ne gagne aucune entrée**, et le critère doit porter sa **base**, faute de quoi il
+  n'est pas rejouable. `git log --oneline -- AGENTS.md` n'a jamais rendu « zéro » : **mesuré, il rend
+  huit lignes sur un dépôt sain aujourd'hui**, avant que C3 commence — c'est l'historique du fichier,
+  pas le delta du lot. La forme à jouer, sur la branche du lot et **avant** la fusion, c'est-à-dire
+  au moment exact où une définition de fini se vérifie :
+
+  ```bash
+  git diff --exit-code "$(git merge-base origin/main HEAD)" HEAD -- AGENTS.md
+  ```
+
+  exit **0**. La base est le **point de branche**, *calculé* et non recopié : un hash écrit ici se
+  périmerait à la première réécriture d'historique, et c'est précisément ce que cette section refuse.
+  C3 n'amende aucune règle de gouvernance : c'est la différence exacte avec C2, dont la définition de
+  fini exigeait **une** entrée. La **décision 7-A** [§8] l'a confirmé le 2026-08-17, ce qui fait de
+  cette ligne un contrôle négatif et non une hypothèse en attente.
+
+  > ⚠️ **La forme antérieure de ce critère n'était pas rejouable, à ne pas recopier.** Elle
+  > s'écrivait « *`git log --oneline -- AGENTS.md` montre **zéro** entrée nouvelle pour ce lot* ». Le
+  > mot « nouvelle » porte tout le sens, et une commande ne le porte pas : sa sortie est de **huit**
+  > lignes, et il faut connaître le compte d'avant pour conclure. C'est ce que cette section appelle
+  > un critère décoratif — « *une commande dont la sortie attendue est vraie sur un dépôt sain* » —
+  > exactement le reproche qu'elle adresse déjà à la forme naïve du grep du jeu d'épreuve. Le
+  > `--exit-code` sur la base rend la vérification binaire et indépendante du compte.
 - **L'ADR 0005 existe, est en 🟢, et couvre les treize décisions** avec, pour chacune, son motif,
   ses alternatives écartées, son verdict de réversibilité et son signal de réouverture quand il y en
   a un. `docs/roadmap/core.md` §C3 porte le renvoi vers ce plan puis la mention de livraison, et ce
@@ -4583,10 +4940,40 @@ ne porte pas, cela se voit là, et nulle part ailleurs.
 
 Le hors-périmètre **de conception** est écrit en **D13** ([§2]) et n'est pas répété ici. Les deux
 listes ne disent pas la même chose, et les confondre est la première façon de mal lire ce plan :
-D13 énumère ce que C3 **refuse**, chaque refus adossé à un texte déjà écrit, et ce que D13 refuse
-ne sera livré par personne — ni par C4, ni par C5, ni par le moteur. Ce qui suit est l'inverse :
-des choses qui **seront** livrées, mais ailleurs, et qu'un lecteur de « le tableau de lignes »
-pourrait raisonnablement croire dans le lot. Aucune n'est un refus ; toutes sont une adresse.
+D13 énumère ce que C3 **refuse**, chaque refus adossé à un texte déjà écrit. Ce qui suit est
+l'inverse : des choses qui **seront** livrées, mais ailleurs, et qu'un lecteur de « le tableau de
+lignes » pourrait raisonnablement croire dans le lot. Aucune n'est un refus ; toutes sont une
+adresse.
+
+> ⚠️ **Correction d'un énoncé faux, à ne pas recopier — il contredisait D13 et les six paragraphes
+> qui suivent.** L'énoncé retiré : « *ce que D13 refuse ne sera livré par personne — ni par C4, ni
+> par C5, ni par le moteur* ». **Il est démenti par D13 elle-même**, dont les motifs disent
+> « périmètre de C5 », « périmètre de C6 », « lots E2 et E3 », et dont la colonne « Où elle vit » de
+> [§2, D1] écrit « C5 » et « C6 » ; et il est démenti deux paragraphes plus bas par « **Ce n'est pas
+> l'apparence.** Filets, fonds, zébrures, polices […] : **C5** ». Ce que D13 refuse, ce n'est pas une
+> **capacité**, c'est un **champ de C3** — et les deux listes se recouvrent donc, au lieu d'être
+> disjointes.
+>
+> **La classification juste tient en trois classes, et chaque refus de D13 tombe dans une seule :**
+>
+> 1. **Interdit définitivement, pour tout le produit** — l'auto-somme et tout champ de total, le
+>    sous-total et le report de page, la répartition d'un résidu d'arrondi, un nom de colonne
+>    réservé, l'en-tête ou les colonnes déduits des clés du jeu de données, l'alignement déduit du
+>    type de la valeur, tout vocabulaire à consonance réglementaire, toute lecture d'environnement.
+>    Personne ne les livrera, et trois d'entre eux sont outillés plutôt que promis.
+> 2. **Refusé dans C3, livré ailleurs sous une autre forme** — l'apparence, l'alignement de bloc et
+>    la surcharge par cellule (**C5**) ; le format, le séparateur, le symbole, l'échelle
+>    d'affichage, le type de colonne (**C6**) ; la répétition d'en-tête, la veuve, l'orpheline, le
+>    point de coupe, la numérotation (**E2**, **E3**) ; l'insécabilité (**C7**) ; le tri, le filtre
+>    et le regroupement, qui existent **déjà** dans l'algèbre C1. Ce que C3 refuse ici, c'est le
+>    **champ**, jamais la capacité — et la raison est toujours la même : déplacer un champ stocké est
+>    une migration transformante.
+> 3. **Refusé aujourd'hui, avec un signal de réouverture daté** — la fusion de cellules, la colonne
+>    conditionnelle, le type de colonne, chacun avec son contournement écrit [§2, D13].
+>
+> La liste ci-dessous n'est donc pas « l'inverse de D13 » : c'est **la classe 2, développée avec son
+> adresse**. Les confondre reste la première façon de mal lire ce plan, mais la faute exacte n'est
+> pas celle que cette phrase annonçait.
 
 **Ce n'est pas un lot de rendu.** `core` **décrit**, il ne **produit** rien : aucune page, aucun
 pixel, aucun PDF (`docs/roadmap/core.md:270-274`). Un `TableNode` validé ne dessine pas un filet,
@@ -4611,8 +4998,8 @@ quel est une grille sans une seule ligne tracée, et c'est normal. La seule prop
 C3 déclare est `TableColumn.align`, et elle y est par exception nommée : elle échoue au critère
 d'appartenance de D1 comme les autres, et elle est retenue sur deux arguments mécaniques — le
 libellé du lot (`core.md:153-154`, « un alignement par colonne ») et la chaîne de dépendances
-([§2, D1] et [§2, D7]). Ce n'est pas une frontière lue dans un texte : c'est un arbitrage, le n°2
-de la [§8].
+([§2, D1] et [§2, D7]). Ce n'est pas une frontière lue dans un texte : c'est un arbitrage — le n°2
+de la [§8], tranché le 2026-08-17.
 
 **Ce n'est pas la langue ni la devise.** Séparateurs, symbole monétaire, position du symbole,
 échelle d'affichage, libellés fixes traduits : **C6** (`core.md:186-196`). C3 ne livre aucun type
@@ -4678,63 +5065,76 @@ et rien d'autre.
 
 ---
 
-## 8. Les sept arbitrages, à trancher
+## 8. Les sept arbitrages, tranchés
 
-**Contrairement aux plans C1 et C2, ces arbitrages ne sont PAS tranchés.** C1 a fait relever ses
-cinq décisions par le propriétaire du produit le 2026-08-13, C2 les siennes le 2026-08-14 ; ce plan
-est écrit le 2026-08-16 et **reste en attente**. La colonne de droite porte une **recommandation**,
-pas un relevé, et elle sera relue le jour où l'un de ces points sera rouvert — c'est la raison pour
-laquelle le motif y est écrit en entier plutôt que résumé.
+**Décidés par le propriétaire du produit le 2026-08-17**, conformément aux sept recommandations de
+ce plan : **1-A**, **2-A**, **3-A**, **4-A**, **5-A**, **6-A**, **7-A**. Ils ne sont plus ouverts :
+ce qui suit est le **relevé**, pour que l'ADR 0005 le reprenne ([§4], INC-5, point 12) et que
+personne ne les rejoue. C1 avait fait relever ses cinq décisions le 2026-08-13, C2 les siennes le
+2026-08-14 ; C3 suit la même règle, un jour après la date d'écriture de son plan.
 
-**Les sept gatent INC-1, et trois sont marqués ⛔.** Le marquage ne dit pas « à rendre plus tôt » —
-tous sont à rendre avant qu'une ligne de contrat ne soit écrite. Il dit **ce que coûte l'option
-non recommandée** : ⛔ signale les trois dont l'autre branche réécrit du contrat déjà rédigé en [§3],
-par opposition aux quatre dont l'autre branche change une valeur, une borne ou une étiquette.
+La colonne « Options » porte ☑ sur l'option retenue ; la colonne de droite conserve le motif **tel
+qu'il a été écrit avant la décision**, parce que c'est lui qui devra être relu le jour où l'un de ces
+points sera rouvert — et c'est la raison pour laquelle il y est écrit en entier plutôt que résumé.
 
-- **Le n°1 ⛔ est bloquant et il change le lot.** Si « typé » se lit B, le contrat des treize
-  décisions n'est pas à amender, il est **à rejouer**. C'est le seul qui puisse renvoyer le plan à
-  sa table de travail.
-- **Le n°3 ⛔ réécrit la moitié de la [§3].** L'option B — la cellule porte des `TextSegment[]` — ne
+**Ce que les sept débloquent.** Ils barraient tous la route à INC-1 : **il n'est plus gaté**, et
+démarre donc dès qu'INC-0 est fusionné — l'ordre technique de la [§4] est intact, un gate produit
+levé n'est pas une dépendance supprimée. Et la [§3] tient telle qu'elle est rédigée — aucune ligne à rejouer, aucun commit `chore(governance)`
+dans le découpage de la [§4], et `AGENTS.md` sans entrée nouvelle, ce dont la [§6.4] fait un contrôle
+négatif. INC-0 n'attendait aucun des sept, et cela reste vrai de son côté : c'est un refactor pur,
+qui déplace des types et des schémas derrière une façade sans toucher une surface publique.
+
+**Le marquage ⛔ reste, et il change de sens.** Avant la décision, il disait **ce que coûtait l'option
+non recommandée**. Ce coût ne s'évapore pas avec la décision : il devient le **coût de réouverture**,
+et c'est sous ce sens qu'il se lit désormais. ⛔ signale donc les trois points qu'on ne rouvre pas
+sans rouvrir du contrat déjà rédigé en [§3], par opposition aux quatre dont la réouverture ne
+changerait qu'une valeur, une borne ou une étiquette.
+
+- **Le n°1 ⛔ engage le lot entier.** Si « typé » devait se relire en B, le contrat des treize
+  décisions ne serait pas à amender, il serait **à rejouer**. C'est le seul des sept qui puisse
+  renvoyer le plan à sa table de travail, et c'est pourquoi il portait le caractère bloquant.
+- **Le n°3 ⛔ engage la moitié de la [§3].** L'option B — la cellule porte des `TextSegment[]` — ne
   change pas « un type » : elle change `TableCell` et sa docstring [§3.1], la branche `tableRow` de
   `childrenOf` [§3.4], **toutes** les mesures de profondeur du lot (18/231, 15/210, 48, 50, 56, et
   les neuf tableaux imbriqués avant `too-deep`), l'argument « **zéro position de contenu nouvelle
   pour C6** » qui porte la troisième raison de D4, la fixture de recette et le décompte de dix-sept
-  nœuds de [§5.3]. **Le rang de cet arbitrage a été relevé après relecture** : une version antérieure
-  de cette section le rangeait parmi les cinq « non bloquants », alors que son option B touche plus
-  de contrat que celle du n°7. Un arbitrage dont on sous-estime le coût est un arbitrage qu'on rend
-  vite.
-- **Le n°7 ⛔ change le contrat ou le découpage**, pour deux raisons distinctes : l'option B **change
+  nœuds de [§5.3]. **Le rang de cet arbitrage a été relevé avant la décision** : une version
+  antérieure de cette section le rangeait parmi les cinq « non bloquants », alors que son option B
+  touche plus de contrat que celle du n°7. Un arbitrage dont on sous-estime le coût est un arbitrage
+  qu'on rend vite — et celui-là ne l'a pas été.
+- **Le n°7 ⛔ engage le contrat ou le découpage**, pour deux raisons distinctes : l'option B **change
   le contrat** (un import de plus, et un couplage inversé entre `ast/schemas.ts` et
   `ast/visitor.ts`), et l'option C **ajoute un commit `chore(governance)` et un mandat daté** au
-  découpage de la [§4]. Il déplace du travail ; il ne le refait pas.
-- **Les quatre autres — n°2, n°4, n°5, n°6 — peuvent être rendus pendant INC-0**, qui est un
-  refactor pur : il déplace des types et des schémas derrière une façade, ne change aucune surface
-  publique, et **aucune des quatre options en jeu n'y touche une ligne**. Le lot peut donc démarrer
-  sans eux ; il ne peut pas atteindre INC-1 sans eux, ni sans les trois autres.
+  découpage de la [§4]. Elle déplacerait du travail ; elle ne le referait pas.
+- **Les quatre autres — n°2, n°4, n°5, n°6 — n'engagent qu'une pièce nommée** : un champ laissé à
+  C5, un contrôle au save time, une étiquette de valeur stockée, une borne de largeur. Leur
+  réouverture se traite sans toucher au reste du contrat, et **deux** d'entre eux — le n°5 et le
+  n°6 — portent le signal nommé qui la déclencherait ; le troisième signal du lot appartient au n°1,
+  et c'est le seul dont la réouverture coûte le lot. Les trois sont écrits plus bas.
 
-| # | Question | Options | Recommandation |
+| # | Question | Options | Motif de la décision |
 | :-- | :--- | :--- | :--- |
-| **1** ⛔ | Que veut dire « typé » dans le critère de recette — « un tableau à cinq colonnes typé (désignation, quantité, prix unitaire, remise, montant) » (`core.md:157-159`, [§6.1]) ? | **A —** « décrit dans un contrat typé » : les cinq colonnes sont un **jeu d'épreuve**, aucune ne porte de type de donnée. C'est la lecture de ce plan. | **A**, et l'écart entre les deux lectures n'est pas cosmétique : **il change le lot**. Un type de colonne appelle une échelle et un symbole ; une échelle non déclarée est un arrondi implicite ; une table devise → décimales est refusée jusque dans un exemple de docstring ; et le formatage appartient à C6, dont C2 a **explicitement laissé ouverte** la question « qui déclare l'échelle d'affichage d'un montant ». Trancher B ici préempterait cette décision par la porte de service, et ferait dépendre la mise en page du jeu de données de l'intégrateur — contre la règle de périmètre. **Si le propriétaire du produit lit B, ce contrat est à rejouer, pas à amender.** |
-| | | **B —** « chaque colonne porte un type » (monétaire, nombre, texte, date), dont le moteur déduit format et alignement. | |
-| **2** | La frontière C3 / C5 sur l'alignement n'est arbitrée par **aucun texte** du dépôt : `core.md:153-154` donne « un alignement par colonne » à C3, `core.md:179` donne « alignements » à C5, et C5 dépend de C3. | **A —** C3 possède l'alignement **de colonne** ; C5 possède l'alignement de bloc et, s'il le décide, une surcharge par cellule qu'il ajoute lui-même. | **A**. B contredit le libellé du lot **et** la chaîne de dépendances : une propriété dont le critère de recette de C3 a besoin ne peut pas vivre dans le lot qui vient après, et sans elle « libellés à gauche, montants à droite » est indémontrable. C écrit un champ optionnel **à la place de C5** ; le retirer plus tard exigerait une migration transformante, l'ajouter plus tard n'est qu'un élargissement. A garde la porte ouverte dans le seul sens qui ne coûte rien. **À consigner comme une DÉCISION dans l'ADR 0005, pas comme une lecture.** |
-| | | **B —** Tout l'alignement va à C5 ; C3 ne livre que colonnes, largeur et en-tête. | |
-| | | **C —** C3 déclare l'alignement de colonne **et** la surcharge par cellule, dès maintenant. | |
-| **3** ⛔ | Une cellule contient-elle des **blocs** ou des **segments de texte** ? | **A —** `readonly BlockNode[]` : image, deux paragraphes, condition, tableau imbriqué possibles ; l'imbrication est bornée par le garde de forme (mesuré : 9 tableaux imbriqués passent, le 10ᵉ est refusé `too-deep`). Coût mesuré : **+2 niveaux JSON**. | **A**, sur la **réversibilité** et non sur l'expressivité. B est le seul point de ce contrat où un revirement coûterait une migration **transformante** — envelopper les segments de chaque cellule dans un nœud texte doté d'un id inventé — et la première demande sera un logo, un picto ou un QR code dans une cellule. A rend en prime le libellé d'en-tête un `TextNode` ordinaire, donc **zéro position de contenu nouvelle** pour C6. Si le propriétaire du produit juge que la pagination d'un tableau imbriqué est un risque inacceptable pour E2, **B est défendable** — mais il faut alors accepter que la cellule ne contiendra jamais qu'un run de texte, et l'écrire dans l'ADR. **⛔ à rendre avant INC-1 :** B ne change pas un type, il réécrit `TableCell` [§3.1], la branche `tableRow` de `childrenOf` [§3.4], **toutes** les mesures de profondeur du lot, l'argument « zéro position de contenu nouvelle pour C6 » de D4, la fixture et le décompte de dix-sept nœuds de [§5.3]. |
-| | | **B —** `readonly TextSegment[]` : l'imbrication devient impossible par construction, la profondeur du sous-arbre est fixée, et E2 n'héritera jamais d'un tableau dans un tableau. | |
-| **4** | Le `superRefine` sur `TableNodeSchema` — **le premier du dépôt** — est-il accepté ? | **A —** Le garder : la cellule orpheline, le doublon de cellule et l'id de colonne dupliqué sont refusés au save time, avec un chemin qui désigne la faute, et **zéro code d'erreur nouveau**. | **A**. L'appariement par clé ne laisse qu'**un seul** état représentable — la cellule orpheline — et c'est une **perte silencieuse** : du contenu que l'auteur voit dans son JSON et que rien n'affichera. La doctrine de versionnement du dépôt existe précisément contre cette classe de défaut. Ce n'est pas la passe sémantique qu'ADR 0002 D2 a refusée : le contrôle est **local** — un nœud, un niveau, aucune descente dans les cellules — là où le masquage d'alias exigeait toute l'ascendance. Deux réserves à écrire : « zéro code nouveau » repose sur le fait qu'un `z.object().superRefine()` reste un `ZodObject` en zod 4 (mesuré, à rejouer à chaque montée, [§9]) ; et B laisserait **C8** découvrir la faute des mois plus tard, C8 dépendant de C1 à C7. |
-| | | **B —** Le retirer : `core` accepte, et la passe de validation de C8 nomme le défaut plus tard. | |
-| **5** | `start / center / end` ou `left / center / right` pour l'alignement de colonne ? | **A —** `start / center / end` : `core` ne résout rien, il **diffère** la résolution, et là où la direction est gauche-droite `start` **est** `left`. | **A**, mais **pas sur l'argument initialement écrit** — voir l'encadré ci-dessous. L'argument qui tient : C3 diffère une résolution qu'il n'a **aucune information** pour trancher, et le revirement serait à la fois **transformant** (réécrire une valeur stockée dans tous les modèles) et **sémantiquement indécidable** (on ne saurait pas si l'auteur voulait « gauche » ou « début »). Différer coûte zéro aujourd'hui ; trancher coûte une migration qu'on ne saurait pas écrire. La lisibilité invoquée par B est un problème d'**étiquette dans l'éditeur**, pas de contrat. |
-| | | **B —** `left / center / right` : plus lisible pour un utilisateur non développeur dans l'éditeur de D6, et sans ambiguïté pour un intégrateur. | |
-| **6** | La borne `MAX_COLUMN_WIDTH = 1000` — un rapport de 1 à 1 000 suffit-il, et faut-il une borne du tout ? | **A —** Garder `[1, 1000]` : la borne haute **porte la preuve** d'exactitude. | **A**. La borne n'est pas un jugement de mise en page, elle est **load-bearing** : sans elle, la preuve qui adosse la décision produit 7 (« identique au PDF, garanti ») à une propriété démontrable disparaît, et la part d'une colonne redevient un accord entre deux implémentations. C reste arithmétiquement correct, mais **aucun besoin ne le motive** et un rapport de 1 à 1 000 couvre toute géométrie de facture. Signal de réouverture nommé : une demande citant un rapport plus fin que 1:1 000, ou un gabarit préimprimé imposant une largeur physique — auquel cas c'est **l'unité** qu'il faut rouvrir, pas la borne. |
-| | | **B —** Entier sans borne haute : la preuve tombe, la garantie aperçu/PDF redevient une approximation. | |
-| | | **C —** Une borne plus large, par exemple 10 000 : la preuve tient encore, et le rapport exprimable est de 1 à 10 000. | |
-| **7** ⛔ | Le lot a-t-il besoin d'un **mandat de gouvernance** ? Autrement dit, le test de discriminant `if (entry.type === 'tableRow')` dans `checkTableWiring` ([§3.2]) est-il un second `switch (node.type)` au sens d'`AGENTS.md` §3.B ? | **A —** Non : ce n'est pas un parcours du Composite. Il ne descend dans aucun enfant, il lit l'union à **deux** membres du corps d'**un** nœud, dans le schéma de ce nœud, et Zod a déjà discriminé. **Aucun amendement d'`AGENTS.md`.** | **A**, et c'est le **seul** point de gouvernance que le lot soulève. La garantie qu'un Visitor achèterait est déjà achetée par le rétrécissement lui-même : `entry.rows` ne type-check que tant que `TableBodyNode` a exactement ces deux membres. C3 n'ouvre par ailleurs **aucun troisième parcours d'expression** — `git grep -n "case 'round':" -- packages/core/src \| wc -l` doit toujours rendre **2** — donc le seuil de retrait de l'amendement obtenu par C2 n'est pas franchi. **Mais un plan ne s'auto-délivre pas de dérogation** : si le propriétaire du produit lit B ou C, il faut le savoir **avant INC-1**. |
-| | | **B —** Oui : router le contrôle par `visitNode`, ce qui oblige `ast/schemas.ts` à dépendre de `ast/visitor.ts` et à écrire **huit** branches pour en dispatcher **deux**. | |
-| | | **C —** Oui, et cela exige un amendement d'`AGENTS.md` §3.B sous mandat explicite, dans un commit `chore(governance)` **séparé**, posé avant l'ADR. | |
+| **1** ⛔ | Que veut dire « typé » dans le critère de recette — « un tableau à cinq colonnes typé (désignation, quantité, prix unitaire, remise, montant) » (`core.md:157-159`, [§6.1]) ? | ☑ **A —** « décrit dans un contrat typé » : les cinq colonnes sont un **jeu d'épreuve**, aucune ne porte de type de donnée. C'est la lecture de ce plan. *(retenu)* | ☑ **A.** L'écart entre les deux lectures n'est pas cosmétique : **il change le lot**. Un type de colonne appelle une échelle et un symbole ; une échelle non déclarée est un arrondi implicite ; une table devise → décimales est refusée jusque dans un exemple de docstring ; et le formatage appartient à C6, dont C2 a **explicitement laissé ouverte** la question « qui déclare l'échelle d'affichage d'un montant ». Trancher B ici aurait préempté cette décision par la porte de service, et fait dépendre la mise en page du jeu de données de l'intégrateur — contre la règle de périmètre. **Coût de réouverture ⛔ : ce contrat serait à rejouer, pas à amender.** *Signal nommé :* la décision ouverte de C2 sur l'échelle d'affichage tranchée en faveur d'une table de devises. |
+| | | ☐ **B —** « chaque colonne porte un type » (monétaire, nombre, texte, date), dont le moteur déduit format et alignement. | |
+| **2** | La frontière C3 / C5 sur l'alignement n'est arbitrée par **aucun texte** du dépôt : `core.md:153-154` donne « un alignement par colonne » à C3, `core.md:179` donne « alignements » à C5, et C5 dépend de C3. | ☑ **A —** C3 possède l'alignement **de colonne** ; C5 possède l'alignement de bloc et, s'il le décide, une surcharge par cellule qu'il ajoute lui-même. *(retenu)* | ☑ **A.** B contredit le libellé du lot **et** la chaîne de dépendances : une propriété dont le critère de recette de C3 a besoin ne peut pas vivre dans le lot qui vient après, et sans elle « libellés à gauche, montants à droite » est indémontrable. C écrit un champ optionnel **à la place de C5** ; le retirer plus tard exigerait une migration transformante, l'ajouter plus tard n'est qu'un élargissement. A garde la porte ouverte dans le seul sens qui ne coûte rien. **À consigner comme une DÉCISION dans l'ADR 0005, pas comme une lecture** — c'en est une, et elle porte désormais sa date. |
+| | | ☐ **B —** Tout l'alignement va à C5 ; C3 ne livre que colonnes, largeur et en-tête. | |
+| | | ☐ **C —** C3 déclare l'alignement de colonne **et** la surcharge par cellule, dès maintenant. | |
+| **3** ⛔ | Une cellule contient-elle des **blocs** ou des **segments de texte** ? | ☑ **A —** `readonly BlockNode[]` : image, deux paragraphes, condition, tableau imbriqué possibles ; l'imbrication est bornée par le garde de forme (mesuré : 9 tableaux imbriqués passent, le 10ᵉ est refusé `too-deep`). Coût mesuré : **+2 niveaux JSON**. *(retenu)* | ☑ **A**, sur la **réversibilité** et non sur l'expressivité. B est le seul point de ce contrat où un revirement coûterait une migration **transformante** — envelopper les segments de chaque cellule dans un nœud texte doté d'un id inventé — et la première demande sera un logo, un picto ou un QR code dans une cellule. A rend en prime le libellé d'en-tête un `TextNode` ordinaire, donc **zéro position de contenu nouvelle** pour C6. **Ce que la décision accepte, et par écrit :** E2 hérite de la pagination d'un tableau imbriqué — le seul coût que le lot transfère à un lot non écrit, nommé en conséquence de D5 [§2, D5]. **Coût de réouverture ⛔ :** B ne change pas un type, il réécrit `TableCell` [§3.1], la branche `tableRow` de `childrenOf` [§3.4], **toutes** les mesures de profondeur du lot, l'argument « zéro position de contenu nouvelle pour C6 » de D4, la fixture et le décompte de dix-sept nœuds de [§5.3] — et il exige d'écrire dans l'ADR que la cellule ne contiendra jamais qu'un run de texte. |
+| | | ☐ **B —** `readonly TextSegment[]` : l'imbrication devient impossible par construction, la profondeur du sous-arbre est fixée, et E2 n'héritera jamais d'un tableau dans un tableau. | |
+| **4** | Le `superRefine` sur `TableNodeSchema` — **le premier du dépôt** — est-il accepté ? | ☑ **A —** Le garder : la cellule orpheline, le doublon de cellule et l'id de colonne dupliqué sont refusés au save time, avec un chemin qui désigne la faute, et **zéro code d'erreur nouveau**. *(retenu)* | ☑ **A.** L'appariement par clé ne laisse qu'**un seul** état représentable — la cellule orpheline — et c'est une **perte silencieuse** : du contenu que l'auteur voit dans son JSON et que rien n'affichera. La doctrine de versionnement du dépôt existe précisément contre cette classe de défaut. Ce n'est pas la passe sémantique qu'ADR 0002 D2 a refusée : le contrôle est **local** — un nœud, un niveau, aucune descente dans les cellules — là où le masquage d'alias exigeait toute l'ascendance. Deux réserves à écrire : « zéro code nouveau » repose sur le fait qu'un `z.object().superRefine()` reste un `ZodObject` en zod 4 (mesuré, **à rejouer à chaque montée**, [§9]) ; et B aurait laissé **C8** découvrir la faute des mois plus tard, C8 dépendant de C1 à C7. |
+| | | ☐ **B —** Le retirer : `core` accepte, et la passe de validation de C8 nomme le défaut plus tard. | |
+| **5** | `start / center / end` ou `left / center / right` pour l'alignement de colonne ? | ☑ **A —** `start / center / end` : `core` ne résout rien, il **diffère** la résolution, et là où la direction est gauche-droite `start` **est** `left`. *(retenu)* | ☑ **A**, mais **pas sur l'argument initialement écrit** — voir l'encadré ci-dessous. L'argument qui tient : C3 diffère une résolution qu'il n'a **aucune information** pour trancher, et le revirement serait à la fois **transformant** (réécrire une valeur stockée dans tous les modèles) et **sémantiquement indécidable** (on ne saurait pas si l'auteur voulait « gauche » ou « début »). Différer coûte zéro aujourd'hui ; trancher coûte une migration qu'on ne saurait pas écrire. La lisibilité invoquée par B est un problème d'**étiquette dans l'éditeur**, pas de contrat. **Ce que la décision ne fait pas :** désigner un destinataire de la résolution différée — la question part dans « Ce qui reste ouvert » de l'ADR 0005, sans recommandation. *Signal nommé :* le RTL déclaré hors périmètre à jamais. |
+| | | ☐ **B —** `left / center / right` : plus lisible pour un utilisateur non développeur dans l'éditeur de D6, et sans ambiguïté pour un intégrateur. | |
+| **6** | La borne `MAX_COLUMN_WIDTH = 1000` — un rapport de 1 à 1 000 suffit-il, et faut-il une borne du tout ? | ☑ **A —** Garder `[1, 1000]` : la borne haute **porte la preuve** d'exactitude. *(retenu)* | ☑ **A.** La borne n'est pas un jugement de mise en page, elle est **load-bearing** : sans elle, la preuve qui adosse la décision produit 7 (« identique au PDF, garanti ») à une propriété démontrable disparaît, et la part d'une colonne redevient un accord entre deux implémentations. C reste arithmétiquement correct, mais **aucun besoin ne le motive** et un rapport de 1 à 1 000 couvre toute géométrie de facture. *Signal nommé :* une demande citant un rapport plus fin que 1:1 000, ou un gabarit préimprimé imposant une largeur physique — auquel cas c'est **l'unité** qu'il faut rouvrir, pas la borne. |
+| | | ☐ **B —** Entier sans borne haute : la preuve tombe, la garantie aperçu/PDF redevient une approximation. | |
+| | | ☐ **C —** Une borne plus large, par exemple 10 000 : la preuve tient encore, et le rapport exprimable est de 1 à 10 000. | |
+| **7** ⛔ | Le lot a-t-il besoin d'un **mandat de gouvernance** ? Autrement dit, le test de discriminant `if (entry.type === 'tableRow')` dans `checkTableWiring` ([§3.2]) est-il un second `switch (node.type)` au sens d'`AGENTS.md` §3.B ? | ☑ **A —** Non : ce n'est pas un parcours du Composite. Il ne descend dans aucun enfant, il lit l'union à **deux** membres du corps d'**un** nœud, dans le schéma de ce nœud, et Zod a déjà discriminé. **Aucun amendement d'`AGENTS.md`.** *(retenu)* | ☑ **A**, et c'était le **seul** point de gouvernance que le lot soulève. La garantie qu'un Visitor achèterait était donnée pour achetée par le rétrécissement lui-même : « *`entry.rows` ne type-check que tant que `TableBodyNode` a exactement ces deux membres* » — **motif réfuté par la mesure, option inchangée, voir l'encadré du développement ci-dessous** : elle est achetée par une assertion de type à la porte 3, qui n'est ni un parcours du Composite ni un amendement. C3 n'ouvre par ailleurs **aucun troisième parcours d'expression** — `git grep -n "case 'round':" -- packages/core/src \| wc -l` doit toujours rendre **2** — donc le seuil de retrait de l'amendement obtenu par C2 n'est pas franchi. **Et un plan ne s'auto-délivre pas de dérogation** : c'est bien pour cela que cette lecture a été **relevée** et non présumée, ce qui autorise INC-5 à ne pas toucher `AGENTS.md` ([§6.4], contrôle négatif). |
+| | | ☐ **B —** Oui : router le contrôle par `visitNode`, ce qui oblige `ast/schemas.ts` à dépendre de `ast/visitor.ts` et à écrire **huit** branches pour en dispatcher **deux**. | |
+| | | ☐ **C —** Oui, et cela exige un amendement d'`AGENTS.md` §3.B sous mandat explicite, dans un commit `chore(governance)` **séparé**, posé avant l'ADR. | |
 
 ### Le développement, arbitrage par arbitrage
 
-**n°1 — « typé ». Pourquoi B rejoue le lot au lieu de l'amender.** Sous la lecture B, un
+**n°1 — « typé ». Pourquoi B aurait rejoué le lot au lieu de l'amender.** Sous la lecture B, un
 `TableColumn` porterait un champ `type` (ou `kind`), et le moteur en déduirait un format et un
 alignement. Trois conséquences en cascade, chacune fatale à une décision déjà écrite. (1) `align`
 cesserait d'être déclaré pour devenir **déduit**, ce que D13 refuse nommément — « l'alignement
@@ -4746,9 +5146,10 @@ C2 — *qui déclare l'échelle d'affichage d'un montant : le modèle, l'intégr
 devises ?* — serait tranchée par C3, qui n'a pas mandat pour cela et qui n'a instruit ni C6 ni le
 catalogue C10. Le critère d'appartenance de D1 rend d'ailleurs le verdict tout seul : un type de
 colonne échoue à la condition (3) — il peut changer ce qu'un `sum` produit à l'affichage — et
-frôle la condition (4). C'est pourquoi la recommandation dit « rejouer » : il ne s'agit pas
-d'ajouter un champ optionnel à un contrat par ailleurs valide, il s'agit de reprendre D1, D6, D7,
-D10 et D13 avec un axiome différent. **Le geste préventif est déjà pris** : le playground et la
+frôle la condition (4). C'est pourquoi le motif dit « rejouer », et pourquoi il faut le relire tel
+quel le jour d'une réouverture : il ne s'agirait pas d'ajouter un champ optionnel à un contrat par
+ailleurs valide, il s'agirait de reprendre D1, D6, D7, D10 et D13 avec un axiome différent. **Le
+geste préventif est déjà pris** : le playground et la
 fixture `RECIPE_TABLE` portent, en tête, l'avertissement que les cinq colonnes sont un jeu
 d'épreuve, et la [§6.4] en fait un critère mécanique, dans la forme exacte — avec `-w` — que cette
 section-là établit et mesure.
@@ -4780,9 +5181,10 @@ le garde de forme rend de toute façon superflu : mesuré par bissection, **9** 
 passent et le **10ᵉ** est refusé avec un code typé qui existe déjà, `too-deep`. Le coût de A est
 mesuré et il est petit : **+2 niveaux JSON**, une cellule laissant **48** `round` imbriqués
 lorsqu'elle est dans un `tableRowGroup` et **50** dans une ligne de corps fixe, contre **56** sous
-un texte nu. Si le propriétaire du produit choisit B, il ne suffit pas de changer un type : il faut
-écrire dans l'ADR que la cellule ne contiendra **jamais** qu'un run de texte, sans quoi le refus
-redeviendra une docstring que la première demande fera sauter.
+un texte nu. **Ce que la décision A consent, et il faut le lire comme consenti :** E2 hérite de la
+pagination d'un tableau imbriqué [§2, D5]. Et le jour où B reviendrait sur la table, il ne suffirait
+pas de changer un type : il faudrait écrire dans l'ADR que la cellule ne contiendra **jamais** qu'un
+run de texte, sans quoi le refus redeviendrait une docstring que la première demande ferait sauter.
 
 **n°4 — le premier `superRefine` du dépôt.** L'objection sérieuse à A n'est pas technique, elle est
 doctrinale : l'ADR 0002 D2 a refusé une passe de validation sémantique au save time, et un
@@ -4791,7 +5193,7 @@ n'y est pas. Le masquage d'alias exigeait de connaître **toute l'ascendance** d
 parcours, donc une passe. `checkTableWiring` lit **un** nœud : la liste de ses colonnes et, un
 niveau plus bas, le `columnId` de chaque cellule de ses propres lignes. Il **ne descend pas** dans
 les cellules — un tableau imbriqué valide ses propres lignes contre ses propres colonnes — et le
-coût est borné à un niveau. Deux réserves accompagnent la recommandation, toutes deux inscrites en
+coût est borné à un niveau. Deux réserves accompagnent la décision, toutes deux inscrites en
 [§9]. La première est que la propriété « zéro code d'erreur nouveau » repose sur un comportement de
 zod 4 : un `z.object().superRefine()` reste un `ZodObject`, donc `TableNodeSchema` reste membre
 légal des deux unions discriminées, `lazy` comprises. La seconde est que **le `superRefine` tourne
@@ -4811,7 +5213,7 @@ le fait déjà pour la règle nursery de Biome.
 > le périmètre de C6 (`core.md:186-196`) énumère montants, dates, séparateurs de milliers, position
 > du symbole monétaire et libellés fixes — **pas** la direction. Le dépôt ne l'attribue à personne.
 
-La recommandation **A tient**, mais sur un autre argument, et il est plus faible — il faut le dire
+La décision **A tient**, mais sur un autre argument, et il est plus faible — il faut le dire
 plutôt que de le maquiller. `core` ne diffère pas la résolution *à C6* ; il la diffère **à un lot
 qui n'existe pas et qui n'est pas nommé**. Ce qui reste opposable est ceci : entre deux options
 dont l'une n'engage rien et l'autre engage une valeur stockée, C3 n'a **aucune information** pour
@@ -4819,13 +5221,14 @@ préférer la seconde, et le revirement de B vers A serait **transformant** — 
 `left` dans chaque modèle — **et sémantiquement indécidable**, puisqu'on ne saurait pas si l'auteur
 d'un modèle voulait dire « gauche » ou « début ». Un revirement dont on ne peut pas écrire la
 fonction de migration n'est pas un revirement, c'est une perte. Trois gestes accompagnent donc
-cette recommandation, et ils sont dus quelle que soit la décision : l'ADR 0005 ouvre, dans « Ce qui
+cette décision, et ils étaient dus quelle qu'elle fût : l'ADR 0005 ouvre, dans « Ce qui
 reste ouvert », la question **« qui déclare la direction d'écriture d'un document ? »** avec ses
 options — une déclaration de modèle rattachée à C6, une entrée du `RenderRequest`, ou rien et un
 défaut de moteur — et **sans recommandation**, sur le patron de la question d'échelle d'affichage
 léguée par C2 ; elle y écrit l'interdit qui tient déjà, à savoir qu'**aucun moteur ne dérive cette
-direction de la machine** (E6, outillé par Biome) ; et si le propriétaire du produit exclut le RTL
-du v1 **et** du v2, l'option B devient défendable et l'arbitrage se referme.
+direction de la machine** (E6, outillé par Biome) ; et le jour où une décision produit exclurait le
+RTL du v1 **et** du v2, l'option B redeviendrait défendable et **l'arbitrage se rejouerait** — c'est
+le signal de réouverture du n°5, et le reconnaître fait partie de la décision.
 
 **n°6 — la borne de largeur, et ce qu'elle porte exactement.** Il faut d'abord retirer de la
 discussion une preuve qui a circulé et qui est fausse : ce n'est **pas** `maxNodes = 100 000` qui
@@ -4848,39 +5251,63 @@ et sa portée a été restreinte par C2 à l'AST de document. Le test de discrim
 `checkTableWiring` est-il ce deuxième parcours ? L'argument de A est qu'il ne parcourt rien : il ne
 descend dans aucun enfant, il lit une union à deux membres (`TableRowNode | TableRowGroupNode`)
 dans le schéma du nœud qui la porte, après que Zod a déjà discriminé. Ce que le Visitor protège —
-l'oubli d'un membre le jour où l'union s'élargit — est ici acheté par le **rétrécissement
-lui-même** : `entry.rows` ne type-check que tant que `TableBodyNode` a exactement ces deux membres,
-et la porte 3 le dit. L'argument contraire est de forme : la règle ne parle pas de « parcours du
+l'oubli d'un membre le jour où l'union s'élargit — était donné pour acheté par le **rétrécissement
+lui-même**, `entry.rows` ne type-checkant « que tant que `TableBodyNode` a exactement ces deux
+membres ».
+
+> ⚠️ **Ce motif a été réfuté par la mesure, et l'option A survit sur un autre mécanisme.** **MESURÉ**
+> (`tsc` 7.0.2 du dépôt, drapeaux stricts) : un troisième membre portant
+> `rows: readonly TableRowNode[]` compile à **exit 0** à cette ligne et se fait absorber par le
+> `else` ; seul un membre **sans** `rows` casse (TS2339). Le rétrécissement n'achète donc que la
+> moitié de la garantie. Ce qui l'achète en entier est une **assertion de type** dans
+> `nodes.test.ts`, `TABLE_BODY_MEMBERS_IN_STEP`, mesurée à TS2322 sur les deux formes de troisième
+> membre — trois lignes de test, zéro ligne d'exécution, porte 3 [§3.2].
+>
+> **La décision 7-A tient, et elle tient mieux.** Aucune des deux options coûteuses ne redevient
+> nécessaire : l'assertion n'est ni un parcours du Composite (option B), ni un amendement
+> d'`AGENTS.md` (option C) ; elle ne fait pas dépendre `ast/schemas.ts` d'`ast/visitor.ts` et
+> n'ajoute pas de commit `chore(governance)`. Conformément à la règle que le plan C2 a écrite — *un
+> chiffre réfuté réécrit le motif, une prémisse réfutée rejoue l'option* —, c'est le **motif** qui
+> est réécrit ici. Deux mesures interdisent par ailleurs la variante intuitive, une branche `else`
+> terminée par un `never` et un `throw` **dans** le schéma : `invalid_union` étant abandonnante, la
+> branche est inatteignable donc non couvrable, et un `throw` dans un `superRefine` **s'échappe de
+> `safeParse`** [§3.2].
+
+L'argument contraire est de forme : la règle ne parle pas de « parcours du
 Composite », elle parle d'un `switch (node.type)` qui se duplique, et un test de discriminant en
-est la forme dégénérée. Ce plan **recommande A** et refuse de trancher seul, parce que les deux
-options coûteuses coûtent en des endroits différents. B inverse une dépendance : `ast/schemas.ts`
-importerait `ast/visitor.ts` pour écrire huit branches dont six inatteignables, ce qui est
-exactement la cérémonie que la règle anti-sur-ingénierie nomme — mais c'est un **changement de
-contrat**, pas un ajustement, et il doit être connu avant qu'INC-1 n'écrive les schémas. C ne
-change pas le contrat mais change le **découpage** : un commit `chore(governance)` séparé, posé
-avant l'ADR, et un mandat daté — le précédent existe, C1 l'a fait pour `biome.jsonc` et le plugin
-GritQL, C2 pour `AGENTS.md` §3.B. Sous A, le critère de fin d'INC-5 est mécanique et il est déjà
-écrit : `git log --oneline -- AGENTS.md` montre **zéro** entrée nouvelle pour ce lot.
+est la forme dégénérée. Ce plan **recommandait A** en refusant de trancher seul, et c'est cette
+lecture qui a été relevée le 2026-08-17 — la distinction n'est pas de politesse : les deux options
+coûteuses coûtent en des endroits différents, et c'est ce qui obligeait à rendre la décision avant
+INC-1. B inverse une dépendance : `ast/schemas.ts` importerait `ast/visitor.ts` pour écrire huit
+branches dont six inatteignables, ce qui est exactement la cérémonie que la règle
+anti-sur-ingénierie nomme — mais c'est un **changement de contrat**, pas un ajustement, et il devait
+être connu avant qu'INC-1 n'écrive les schémas. C ne change pas le contrat mais change le
+**découpage** : un commit `chore(governance)` séparé, posé avant l'ADR, et un mandat daté — le
+précédent existe, C1 l'a fait pour `biome.jsonc` et le plugin GritQL, C2 pour `AGENTS.md` §3.B. Sous
+A, retenu, le critère de fin d'INC-5 est mécanique et il est déjà écrit — dans la forme rejouable de
+la [§6.4], celle qui porte sa base : `git diff --exit-code "$(git merge-base origin/main HEAD)" HEAD
+-- AGENTS.md` rend exit **0**. *(Pas `git log --oneline -- AGENTS.md` : mesuré, il rend l'historique
+du fichier — huit lignes sur un dépôt sain — et ne dit rien du delta du lot.)*
 
 ### Les conséquences qu'il faut avoir en tête
 
-**Les sept barrent la route à INC-1 ; trois seulement réécrivent du contrat, et un seul barre la
-route au lot.** Le classement compte plus que le décompte, parce que c'est lui qui dit **combien de
-[§3] il faut rouvrir** selon la réponse :
+**Les sept sont rendus, INC-1 démarre, et ce qui survit à la décision est le coût de RÉOUVERTURE.**
+Le classement compte plus que le décompte, parce que c'est lui qui dit **combien de [§3] il faudrait
+rouvrir** le jour où l'un de ces points reviendrait sur la table :
 
-| Arbitrage | Si l'option non recommandée est retenue |
+| Arbitrage | Coût de réouverture |
 | :--- | :--- |
 | **n°1** ⛔ | Le lot est **rejoué** : D1, D6, D7, D10 et D13 se reprennent avec un axiome différent |
 | **n°3** ⛔ | La **moitié de la [§3]** se réécrit : `TableCell`, `childrenOf`, toutes les mesures de profondeur, la troisième raison de D4, la fixture, le décompte de nœuds |
 | **n°7** ⛔ | Le **découpage** change (option C, un `chore(governance)` de plus) ou un couplage s'inverse entre `ast/schemas.ts` et `ast/visitor.ts` (option B) |
 | **n°2, n°4, n°5, n°6** | Un champ, une borne, une étiquette ou un contrôle en moins — nommé, localisé, sans effet sur le reste du contrat |
 
-Seul le n°1 peut renvoyer le plan à sa table de travail. Le n°3 y renvoie la moitié de la §3, ce qui
-est cher mais borné. Le n°7 déplace du travail, il ne le refait pas. Confondre ces trois degrés
-conduirait soit à retarder INC-0, qui n'attend personne, soit — le vrai risque — à **rendre le n°3
-vite** parce qu'il n'aurait pas l'air d'en valoir la peine.
+Seul le n°1 renverrait le plan à sa table de travail. Le n°3 y renverrait la moitié de la §3, ce qui
+est cher mais borné. Le n°7 déplacerait du travail, il ne le referait pas. Confondre ces trois
+degrés conduirait au vrai risque, qui n'a pas changé de nature en passant de la décision à la
+réouverture : **traiter le n°3 vite** parce qu'il n'a pas l'air d'en valoir la peine.
 
-**Cinq recommandations sur sept sont des recommandations de non-décision, et c'est un motif, pas
+**Cinq décisions sur sept sont des décisions de non-décision, et c'est un motif, pas
 une esquive.** Le n°2 laisse à C5 la surcharge de cellule, le n°3 laisse la cellule ouverte aux
 blocs, le n°5 laisse la direction d'écriture non résolue, le n°6 refuse d'élargir une fenêtre sans
 besoin, le n°7 refuse d'amender une règle de gouvernance. Le fil commun est mécanique et
@@ -4888,22 +5315,23 @@ opposable : dans chacun de ces cinq cas, **l'option qui décide écrit une valeu
 revenir sur une valeur stockée coûte une migration transformante, quand elle est seulement
 possible. Le n°5 est celui où elle ne l'est pas — on ne saurait pas quoi écrire.
 
-**Le n°5 est le seul dont la recommandation a survécu à la réfutation de son motif, et il faut
+**Le n°5 est le seul dont l'option retenue a survécu à la réfutation de son motif, et il faut
 savoir lire cette situation.** Le plan C2 avait déjà nommé la règle et elle vaut ici : si une
 contre-mesure réfute un **chiffre**, c'est le motif qui se réécrit ; si elle réfute une
 **prémisse**, c'est l'option qui se rejoue. Le cas du n°5 est intermédiaire, et c'est pour cela
 qu'il est écrit en entier : la prémisse « C6 possède la direction d'écriture » est fausse, mais
 l'option A ne reposait pas **seulement** sur elle — l'indécidabilité du revirement, elle, est
 intacte. **Ce qui a disparu, c'est le destinataire de la résolution différée**, et c'est ce qui
-justifie d'ouvrir la question dans l'ADR au lieu de la laisser implicite. Un plan qui aurait gardé
-la recommandation en silence aurait laissé le lecteur croire que quelqu'un, quelque part, avait la
+justifie d'ouvrir la question dans l'ADR au lieu de la laisser implicite. Une décision rendue en
+silence sur ce point aurait laissé le lecteur croire que quelqu'un, quelque part, avait la
 charge de résoudre `start`.
 
-**Un arbitrage rendu ne clôt pas un signal de réouverture.** Trois des sept en portent un, et ils
-doivent être recopiés dans l'ADR 0005 : le n°1 se rouvre si la décision ouverte de C2 sur l'échelle
-d'affichage est tranchée en faveur d'une table de devises ; le n°5 se rouvre si le RTL est déclaré
-hors périmètre à jamais ; le n°6 se rouvre sur une demande citant un rapport plus fin que 1:1 000
-ou une largeur physique imposée. Les reconnaître le moment venu fait partie de la décision.
+**Un arbitrage rendu ne clôt pas un signal de réouverture, et c'est la moitié de ce que ce relevé
+transmet.** Trois des sept en portent un, et ils doivent être recopiés dans l'ADR 0005 ([§4], INC-5,
+point 12) : le n°1 se rouvre si la décision ouverte de C2 sur l'échelle d'affichage est tranchée en
+faveur d'une table de devises ; le n°5 se rouvre si le RTL est déclaré hors périmètre à jamais ; le
+n°6 se rouvre sur une demande citant un rapport plus fin que 1:1 000 ou une largeur physique
+imposée. Les reconnaître le moment venu fait partie de la décision.
 
 ---
 
@@ -4931,8 +5359,8 @@ produit une preuve d'exactitude adossée à un défaut de configuration.
    **À rejouer à chaque montée de zod**, comme l'ADR 0004 le fait pour la règle nursery de Biome.
 
 2. **Un `superRefine` n'est sauté que sur une issue ABANDONNANTE.**
-   *Mesuré* (Node v24.11.1, `zod@3.25.76` via `zod/v4`) : `invalid_type` et `invalid_value` le
-   sautent ; `too_small`, `too_big` et `custom` le laissent tourner. `columns.min(1)` rend un
+   *Mesuré* (Node v24.11.1, `zod@3.25.76` via `zod/v4`) : `invalid_type`, `invalid_value` et
+   `invalid_union` le sautent ; `too_small`, `too_big` et `custom` le laissent tourner. `columns.min(1)` rend un
    `too_small`, **donc il n'arrête pas `checkTableWiring`**, qui est appelé avec `table.columns`
    vide. Contrôle croisé, qui tient : une largeur `1.5` — un `invalid_type` — masque bien les fautes
    de câblage jusqu'à sa correction. La formule juste est *un refus de type masque le câblage, un
@@ -5017,22 +5445,26 @@ produit une preuve d'exactitude adossée à un défaut de configuration.
    *Si elle tombe :* ce sont les **quatre** bornes existantes qui se rediscutent une par une, et
    aucune des trois de C3, puisqu'elles ne rétrécissent rien d'antérieur.
 
-7. **Le critère de recette se lit comme l'arbitrage n°1 le recommande.**
+7. **Le critère de recette se lit comme la décision 1-A l'établit.**
    Tout ce que ce plan écrit suppose que « un tableau à cinq colonnes **typé** » veut dire « décrit
    dans un contrat typé », et que `designation`, `quantite`, `prixUnitaire`, `remise`, `montant`
-   sont un **jeu d'épreuve**, jamais des noms inscrits dans le contrat.
+   sont un **jeu d'épreuve**, jamais des noms inscrits dans le contrat. **Ce n'est plus une lecture
+   que le plan se donne : c'est l'arbitrage n°1, tranché le 2026-08-17** ([§8]). L'hypothèse ne
+   disparaît pas pour autant, elle change d'objet — ce qui la ferait tomber n'est plus une relecture
+   du texte de la roadmap, c'est un revirement, et son signal est nommé.
    *Ce qui repose dessus :* le contrat définitif dans son entier, la [§6] tout entière, et cinq des
    treize décisions — D1, D6, D7, D10 et D13.
-   *Si elle tombe :* le lot est **rejoué**, pas amendé ([§8], n°1). C'est la seule hypothèse de
+   *Si elle tombe* — la décision ouverte de C2 sur l'échelle d'affichage tranchée en faveur d'une
+   table de devises : le lot est **rejoué**, pas amendé ([§8], n°1). C'est la seule hypothèse de
    cette liste dont la chute ne se répare pas par une pièce nommée, et c'est pourquoi l'arbitrage
-   est bloquant.
+   était bloquant et porte un ⛔ de réouverture.
 
 8. **C3 n'ouvre aucun troisième parcours d'expression.**
    *Re-mesuré le 2026-08-16 :* `git grep -n "case 'round':" -- packages/core/src | wc -l` rend **2**
    — les deux parcours de l'algèbre, inchangés. C3 n'ajoute aucun kind d'expression, aucun opérateur
    et aucun code d'erreur ([§2, D10]) ; le seul élargissement est `ExpressionErrorSite`, qui est un
    **site** et non un kind, et qui ne se dispatche dans aucun `switch` de l'algèbre.
-   *Ce qui repose dessus :* la recommandation A de l'arbitrage n°7, et le fait que le **seuil de
+   *Ce qui repose dessus :* la décision 7-A [§8], et le fait que le **seuil de
    retrait** de l'amendement d'`AGENTS.md` §3.B obtenu par C2 n'est pas franchi — donc que ce lot
    n'a aucune raison de toucher `AGENTS.md`, ce dont la [§6.4] fait un critère mécanique.
    *Si elle tombe* — un lot ultérieur écrivant un troisième parcours — l'amendement se retire, les
