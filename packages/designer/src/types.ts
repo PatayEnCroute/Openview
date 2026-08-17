@@ -1,6 +1,20 @@
-import type { Template } from '@openview/core';
+import type { BlockNodeType, Template } from '@openview/core';
 
-export type BlockType = 'text' | 'image' | 'container' | 'table' | 'loop' | 'condition';
+/**
+ * Derived, not restated. The hand-written list this replaces already contained `'table'`
+ * while `core` had no such node: it was right by accident, and nothing in the four gates
+ * said so. Derivation makes "what a user may insert" exactly "what a block flow accepts",
+ * and a ninth node type cannot slip past it.
+ *
+ * `BlockNodeType` and not `DocumentNodeType`: after lot C3 the latter holds EIGHT members,
+ * `tableRow` and `tableRowGroup` among them. An `allowedBlocks: ['tableRow']` would be
+ * accepted by the type and refused by the schema, so an editor offering to insert a row into
+ * a block flow would produce a document `parseTemplate` rejects.
+ *
+ * And `BlockNodeType` rather than `BlockNode['type']` recomputed here: the list is named once,
+ * in `core`, and two computations of the same thing are two things free to diverge.
+ */
+export type BlockType = BlockNodeType;
 
 // Every optional below is spelled `?: T | undefined`. tsconfig.base.json enables
 // exactOptionalPropertyTypes, under which a bare `?:` rejects an explicitly
