@@ -175,7 +175,11 @@ describe('parseTemplate', () => {
           {
             type: 'table',
             id: 'lignes',
-            columns: [{ id: 'montant', width: 1, align: 'end' }],
+            // Un identifiant NEUTRE, délibérément : le jeu d'épreuve à cinq colonnes du
+            // critère de recette vit dans `ast/__tests__/fixtures.ts` et dans le playground,
+            // et ce test-ci n'a rien à voir avec lui — il vérifie une estampille. Le critère
+            // mécanique du lot exige d'ailleurs que ces noms ne fuient pas hors de la fixture.
+            columns: [{ id: 'valeur', width: 1, align: 'end' }],
             header: [],
             body: [
               {
@@ -189,13 +193,13 @@ describe('parseTemplate', () => {
                     id: 'detail',
                     cells: [
                       {
-                        columnId: 'montant',
+                        columnId: 'valeur',
                         children: [
                           {
                             type: 'text',
                             id: 'td',
                             content: [
-                              { kind: 'binding', value: { kind: 'path', path: 'ligne.montant' } },
+                              { kind: 'binding', value: { kind: 'path', path: 'ligne.valeur' } },
                             ],
                           },
                         ],
