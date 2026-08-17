@@ -1,19 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import {
+  BlockNodeSchema,
   type DocumentNode,
   DocumentNodeSchema,
+  type TableBodyNode,
+  type TableColumn,
+  type TableColumnSchema,
   TextNodeSchema,
   type TextSegment,
   type TextSegmentSchema,
 } from '../nodes.js';
-
-/** True only when each type accepts the other; `false` otherwise, which fails to assign. */
-type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
-  ? [TRight] extends [TLeft]
-    ? true
-    : false
-  : false;
+import { type MutuallyAssignable, RECIPE_TABLE } from './fixtures.js';
 
 /**
  * The segment schema and the hand-written union, checked in BOTH directions.
@@ -36,7 +34,50 @@ export const SEGMENT_SCHEMA_IN_STEP: MutuallyAssignable<
   TextSegment
 > = true;
 
+/**
+ * The column schema and the hand-written record, checked in BOTH directions.
+ *
+ * The exact twin of {@link SEGMENT_SCHEMA_IN_STEP}, with the same covariance argument, and
+ * NOT tautological the way the same assertion posed on `DocumentNodeSchema` would be:
+ * `TableColumnSchema` carries no `z.ZodType<TableColumn>` annotation, so its inference is
+ * what is being compared rather than an annotation compared with itself.
+ *
+ * Dropping `align` from the schema is caught here and in four other places besides -- a
+ * `TS6133` on the now-unused import of `TABLE_COLUMN_ALIGNMENTS`, two `TS2375` on the
+ * `z.ZodType` annotations, and a `TS2345` on the argument passed to `.superRefine` -- all
+ * four at gate 2. This one is at gate 3, and it is the only one that also catches the
+ * REVERSE drift: a field added to the schema and forgotten in the interface.
+ */
+export const TABLE_COLUMN_SCHEMA_IN_STEP: MutuallyAssignable<
+  z.infer<typeof TableColumnSchema>,
+  TableColumn
+> = true;
+
+/**
+ * The two members `checkTableWiring` discriminates by hand, held to the union.
+ *
+ * The narrowing at that site does NOT hold it: measured, a third member carrying
+ * `rows: readonly TableRowNode[]` compiles there and is absorbed by the `else`. This
+ * annotation collapses to `false` on any third member at all, and `false` does not assign to
+ * `true`. A defensive `else` in the schema would buy the same guarantee at the price of a branch
+ * no input can reach -- `invalid_union` on a body entry is abandoning, so the refinement never
+ * runs -- and of a `throw` that escapes `safeParse`.
+ */
+export const TABLE_BODY_MEMBERS_IN_STEP: MutuallyAssignable<
+  TableBodyNode['type'],
+  'tableRow' | 'tableRowGroup'
+> = true;
+
 describe('DocumentNodeSchema', () => {
+  it('accepts a table through the block union, and a row only through its table', () => {
+    expect(BlockNodeSchema.safeParse(RECIPE_TABLE).success).toBe(true);
+    expect(DocumentNodeSchema.safeParse(RECIPE_TABLE).success).toBe(true);
+    expect(BlockNodeSchema.safeParse({ type: 'tableRow', id: 'r', cells: [] }).success).toBe(false);
+    expect(DocumentNodeSchema.safeParse({ type: 'tableRow', id: 'r', cells: [] }).success).toBe(
+      true,
+    );
+  });
+
   it('parses a tree nested several levels deep', () => {
     const raw = {
       type: 'container',

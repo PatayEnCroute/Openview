@@ -1,5 +1,10 @@
 import { z } from 'zod/v4';
-import { type DocumentNode, DocumentNodeSchema } from '../ast/nodes.js';
+import {
+  type BlockNode,
+  BlockNodeSchema,
+  type DocumentNode,
+  DocumentNodeSchema,
+} from '../ast/nodes.js';
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { type Expression, ExpressionSchema } from '../expression/expression.js';
 import { limitSchema, resolveLimits } from '../expression/limits.js';
@@ -35,9 +40,11 @@ import { limitSchema, resolveLimits } from '../expression/limits.js';
  */
 export interface ShapeLimits {
   /**
-   * JSON levels, **not** document nodes. Measured on a realistic model: 10 levels, and 12
-   * with an `aggregate(filter(...))`. 64 leaves a fivefold margin. The unit has to be
-   * written down -- a reader who thinks these are blocks will pick an absurd value.
+   * JSON levels, **not** document nodes. Measured on a realistic model: 10 levels, 12 with
+   * an `aggregate(filter(...))`, and 18 for the five-column table of lot C3 with its header
+   * and a `round(sum(round(mul)))` footer. 64 leaves a threefold margin, and nine nested
+   * tables are accepted before `too-deep`. The unit has to be written down -- a reader who
+   * thinks these are blocks will pick an absurd value.
    */
   readonly maxDepth: number;
   /**
@@ -262,4 +269,10 @@ export function parseExpression(raw: unknown, limits?: Partial<ShapeLimits>): Ex
 export function parseDocumentNode(raw: unknown, limits?: Partial<ShapeLimits>): DocumentNode {
   assertBoundedShape(raw, limits);
   return DocumentNodeSchema.parse(raw);
+}
+
+/** Parses a standalone BLOCK node WHILE BOUNDING IT. See {@link parseExpression}. */
+export function parseBlockNode(raw: unknown, limits?: Partial<ShapeLimits>): BlockNode {
+  assertBoundedShape(raw, limits);
+  return BlockNodeSchema.parse(raw);
 }
