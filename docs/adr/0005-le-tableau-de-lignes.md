@@ -7,6 +7,12 @@
   tableau imbriqué ; E5 rapportera quelle ligne est tombée sur quelle page),
   `@openview/designer` (D6 éditera colonnes et cellules, D7 la barre de formule d'une cellule),
   `@openview/core` lot C5 (« **Dépend de :** C3 », `core.md:184`)
+- **Complétée par :** [ADR 0006](0006-la-page.md) — le contenu d'une bande de page est un
+  `ContainerNode`, donc la coupure `BlockNode` de cette ADR s'y applique sans une ligne du lot C4 ;
+  la docstring de `TableNode` est **précisée** sur la numérotation (la valeur reste à E2/E3,
+  l'emplacement est un segment de C4) ; et l'ADR 0006 signale que le **critère mécanique de
+  couverture par fichier** de cette ADR devient ambigu dès qu'un second `fixtures.ts` existe — sa
+  sonde cherche « le premier chemin finissant par `fixtures.ts` », et C4 en crée un second.
 - **Complète :** [ADR 0004](0004-les-arrondis-declares-par-le-modele.md) — sa **décision 8**
   transmettait la contrainte « le tableau ne somme rien » au lot qui décrirait un tableau ; cette
   ADR l'honore **par le type**. Et [ADR 0002](0002-data-binding-and-loop-scope.md), dont la

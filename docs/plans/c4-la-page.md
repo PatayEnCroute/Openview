@@ -5,6 +5,18 @@
 > `docs/roadmap/` — ni les *décisions* structurantes, qui se consignent dans `docs/adr/`. Il est
 > **périssable** : une fois le lot livré, il ne fait plus foi, et c'est l'ADR 0006 qui reste.
 >
+> **Statut : ⛔ PÉRIMÉ — le lot C4 est livré (2026-08-18).** Ce document ne fait plus foi :
+> c'est [l'ADR 0006](../adr/0006-la-page.md) qui porte les treize décisions, leurs motifs, leurs
+> alternatives écartées et leurs signaux de réouverture. Il est conservé comme **trace du
+> raisonnement**, et trois de ses énoncés ont été corrigés par l'exécution, tous consignés dans
+> l'ADR : (1) retirer `TextPageFieldSegmentSchema` de l'union fait rougir les portes 3 **et** 4, et
+> non la porte 4 seule — `tsconfig.typecheck.json` couvre les fichiers de test ; (2) la liste des
+> littéraux que le champ requis casse omettait
+> `expression/evaluator/__tests__/limits-scope.test.ts` ; (3) `RECIPE_TEMPLATE` ne peut pas porter
+> `RECIPE_PAGE`, parce que `Template` est inféré d'un schéma dont `z.array` rend des tableaux
+> **mutables** là où `PageSetup` déclare `readonly` — le plan mesurait la variance mais n'en tirait
+> pas cette conséquence-là.
+>
 > **Statut à l'exécution :** ✅ **prêt à exécuter. Les sept arbitrages de la [§8] sont TRANCHÉS** —
 > propriétaire du produit, **2026‑08‑18**. Six sont tranchés sur la recommandation de ce plan ; **un
 > seul en diverge, et c'est le n° 6 : `firstOnly` et `exceptFirst` entrent dans le lot.** Le contrat de

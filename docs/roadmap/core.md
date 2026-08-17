@@ -183,6 +183,27 @@ en haut et en bas de chaque page, et ce qui n'apparaît que sur la dernière.
 
 **Poids :** M — **Dépend de :** rien
 
+> ✅ **Livré.** Les treize décisions du lot — la feuille en **deux longueurs
+> fractionnaires en millimètres** (sans nom de format ni champ `orientation`), les
+> quatre marges et leur invariant croisé, `printableAreaOf` exportée pour que la
+> soustraction s'écrive **une** fois, deux listes de bandes à **cinq** occurrences
+> régies par une table de compatibilité déclarée, le **marqueur** `pageField` qui
+> place un numéro sans jamais le calculer, `collectTemplateDataPaths`, et
+> l'estampille `schemaVersion` **5** avec la **première migration transformante**
+> du dépôt — vivent dans [ADR 0006](../adr/0006-la-page.md), qui fait foi.
+>
+> Le lot livre **plus** que ce critère n'exige, et il faut le dire pour que le
+> prochain lecteur ne croie pas le critère incomplet : la **numérotation** (nommée
+> dans le *pourquoi* ci-dessus mais absente du « prêt quand », arbitrage n° 1) et
+> les **variantes de première page** `firstOnly` / `exceptFirst` (arbitrage n° 6,
+> tranché le 2026-08-18 contre la recommandation du plan, parce que le total
+> reporté de E3 est un montant entrant qui n'existe pas en page 1).
+>
+> Ce qu'il ne livre **pas** : aucun document ne sort sur deux pages après C4 — il
+> n'existe pas de moteur. Le *comment* — découpage en incréments, contrat définitif,
+> plan de test — vit dans [docs/plans/c4-la-page.md](../plans/c4-la-page.md), périmé
+> depuis la livraison comme le dit son propre en-tête.
+
 ### C5. L'apparence
 
 **Pourquoi.** Un document sans police, sans couleur et sans filet ne convaincra
