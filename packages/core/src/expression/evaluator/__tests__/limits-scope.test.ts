@@ -442,6 +442,15 @@ describe('childScope', () => {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       id: 'tpl_1',
       name: 'Invoice',
+      // Requis depuis le lot C4, et ce test n'a rien à dire sur la feuille : une page nue,
+      // écrite parce que le champ est requis — ce qui est exactement ce que « le modèle
+      // impose son format » veut dire.
+      page: {
+        sheet: { width: 210, height: 297 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        header: [],
+        footer: [],
+      },
       root: {
         type: 'container',
         id: 'root',

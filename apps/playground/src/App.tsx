@@ -179,6 +179,64 @@ const sampleTemplate = parseTemplate({
   id: 'tpl_demo_1',
   name: 'Facture Exemple',
   version: '1.0.0',
+  // La feuille, ses marges et ses bandes — lot C4. Les dimensions ci-dessous sont celles
+  // d'une A4 PARCE QUE L'AUTEUR DU MODÈLE L'A ÉCRIT : Openview n'impose aucun format, n'en
+  // réserve aucun nom et n'en déduit aucun d'une locale. `STANDARD_SHEETS_MM` est une
+  // commodité d'écriture, et le document, lui, n'enregistre que deux nombres.
+  page: {
+    sheet: { width: 210, height: 297 },
+    margins: { top: 18, right: 15, bottom: 18, left: 15 },
+    header: [
+      {
+        on: 'every',
+        content: {
+          type: 'container',
+          id: 'bandeau',
+          children: [
+            {
+              type: 'text',
+              id: 'bandeau-titre',
+              content: [
+                { kind: 'literal', text: 'Commande ' },
+                { kind: 'binding', value: { kind: 'path', path: 'commande.numero' } },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+    // Un pied COURANT et un pied de DERNIÈRE page. `every` + `lastOnly` serait refusé par le
+    // schéma — les deux tomberaient sur la dernière feuille —, donc le pied courant est
+    // `exceptLast`. C'est la seule écriture licite de cette intention, et c'est la raison
+    // d'exister de la troisième occurrence.
+    footer: [
+      {
+        on: 'exceptLast',
+        content: {
+          type: 'container',
+          id: 'pied',
+          children: [
+            { type: 'text', id: 'pied-num', content: [{ kind: 'literal', text: 'Page ' }] },
+          ],
+        },
+      },
+      {
+        on: 'lastOnly',
+        content: {
+          type: 'container',
+          id: 'pied-dernier',
+          children: [
+            { type: 'text', id: 'pied-dernier-num', content: [{ kind: 'literal', text: 'Page ' }] },
+            {
+              type: 'text',
+              id: 'pied-mentions',
+              content: [{ kind: 'literal', text: 'Escompte pour paiement anticipé : néant.' }],
+            },
+          ],
+        },
+      },
+    ],
+  },
   root: {
     type: 'container',
     id: 'root',
@@ -742,6 +800,14 @@ function modeleArrondi(
       id: `tpl_arrondi_${cle}`,
       name: `Arrondi ${cle}`,
       version: '1.0.0',
+      // Une page nue : ces trois modèles démontrent l'arrondi, pas la feuille. Le champ est
+      // requis, donc leur auteur l'écrit — et c'est exactement ce que « impose » veut dire.
+      page: {
+        sheet: { width: 210, height: 297 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        header: [],
+        footer: [],
+      },
       root: {
         type: 'container',
         id: 'root',

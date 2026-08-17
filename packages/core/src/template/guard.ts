@@ -8,6 +8,7 @@ import {
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { type Expression, ExpressionSchema } from '../expression/expression.js';
 import { limitSchema, resolveLimits } from '../expression/limits.js';
+import { type PageSetup, PageSetupSchema } from '../page/page.js';
 
 /**
  * The shape guard, and the bounded doors that were missing beside it (ADR 0003,
@@ -293,4 +294,28 @@ export function parseDocumentNode(raw: unknown, limits?: Partial<ShapeLimits>): 
 export function parseBlockNode(raw: unknown, limits?: Partial<ShapeLimits>): BlockNode {
   assertBoundedShape(raw, limits);
   return BlockNodeSchema.parse(raw);
+}
+
+/**
+ * Parses a standalone page setup WHILE BOUNDING IT. See {@link parseExpression}.
+ *
+ * `PageSetupSchema.parse` bounds nothing, and a band carries a `ContainerNode`: measured,
+ * 2 000 nested containers inside one band raise a bare `RangeError: Maximum call stack size
+ * exceeded` -- the unwrapped error the bounded doors of ADR 0003 decision 8 exist to remove,
+ * reopened for the one shape this lot adds. Three lines close it, exactly as `parseBlockNode`
+ * did for lot C3.
+ *
+ * THIS IS NOT A PERSISTENCE BOUNDARY, and neither are its three siblings. It VALIDATES a
+ * fragment -- for an editor's partial check, for an integrator's pre-storage check -- and its
+ * output is not what you store. `z.object` strips keys it does not know (measured: a `bleed`
+ * key is gone after the parse), so round-tripping a fragment through this door and saving the
+ * result would silently drop any field a later schema version adds. The only shape whose
+ * round trip is guaranteed is the VERSIONED `Template`, because only it carries the
+ * `schemaVersion` that turns a future field into a legible refusal instead of a deletion.
+ * Same caveat, unchanged, for `parseExpression`, `parseDocumentNode` and `parseBlockNode`:
+ * store templates, validate fragments.
+ */
+export function parsePageSetup(raw: unknown, limits?: Partial<ShapeLimits>): PageSetup {
+  assertBoundedShape(raw, limits);
+  return PageSetupSchema.parse(raw);
 }

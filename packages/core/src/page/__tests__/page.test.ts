@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { parseTemplate } from '../../template/migrate.js';
+import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import {
   MAX_SHEET_MM,
   MIN_SHEET_MM,
@@ -107,6 +109,48 @@ describe('the recipe page', () => {
     const parsed = PageSetupSchema.parse({ ...RECIPE_PAGE, bleed: 3 });
 
     expect(Object.keys(parsed)).toStrictEqual(['sheet', 'margins', 'header', 'footer']);
+  });
+
+  it('is a valid DOCUMENT, not only a valid fragment', () => {
+    // The `it` that ties the seven above to a real document, and the exact form of
+    // `table.test.ts`: parse, then compare the JSON round trip. A template is what gets
+    // STORED, so this is where a field the schema silently drops would show.
+    const document = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'facture-c4',
+      name: 'Facture — la page',
+      version: '1.0.0',
+      page: RECIPE_PAGE,
+      root: {
+        type: 'container',
+        id: 'racine',
+        children: [{ type: 'text', id: 'corps', content: [{ kind: 'literal', text: 'Corps' }] }],
+      },
+    };
+
+    const parsed = parseTemplate(document);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(document);
+  });
+
+  it('refuses a document with no page at all, on the path `page`', () => {
+    // The proposition the recipe criterion words as "a template IMPOSES its format". An
+    // optional field imposes nothing, and a `z.default()` would be worse than optional -- it
+    // would write a sheet Openview chose into a document its author never saw, at every parse.
+    // This `it` is what forbids anyone from "easing the migration" by relaxing the field.
+    const { page: _dropped, ...noPage } = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'facture-c4',
+      name: 'Facture — la page',
+      version: '1.0.0',
+      page: RECIPE_PAGE,
+      root: { type: 'container', id: 'racine', children: [] },
+    };
+
+    expect(() => parseTemplate(noPage)).toThrow(
+      /Invalid input: expected object, received undefined/,
+    );
   });
 });
 

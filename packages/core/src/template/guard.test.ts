@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { ExpressionSchema } from '../expression/expression.js';
+import { RECIPE_PAGE } from '../page/__tests__/fixtures.js';
+import { PageSetupSchema } from '../page/page.js';
 import {
   assertBoundedShape,
   DEFAULT_SHAPE_LIMITS,
   parseBlockNode,
   parseDocumentNode,
   parseExpression,
+  parsePageSetup,
   resolveShapeLimits,
 } from './guard.js';
 
@@ -275,5 +278,59 @@ describe('the bounded entry points', () => {
 
     expect(parseDocumentNode(bareRow)).toStrictEqual(bareRow);
     expect(() => parseBlockNode(bareRow)).toThrow();
+  });
+
+  it('parses a standalone page, and refuses a malformed one', () => {
+    expect(parsePageSetup(RECIPE_PAGE)).toStrictEqual(RECIPE_PAGE);
+    expect(() => parsePageSetup({ ...RECIPE_PAGE, sheet: { width: 0, height: 297 } })).toThrow();
+  });
+
+  it('bounds a band the bare page schema does not, on the SAME input', () => {
+    // The fourth bounded door exists for exactly this: `PageBand.content` is a `ContainerNode`,
+    // so a band is a recursion site, and `PageSetupSchema.parse` bounds nothing. The two calls
+    // get the same payload -- the whole point -- and only one of the two errors is something
+    // lot C8 can narrate. `RangeError: Maximum call stack size exceeded` is not a message a
+    // template author corrects.
+    //
+    // The depth at which Zod's own recursion gives out is stack- and JIT-dependent, so the
+    // second leg asserts `toThrow()` rather than `toThrow(RangeError)` -- lot C3 had to make
+    // the same retraction in `table.test.ts` for the same reason. The BOUND, by contrast,
+    // depends on no engine: `maxDepth` is 64 and the refusal is typed.
+    const nestedContainers = (depth: number): unknown => {
+      let node: unknown = { type: 'text', id: 'leaf', content: [] };
+      for (let level = 0; level < depth; level += 1) {
+        node = { type: 'container', id: `c${level}`, children: [node] };
+      }
+      return node;
+    };
+    const deepBand = {
+      sheet: { width: 210, height: 297 },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      header: [],
+      footer: [{ on: 'every', content: nestedContainers(5_000) }],
+    };
+
+    const bounded = shapeErrorOf(() => {
+      parsePageSetup(deepBand);
+    });
+
+    expect(bounded.code).toBe('too-deep');
+    expect(bounded.limit).toBe(DEFAULT_SHAPE_LIMITS.maxDepth);
+    expect(() => PageSetupSchema.parse(deepBand)).toThrow();
+  });
+
+  it('strips an unknown key, so none of the four doors is a persistence boundary', () => {
+    // The same behaviour that gives the tests their net -- `z.object` drops what it does not
+    // know -- erases a FUTURE field for an integrator who parses a fragment and stores the
+    // result. True of `parseExpression`, `parseDocumentNode` and `parseBlockNode` since lots
+    // C1 and C3; this lot adds the fourth instance, not the first. Only the VERSIONED
+    // `Template` round-trips safely, because only it carries the stamp that turns a future
+    // field into a legible refusal instead of a deletion.
+    expect(Object.keys(parsePageSetup({ ...RECIPE_PAGE, bleed: 3 }))).toStrictEqual([
+      'sheet',
+      'margins',
+      'header',
+      'footer',
+    ]);
   });
 });

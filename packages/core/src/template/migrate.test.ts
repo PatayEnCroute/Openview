@@ -9,11 +9,28 @@ import {
 } from './migrate.js';
 import { CURRENT_SCHEMA_VERSION } from './template.js';
 
+/**
+ * La page que ces littéraux portent, et pourquoi ils la portent tous.
+ *
+ * `parseTemplate` migre PUIS valide contre le schéma COURANT. Depuis que `page` est requis,
+ * tout littéral qui traverse cette porte doit en avoir une, quelle que soit son estampille :
+ * il n'existe aucun sous-ensemble épargné. Elle est délibérément différente de la page de
+ * compatibilité que la migration 4 -> 5 écrit — des marges de 12 mm, pas de 20 — pour que le
+ * test qui vérifie qu'un document v4 GARDE sa page ne puisse pas passer par coïncidence.
+ */
+const authoredPage = {
+  sheet: { width: 210, height: 297 },
+  margins: { top: 12, right: 12, bottom: 12, left: 12 },
+  header: [],
+  footer: [],
+};
+
 const validTemplate = {
   schemaVersion: CURRENT_SCHEMA_VERSION,
   id: 'tpl_123',
   name: 'Invoice',
   version: '1.0.0',
+  page: authoredPage,
   root: { type: 'container', id: 'root', children: [] },
 };
 
@@ -103,6 +120,7 @@ describe('parseTemplate', () => {
       id: 'tpl_legacy',
       name: 'Invoice',
       version: '1.0.0',
+      page: authoredPage,
       root: {
         type: 'container',
         id: 'root',

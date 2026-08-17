@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { ContainerNodeSchema } from '../ast/nodes.js';
+import { PageSetupSchema } from '../page/page.js';
 
 /**
  * Format version of the template document, distinct from {@link Template.version}
@@ -99,6 +100,29 @@ export const TemplateSchema = z.object({
   name: z.string().min(1, 'A template name is required'),
   /** Author-facing revision, free-form. Never drives migrations. */
   version: z.string().default('1.0.0'),
+  /**
+   * The sheet, its margins and its repeated bands.
+   *
+   * REQUIRED, with no schema default, for two reasons and NOT for a third that looks like
+   * one. The recipe criterion says a template IMPOSES its format, and an optional field
+   * imposes nothing -- it permits. And an absent page forces the engine to invent a sheet,
+   * which moves a layout decision into a render file, with nothing checking that the viewer
+   * invents the same one.
+   *
+   * NOT because required-ness prevents silent loss: it does not. An older build strips a key
+   * it does not know whether the newer schema calls it required or optional -- only the schema
+   * version protects against that, see {@link CURRENT_SCHEMA_VERSION}.
+   *
+   * A `z.default()` would be worse than optional, and that IS measured: a document with no
+   * page parses and comes out carrying a sheet Openview chose, at every parse, silently.
+   *
+   * The compatibility sheet exists all the same -- but it is written ONCE, by the 4 -> 5
+   * migration, where it is visible and dated.
+   *
+   * Written before `root` because the geometry precedes the content in a document's reading
+   * order, and because a field appended at the end blends into the optional timestamps.
+   */
+  page: PageSetupSchema,
   root: ContainerNodeSchema,
   createdAt: z.iso.datetime().optional(),
   updatedAt: z.iso.datetime().optional(),
