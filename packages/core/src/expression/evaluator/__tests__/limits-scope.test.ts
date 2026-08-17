@@ -181,6 +181,33 @@ describe('expression error payload', () => {
     ).toStrictEqual({ code: 'not-a-list', site: 'loop', at: [], actualType: 'number' });
   });
 
+  it('names a TABLE BODY, and not "an expression", when its list source is not a list', () => {
+    // Le détail ci-dessus n'épingle pas le MESSAGE, et c'est le message que le libellé change.
+    // `LIST_CALLER_SUBJECTS` est un `Partial` : ajouter le site sans le libellé ne casse rien,
+    // ni à la compilation ni au lint, et la chaîne retombe silencieusement sur « An
+    // expression » -- dit à un auteur qui n'a écrit aucune expression, mais un tableau.
+    // L'assertion porte donc sur la chaîne ENTIÈRE, faute de quoi elle resterait verte le jour
+    // où le libellé disparaît.
+    expect(() =>
+      evaluateSequence(path('invoice.total'), scope, { caller: 'tableRowGroup' }),
+    ).toThrow('A table body needs a list to iterate over, got a number.');
+
+    // Le contrôle croisé est gratuit et vaut d'être écrit à côté : deux sites, deux sujets.
+    expect(() => evaluateSequence(path('invoice.total'), scope, { caller: 'loop' })).toThrow(
+      'A loop needs a list to iterate over, got a number.',
+    );
+  });
+
+  it('adds no error code: C3 widens a SITE, never a catalogue', () => {
+    // Le meilleur résultat qu'un lot puisse offrir à C8. Rien n'interdit mécaniquement
+    // d'ajouter une entrée à l'un des trois catalogues ; c'est le test de complétude
+    // ci-dessus qui rougirait, et seulement pour un code effectivement produit.
+    const operand: readonly string[] = OPERAND_ERROR_CODES;
+    const limit: readonly string[] = LIMIT_ERROR_CODES;
+
+    expect(EXPRESSION_ERROR_CODES).toHaveLength(operand.length + limit.length);
+  });
+
   it('points at the operand index of a logical, as a number and not a string', () => {
     expect(
       expectEvaluationError(() =>

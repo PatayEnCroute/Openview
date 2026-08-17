@@ -197,6 +197,7 @@ export function evaluatePredicate(
  */
 const LIST_CALLER_SUBJECTS: Readonly<Partial<Record<ExpressionErrorSite, string>>> = {
   loop: 'A loop',
+  tableRowGroup: 'A table body',
   aggregate: 'An aggregation',
   count: 'A count',
   filter: 'A filter',
