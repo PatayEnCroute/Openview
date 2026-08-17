@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Expression } from '../expression/expression.js';
-import type { DocumentNode, TextSegment } from './nodes.js';
+import type { Expression } from '../../expression/expression.js';
+import type { DocumentNode, TextSegment } from '../nodes.js';
 import {
   childrenOf,
   collectDataPaths,
@@ -9,7 +9,7 @@ import {
   visitNode,
   visitSegment,
   walk,
-} from './visitor.js';
+} from '../visitor.js';
 
 const discountApplies: Expression = {
   kind: 'compare',

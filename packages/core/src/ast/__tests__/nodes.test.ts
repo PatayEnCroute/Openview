@@ -6,7 +6,7 @@ import {
   TextNodeSchema,
   type TextSegment,
   type TextSegmentSchema,
-} from './nodes.js';
+} from '../nodes.js';
 
 /** True only when each type accepts the other; `false` otherwise, which fails to assign. */
 type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
