@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import {
   BlockNodeSchema,
+  type ConditionNode,
+  type ConditionNodeSchema,
+  type ContainerNode,
+  type ContainerNodeSchema,
   type DocumentNode,
   DocumentNodeSchema,
+  type ImageNode,
+  type ImageNodeSchema,
+  type LoopNode,
+  type LoopNodeSchema,
   type TableBodyNode,
   type TableBodyNodeSchema,
   type TableCell,
@@ -16,7 +24,14 @@ import {
   type TableRowGroupNodeSchema,
   type TableRowNode,
   type TableRowNodeSchema,
+  type TextBindingSegment,
+  type TextBindingSegmentSchema,
+  type TextLiteralSegment,
+  type TextLiteralSegmentSchema,
+  type TextNode,
   TextNodeSchema,
+  type TextPageFieldSegment,
+  type TextPageFieldSegmentSchema,
   type TextSegment,
   type TextSegmentSchema,
 } from '../nodes.js';
@@ -136,6 +151,73 @@ export const TABLE_NODE_KEYS_IN_STEP: MutuallyAssignable<
 export const TABLE_COLUMN_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof TableColumnSchema>,
   keyof TableColumn
+> = true;
+
+/**
+ * ## The eight pairs lot C5 owed this file BEFORE it wrote one style field
+ *
+ * The five pairs above and the four in `page/__tests__/page.test.ts` cover exactly the six
+ * sites a style could attach to that the type gate WAS watching. MEASURED, one mutation per
+ * site on a copy of `core/src`, an OPTIONAL field added to the schema alone: of the fifteen
+ * sites in this package, NINE compiled at exit 0 with no assertion refusing -- the three
+ * segment kinds, `TextNode`, `ImageNode`, `ContainerNode`, `LoopNode`, `ConditionNode`, and
+ * `Template`. Which is to say: the eight sites lot C5 attaches a style to were precisely the
+ * eight nobody watched.
+ *
+ * And nothing else catches it. MEASURED on the same copy with four schemas deliberately
+ * diverging from their types: every test PASSES. A field absent from the schema is not an
+ * uncovered branch, it is a branch that does not exist, so the 90 % threshold sees nothing
+ * either.
+ *
+ * The reason the objects themselves are not compared is the one the block above already
+ * gives: under `exactOptionalPropertyTypes` an optional field added to ONE side leaves the
+ * two types mutually assignable, and an optional field is precisely the shape a
+ * backward-compatible new field takes. `keyof` compares KEY SETS, so it catches both
+ * directions.
+ *
+ * The last two are CONTRE-ÉPREUVES OF THE CUT, not preparation for a field: `loop` and
+ * `condition` carry NO style, deliberately -- they produce N sequences or nothing, so a box
+ * on them has no subject. Their pairs redden the day someone adds a field to one side only,
+ * which is how a cut stays a cut rather than becoming a habit.
+ */
+export const TEXT_LITERAL_SEGMENT_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TextLiteralSegmentSchema>,
+  keyof TextLiteralSegment
+> = true;
+
+export const TEXT_BINDING_SEGMENT_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TextBindingSegmentSchema>,
+  keyof TextBindingSegment
+> = true;
+
+export const TEXT_PAGE_FIELD_SEGMENT_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TextPageFieldSegmentSchema>,
+  keyof TextPageFieldSegment
+> = true;
+
+export const TEXT_NODE_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof TextNodeSchema>,
+  keyof TextNode
+> = true;
+
+export const IMAGE_NODE_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof ImageNodeSchema>,
+  keyof ImageNode
+> = true;
+
+export const CONTAINER_NODE_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof ContainerNodeSchema>,
+  keyof ContainerNode
+> = true;
+
+export const LOOP_NODE_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof LoopNodeSchema>,
+  keyof LoopNode
+> = true;
+
+export const CONDITION_NODE_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof ConditionNodeSchema>,
+  keyof ConditionNode
 > = true;
 
 describe('DocumentNodeSchema', () => {
