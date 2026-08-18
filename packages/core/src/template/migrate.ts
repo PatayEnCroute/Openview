@@ -9,19 +9,33 @@ import { CURRENT_SCHEMA_VERSION, type Template, TemplateSchema } from './templat
  * round, no band. Not a default -- see the migration's own docstring for why the distinction
  * is measurable rather than rhetorical.
  *
- * ANNOTATED, and the annotation is the only thing that checks it. `TemplateMigration.migrate`
- * is typed `(input: Record<string, unknown>) => Record<string, unknown>`, so whatever is
- * written into `page` arrives as `unknown` and the registry verifies nothing. Measured: with
- * the annotation, a constant missing its `footer` is `TS2741` at gate 2; without it, the same
- * constant passes every gate in silence and the migration produces a page the parse refuses
- * AFTERWARDS -- with a message accusing the document while the fault is in the migration.
+ * A FUNCTION, not a constant, and the difference is a defect that was measured rather than
+ * imagined. As a module-level object it was written into every migrated document BY
+ * REFERENCE: `migrateToCurrent(a).page === migrateToCurrent(b).page` was `true`, down to
+ * `sheet` and the two band arrays. That door is public and hands back a
+ * `Record<string, unknown>`, so `readonly` is erased at the boundary and nothing stops a
+ * caller from normalising the record it was just told to handle -- after which
+ * `a.page.sheet.width = 999` made a LATER, unrelated `parseTemplate` return `width: 999`,
+ * and an impossible margin made it refuse a document whose author had written no page at
+ * all. That is precisely the failure this file's docstrings exist to prevent: a message
+ * accusing the document while the fault is upstream. `parseTemplate` was safe only by
+ * accident, because zod clones on output.
+ *
+ * The RETURN TYPE is annotated, and the annotation is the only thing that checks it.
+ * `TemplateMigration.migrate` is typed `(input: Record<string, unknown>) =>
+ * Record<string, unknown>`, so whatever is written into `page` arrives as `unknown` and the
+ * registry verifies nothing. Measured: with the annotation, a page missing its `footer` is
+ * `TS2741` at gate 2; without it, the same incomplete page passes every gate in silence and
+ * the migration produces something the parse refuses AFTERWARDS.
  */
-const COMPATIBILITY_PAGE: PageSetup = {
-  sheet: { width: 210, height: 297 },
-  margins: { top: 20, right: 20, bottom: 20, left: 20 },
-  header: [],
-  footer: [],
-};
+function compatibilityPage(): PageSetup {
+  return {
+    sheet: { width: 210, height: 297 },
+    margins: { top: 20, right: 20, bottom: 20, left: 20 },
+    header: [],
+    footer: [],
+  };
+}
 
 /**
  * One step of the upgrade chain. Steps are applied in sequence until the document
@@ -167,14 +181,24 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      *   fills it in. What WILL be copied is the page of the delivered template of designer
      *   lot D9, and that choice belongs to that lot.
      *
-     * The `'page' in input` test is not defensive noise, and it is not replaceable by a
-     * spread order. A hand-made document stamped 4 may already carry a page -- the stamp
-     * only ever guards upward, see the 1 -> 2 entry -- and MEASURED, the two spellings do
-     * opposite things: `{ ...input, page: DEFAULT }` OVERWRITES the author's page, while
+     * The explicit test is not defensive noise, and it is not replaceable by a spread
+     * order. A hand-made document stamped 4 may already carry a page -- the stamp only ever
+     * guards upward, see the 1 -> 2 entry -- and MEASURED, the two spellings do opposite
+     * things: `{ ...input, page: DEFAULT }` OVERWRITES the author's page, while
      * `{ page: DEFAULT, ...input }` preserves it. The second one happens to be right, which
      * is worse than being wrong: it is correct BY KEY ORDER, so the next reader who reorders
      * the object for tidiness silently destroys layouts. The explicit test says what it
      * means, and a test pins it.
+     *
+     * It tests the VALUE and not the KEY, and that correction matters. Written
+     * `'page' in input`, a record carrying `page: null` -- a nullable column serialised
+     * straight out -- or `page: undefined` -- `{ ...template, page: undefined }` from an
+     * editor clearing the field, or a deserialiser that materialises optional keys -- took
+     * the "the author already has a page" branch and passed the empty value straight
+     * through. MEASURED, the parse then answered a bare `ZodError`, "Invalid input: expected
+     * object, received null" on path `page`: the untyped refusal these entry points exist to
+     * remove, on exactly the documents this migration exists to rescue. A key with no usable
+     * value is a document with no page, so it gets the compatibility one.
      *
      * Measured: a v4 document of 7 JSON levels and 16 values comes out at 7 levels and 27
      * values. The page adds eleven values and NO level, because `page.margins` is exactly as
@@ -185,7 +209,7 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      */
     migrate: (input) => ({
       ...input,
-      page: 'page' in input ? input.page : COMPATIBILITY_PAGE,
+      page: input.page ?? compatibilityPage(),
       schemaVersion: 5,
     }),
   },

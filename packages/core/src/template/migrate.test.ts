@@ -191,8 +191,8 @@ describe('parseTemplate', () => {
     // upward, so a hand-made document -- or one written by an unstamped mid-lot build -- can
     // be stamped 4 and already carry a page.
     //
-    // This is what the explicit `'page' in input` test buys. Measured, the two spreads do
-    // OPPOSITE things: `{ ...input, page: DEFAULT }` overwrites the author's page, while
+    // This is what the explicit test buys. Measured, the two spreads do OPPOSITE things:
+    // `{ ...input, page: DEFAULT }` overwrites the author's page, while
     // `{ page: DEFAULT, ...input }` preserves it. The second is right BY KEY ORDER, which is
     // worse than being wrong -- the next reader who tidies the object destroys layouts. This
     // `it` is what makes that non-negotiable.
@@ -203,6 +203,55 @@ describe('parseTemplate', () => {
     expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(parsed.page).toStrictEqual(authoredPage);
     expect(parsed.page.margins.top).toBe(12);
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ])('treats a `page` key holding %s as no page at all', (_label, empty) => {
+    // The branch tests the VALUE, not the KEY. Written `'page' in input`, both of these took
+    // the "the author already has a page" path and handed the empty value to the schema --
+    // MEASURED, a bare `ZodError`, "expected object, received null" on path `page`: the
+    // untyped refusal these entry points exist to remove, on exactly the documents this
+    // migration exists to rescue. Both spellings are reachable: a nullable column serialised
+    // straight out, and `{ ...template, page: undefined }` from an editor clearing the field.
+    const emptied = { ...validTemplate, schemaVersion: 4, page: empty };
+
+    const parsed = parseTemplate(emptied);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.page.margins.top).toBe(20);
+  });
+
+  it('gives every migrated document its OWN page, never one shared object', () => {
+    // The compatibility page was a module-level constant written in by REFERENCE, so
+    // `migrateToCurrent(a).page === migrateToCurrent(b).page` was true down to `sheet` and
+    // both band arrays. `migrateToCurrent` is public and returns a `Record<string, unknown>`,
+    // so `readonly` is erased at that boundary and nothing stopped a caller from normalising
+    // the record it was handed -- after which a LATER, unrelated `parseTemplate` returned the
+    // mutated sheet, and an impossible margin made it refuse a document whose author had
+    // written no page at all.
+    //
+    // `toStrictEqual` cannot see this, which is why the assertions below are on IDENTITY.
+    const { page: _none, ...pageless } = { ...validTemplate, schemaVersion: 4 };
+    const first = migrateToCurrent({ ...pageless });
+    const second = migrateToCurrent({ ...pageless });
+
+    expect(first.page).not.toBe(second.page);
+    expect(first.page).toStrictEqual(second.page);
+
+    // And the mutation that used to travel now goes nowhere.
+    const mutated = first.page as { sheet: { width: number }; header: unknown[] };
+    mutated.sheet.width = 999;
+    mutated.header.push({ on: 'every', content: { type: 'container', id: 'x', children: [] } });
+
+    expect(migrateToCurrent({ ...pageless }).page).toStrictEqual({
+      sheet: { width: 210, height: 297 },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      header: [],
+      footer: [],
+    });
+    expect(parseTemplate({ ...pageless }).page.sheet.width).toBe(210);
   });
 
   it('keeps the migrated shape BOUNDED, which is why the guard runs twice', () => {
