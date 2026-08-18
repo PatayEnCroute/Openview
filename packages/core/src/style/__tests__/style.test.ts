@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
-import { TableColumnSchema, TextNodeSchema } from '../../ast/nodes.js';
+import {
+  TABLE_COLUMN_ALIGNMENTS,
+  TableColumnSchema,
+  TEXT_ALIGNMENTS,
+  TextNodeSchema,
+} from '../../ast/nodes.js';
 import * as core from '../../index.js';
 import { MAX_SHEET_MM } from '../../page/page.js';
 import { parseTemplate } from '../../template/migrate.js';
@@ -592,6 +597,18 @@ describe('the two resolutions', () => {
       italic: undefined,
       color: '#3A3A3A',
     });
+  });
+
+  it('takes the fourth member from a text block and never from a column', () => {
+    // The two appearances differ on exactly one alignment key, and that key is what exercises the
+    // member a COLUMN cannot declare. Appearance A aligns its mentions on `start`, which is legal
+    // on both tuples; B justifies them, which is legal on one. Reading it from both fixtures is
+    // what makes the pair a contract fact rather than two literals that happen to differ.
+    expect(resolveTextAlign({ text: styleOfCase('a').legalAlign })).toBe('start');
+    expect(resolveTextAlign({ text: styleOfCase('b').legalAlign })).toBe('justify');
+    // And the boundary, from the other side: the value B declares is NOT declarable on a column.
+    expect(TABLE_COLUMN_ALIGNMENTS).not.toContain(styleOfCase('b').legalAlign);
+    expect(TEXT_ALIGNMENTS).toContain(styleOfCase('b').legalAlign);
   });
 
   it('gives the BLOCK the last word on an alignment, over its column', () => {
