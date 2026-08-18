@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
 import { TableColumnSchema, TextNodeSchema } from '../../ast/nodes.js';
+import * as core from '../../index.js';
 import { MAX_SHEET_MM } from '../../page/page.js';
 import { parseTemplate } from '../../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
@@ -94,6 +95,40 @@ export const BOX_SPACING_IN_STEP: MutuallyAssignable<
   z.infer<typeof BoxSpacingSchema>,
   BoxSpacing
 > = true;
+
+describe('the public surface of the package', () => {
+  it('exports exactly the thirteen values lot C5 adds, and no fourteenth', () => {
+    // The NEGATIVE CONTROL of the export count, and it is the only guard there is: nothing else
+    // compares the public surface to the intention, so a symbol forgotten in `index.ts` compiles
+    // and ships missing. MEASURED on the emitted `dist` of the build that precedes this lot: 104
+    // exported VALUES. This lot adds thirteen, so 117.
+    //
+    // VALUES only, and that limit is stated rather than hidden: a TYPE does not appear in the
+    // keys of a JavaScript module, so the nine types this lot adds cannot be counted this way and
+    // their count stays reasoned.
+    const values = Object.keys(core);
+    const added = [
+      'BorderEdgeSchema',
+      'BoxBorderSchema',
+      'BoxSpacingSchema',
+      'BoxStyleSchema',
+      'ColorSchema',
+      'MAX_FONT_SIZE_PT',
+      'MIN_FONT_SIZE_PT',
+      'mmFromPt',
+      'ptFromMm',
+      'resolveTextAlign',
+      'resolveTypography',
+      'TEXT_ALIGNMENTS',
+      'TypographySchema',
+    ];
+
+    for (const symbol of added) {
+      expect(values).toContain(symbol);
+    }
+    expect(values).toHaveLength(117);
+  });
+});
 
 describe('the two bounds of a font size', () => {
   it('derives the ceiling from MAX_SHEET_MM instead of restating it, in both directions', () => {

@@ -23,6 +23,7 @@ export type {
   TableNode,
   TableRowGroupNode,
   TableRowNode,
+  TextAlignment,
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
@@ -46,6 +47,7 @@ export {
   TableNodeSchema,
   TableRowGroupNodeSchema,
   TableRowNodeSchema,
+  TEXT_ALIGNMENTS,
   TextBindingSegmentSchema,
   TextLiteralSegmentSchema,
   TextNodeSchema,
@@ -194,6 +196,30 @@ export {
 } from './page/page.js';
 export type { RenderFormat, RenderPort, RenderRequest, RenderResult } from './ports/render.js';
 export type { TemplateStoragePort } from './ports/storage.js';
+export type {
+  BorderEdge,
+  BoxBorder,
+  BoxSpacing,
+  BoxStyle,
+  Color,
+  TextAlignSources,
+  Typography,
+  TypographySources,
+} from './style/style.js';
+export {
+  BorderEdgeSchema,
+  BoxBorderSchema,
+  BoxSpacingSchema,
+  BoxStyleSchema,
+  ColorSchema,
+  MAX_FONT_SIZE_PT,
+  MIN_FONT_SIZE_PT,
+  mmFromPt,
+  ptFromMm,
+  resolveTextAlign,
+  resolveTypography,
+  TypographySchema,
+} from './style/style.js';
 export type { ShapeLimits } from './template/guard.js';
 export {
   assertBoundedShape,
