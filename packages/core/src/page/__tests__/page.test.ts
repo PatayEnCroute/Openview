@@ -1,34 +1,115 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
+import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
 import { parseTemplate } from '../../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import {
+  MAX_BANDS_PER_SIDE,
   MAX_SHEET_MM,
   MIN_SHEET_MM,
   PAGE_BAND_OCCURRENCES,
+  type PageBand,
   type PageBandOccurrence,
+  PageBandSchema,
+  PageBandsSchema,
+  type PageMargins,
+  type PageMarginsSchema,
   type PageSetup,
   PageSetupSchema,
   printableAreaOf,
+  type Sheet,
   SheetSchema,
   STANDARD_SHEETS_MM,
 } from '../page.js';
 import { RECIPE_PAGE } from './fixtures.js';
 
-/** A page carrying the given bands on its footer, and nothing else worth refusing. */
-function withFooter(occurrences: readonly PageBandOccurrence[]): unknown {
+/**
+ * The KEY SETS of the four stored page shapes, compared in both directions.
+ *
+ * The `extends` assertion in `page/schemas.ts` cannot stand in for these, and that was
+ * measured rather than assumed: an OPTIONAL field added to the hand-written type and
+ * forgotten in the schema leaves `z.infer<typeof PageSetupSchema> extends PageSetup` at
+ * `true`, because an optional key is satisfied by absence. The JSON round trip below cannot
+ * catch it either -- `RECIPE_PAGE` is annotated `PageSetup`, so it would never carry the
+ * new field in the first place. Compiled with a `readonly bleed?: number | undefined` added
+ * to `PageSetup`: the `extends` assertion stays green, the pairs below redden.
+ *
+ * `keyof` includes optional keys, which is what makes the comparison catch both directions
+ * for required and optional fields alike -- the reason `nodes.test.ts` uses this exact
+ * shape for `TableCell`. Comparing KEY SETS rather than the types themselves is also what
+ * sidesteps the array variance that forces the assertion in `schemas.ts` to be
+ * one-directional: `keyof` yields a union of strings, and `readonly` never enters it.
+ *
+ * The likeliest drift site is `Sheet` or `PageMargins`: lot C5 has a bleed and a gutter in
+ * its declared future, and both are optional by nature.
+ */
+export const SHEET_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof SheetSchema>,
+  keyof Sheet
+> = true;
+
+export const PAGE_MARGINS_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof PageMarginsSchema>,
+  keyof PageMargins
+> = true;
+
+export const PAGE_BAND_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof PageBandSchema>,
+  keyof PageBand
+> = true;
+
+export const PAGE_SETUP_KEYS_IN_STEP: MutuallyAssignable<
+  keyof z.infer<typeof PageSetupSchema>,
+  keyof PageSetup
+> = true;
+
+/**
+ * The two sides, so every band assertion below runs on BOTH.
+ *
+ * It was a footer-only vehicle, and that left the header side untested by construction:
+ * `header: []` was hard-coded here, `RECIPE_PAGE` and `paths.test.ts` carry exactly one
+ * header band, and no other fixture carries two. MEASURED -- dropping the refinement from
+ * `header` alone and leaving it on `footer` kept all 569 tests green and coverage at 100 %
+ * of branches and functions, while a template could then stack `every` + `lastOnly` at the
+ * top of the sheet: the exact ambiguity the refusal exists to remove. Coverage cannot see
+ * this, because the function stays covered through the other side.
+ */
+const SIDES = ['header', 'footer'] as const;
+
+type BandSide = (typeof SIDES)[number];
+
+/** A page carrying the given bands on ONE side, and nothing else worth refusing. */
+function withBands(side: BandSide, occurrences: readonly PageBandOccurrence[]): unknown {
+  const bands = occurrences.map((on, index) => ({
+    on,
+    content: { type: 'container', id: `b${index}`, children: [] },
+  }));
   return {
     sheet: { width: 210, height: 297 },
     margins: { top: 20, right: 15, bottom: 25, left: 15 },
-    header: [],
-    footer: occurrences.map((on, index) => ({
-      on,
-      content: { type: 'container', id: `b${index}`, children: [] },
-    })),
+    header: side === 'header' ? bands : [],
+    footer: side === 'footer' ? bands : [],
   };
 }
 
-const accepts = (occurrences: readonly PageBandOccurrence[]): boolean =>
-  PageSetupSchema.safeParse(withFooter(occurrences)).success;
+const acceptsOn = (side: BandSide, occurrences: readonly PageBandOccurrence[]): boolean =>
+  PageSetupSchema.safeParse(withBands(side, occurrences)).success;
+
+/**
+ * Accepted on BOTH sides, or the page is refused.
+ *
+ * The two sides share one `PageBandsSchema`, so they cannot disagree today -- and that is
+ * the property being pinned rather than a reason to test one of them: the day a side gets
+ * its own schema, this reads it.
+ */
+const accepts = (occurrences: readonly PageBandOccurrence[]): boolean => {
+  const verdicts = SIDES.map((side) => acceptsOn(side, occurrences));
+  const [onHeader, onFooter] = verdicts;
+  if (onHeader !== onFooter) {
+    throw new Error(`The two sides disagree on [${occurrences.join(', ')}]`);
+  }
+  return onHeader === true;
+};
 
 /**
  * Whether an occurrence covers a given rank, out of a given page count.
@@ -272,13 +353,17 @@ describe('the margins', () => {
     }
   });
 
-  it('says ONE thing about an ill-dimensioned sheet, thanks to the guard', () => {
-    // Measured: without the early return in the refinement, a width of `0` yields TWO issues
-    // -- the `too_small` of the width, then the `custom` of the horizontal margins, because
-    // `30 >= 0` holds. The second is collateral damage of the first. The guard is reached by
-    // every ill-dimensioned sheet, so it is covered rather than dead.
+  it.each([
+    ['zero', 0],
+    // The case the guard USED to miss. Written `> 0`, the whole band [0.0001, 1) slipped
+    // past it -- so `0.5` produced the very cascade the guard exists to suppress, and a
+    // `0.5 x 0.5` sheet produced four issues. The gate mirrors `sheetLengthSchema`'s floor,
+    // so the value here has to be a sub-minimum one, not merely a non-positive one.
+    ['a sub-minimum fraction', 0.5],
+    ['negative', -5],
+  ])('says ONE thing about a width that is %s, thanks to the gate', (_label, width) => {
     const result = PageSetupSchema.safeParse({
-      sheet: { width: 0, height: 297 },
+      sheet: { width, height: 297 },
       margins: { top: 20, right: 15, bottom: 25, left: 15 },
       header: [],
       footer: [],
@@ -288,7 +373,139 @@ describe('the margins', () => {
     if (!result.success) {
       expect(result.error.issues).toHaveLength(1);
       expect(result.error.issues[0]?.code).toBe('too_small');
+      expect(result.error.issues[0]?.path).toStrictEqual(['sheet', 'width']);
     }
+  });
+
+  it('says ONE thing about a sub-minimum HEIGHT too, and names the height', () => {
+    const result = PageSetupSchema.safeParse({
+      sheet: { width: 210, height: 0.5 },
+      margins: { top: 20, right: 15, bottom: 25, left: 15 },
+      header: [],
+      footer: [],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toHaveLength(1);
+      expect(result.error.issues[0]?.path).toStrictEqual(['sheet', 'height']);
+    }
+  });
+
+  it('still reports a vertical fault the width could never have caused', () => {
+    // The gates are per-axis, and this is why. Written as one conjunction, a bad WIDTH
+    // silenced the VERTICAL check as well: 150 + 150 on a 297 mm height is impossible at
+    // every width, so it is not collateral damage of the width at all -- yet the author saw
+    // the width alone, fixed it, re-saved, and only then learnt the page had never been
+    // valid. Two round trips, which is exactly what "two independent faults, not a cascade"
+    // forbids one `it` above.
+    const result = PageSetupSchema.safeParse({
+      sheet: { width: 0, height: 297 },
+      margins: { top: 150, right: 15, bottom: 150, left: 15 },
+      header: [],
+      footer: [],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.code)).toStrictEqual(['too_small', 'custom']);
+      expect(result.error.issues[1]?.message).toBe('Vertical margins leave no printable height.');
+    }
+  });
+});
+
+describe('deriving from PageSetupSchema', () => {
+  /** A page that only the object-level refinement refuses: the margins leave no height. */
+  const noPrintableHeight = {
+    ...RECIPE_PAGE,
+    margins: { top: 200, right: 20, bottom: 200, left: 20 },
+  };
+
+  it('is refused by the schema itself', () => {
+    expect(PageSetupSchema.safeParse(noPrintableHeight).success).toBe(false);
+  });
+
+  it.each([
+    ['extend', PageSetupSchema.extend({ bleed: z.number().optional() })],
+    ['omit', PageSetupSchema.omit({})],
+    ['pick', PageSetupSchema.pick({ sheet: true, margins: true, header: true, footer: true })],
+    ['partial', PageSetupSchema.partial()],
+  ])(
+    'LOSES the margin invariant through .%s(), which is why the docstring forbids it',
+    (_label, derived) => {
+      // Pinned rather than lamented. In zod 4 these four RESET the object's checks, so a
+      // derived page schema accepts a page with no printable area -- on which
+      // `printableAreaOf` returns a negative width. If a zod upgrade ever fixes this, THIS
+      // test reddens, which is the signal to delete the warning in `page/schemas.ts` rather
+      // than discover the change by accident.
+      expect(derived.safeParse(noPrintableHeight).success).toBe(true);
+    },
+  );
+
+  it.each([
+    ['strict', PageSetupSchema.strict()],
+    ['a nested field', z.object({ page: PageSetupSchema })],
+  ])('KEEPS it through %s, which is the composition to use', (label, schema) => {
+    const payload = label === 'a nested field' ? { page: noPrintableHeight } : noPrintableHeight;
+
+    expect(schema.safeParse(payload).success).toBe(false);
+  });
+
+  it('keeps the BAND invariant through all of them, which is what makes the loss deceptive', () => {
+    // The band refinement lives on the field schemas, not on the object, so it survives
+    // every derivation. A derived schema therefore HALF-validates -- still refusing
+    // `every` + `lastOnly` while accepting a page with no printable area -- and a reader
+    // who checks one invariant concludes the other travelled too.
+    const overlapping = {
+      ...RECIPE_PAGE,
+      header: [],
+      footer: [
+        { on: 'every', content: { type: 'container', id: 'a', children: [] } },
+        { on: 'lastOnly', content: { type: 'container', id: 'b', children: [] } },
+      ],
+    };
+
+    expect(
+      PageSetupSchema.extend({ bleed: z.number().optional() }).safeParse(overlapping).success,
+    ).toBe(false);
+  });
+});
+
+describe('PageBandsSchema', () => {
+  const band = (on: PageBandOccurrence): unknown => ({
+    on,
+    content: { type: 'container', id: on, children: [] },
+  });
+
+  it('carries the overlap invariant, which `z.array(PageBandSchema)` does not', () => {
+    // The reason it is exported at all. Composing the obvious `z.array(PageBandSchema)`
+    // accepts `every` + `lastOnly`, stores it, and meets the refusal only later from
+    // `parseTemplate`, on a path far from the code that accepted it -- the trap
+    // `parseDocumentNode` documents for a bare `tableRow`, one lot on.
+    const overlapping = [band('every'), band('lastOnly')];
+
+    expect(z.array(PageBandSchema).safeParse(overlapping).success).toBe(true);
+    expect(PageBandsSchema.safeParse(overlapping).success).toBe(false);
+  });
+
+  it('gives the SAME verdict as PageSetupSchema, on both partitions and on a conflict', () => {
+    for (const couple of [
+      ['firstOnly', 'exceptFirst'],
+      ['exceptLast', 'lastOnly'],
+      ['every', 'lastOnly'],
+    ] as const) {
+      expect(PageBandsSchema.safeParse(couple.map(band)).success).toBe(
+        accepts([couple[0], couple[1]]),
+      );
+    }
+  });
+
+  it('bounds a side at MAX_BANDS_PER_SIDE', () => {
+    expect(MAX_BANDS_PER_SIDE).toBe(2);
+    expect(PageBandsSchema.safeParse([band('firstOnly'), band('exceptFirst')]).success).toBe(true);
+    expect(
+      PageBandsSchema.safeParse([band('firstOnly'), band('exceptFirst'), band('lastOnly')]).success,
+    ).toBe(false);
   });
 });
 
@@ -317,21 +534,27 @@ describe('the bands', () => {
     ]);
   });
 
-  it('refuses the twenty-one overlapping couples on the SECOND band', () => {
+  it.each(SIDES)('refuses the twenty-one overlapping couples on the SECOND band (%s)', (side) => {
+    // The count is asserted rather than assumed: reading `issues[0]` inside `if
+    // (!result.success)` would let this `it` pass VACUOUSLY the day nothing is refused,
+    // which is the one failure it exists to catch.
+    let refused = 0;
     for (const [left, right] of COUPLES) {
-      const result = PageSetupSchema.safeParse(withFooter([left, right]));
+      const result = PageSetupSchema.safeParse(withBands(side, [left, right]));
       if (result.success) {
         continue;
       }
+      refused += 1;
       expect(result.error.issues).toHaveLength(1);
       expect(result.error.issues[0]?.code).toBe('custom');
       // The second band is the one in excess, and `on` is where the author fixes it. The
       // message names no occurrence: a constant payload stays safe to log (ADR 0003).
-      expect(result.error.issues[0]?.path).toStrictEqual(['footer', 1, 'on']);
+      expect(result.error.issues[0]?.path).toStrictEqual([side, 1, 'on']);
       expect(result.error.issues[0]?.message).toBe(
         'Two bands on the same side can apply to the same page.',
       );
     }
+    expect(refused).toBe(21);
   });
 
   it('is SYMMETRIC, so validity never depends on the order the bands were written in', () => {
@@ -351,13 +574,43 @@ describe('the bands', () => {
     }
   });
 
-  it('lets the legal pair through and names only the intruder, on three bands', () => {
-    const result = PageSetupSchema.safeParse(withFooter(['firstOnly', 'exceptFirst', 'lastOnly']));
+  it.each(SIDES)('refuses a third band by the COUNT, still one message at a time (%s)', (side) => {
+    // A legal pair plus an intruder used to be refused band by band, at `[side, 2, 'on']`.
+    // It is now refused by `MAX_BANDS_PER_SIDE`, and the swap is what bounds the COST: the
+    // per-band spelling allocated one issue per supernumerary band, so a hostile side of
+    // 100 000 produced 99 998 of them and a 2.8 MB `error.message`. The bound refuses no
+    // page the pairwise rule did not already refuse -- of the twenty-five couples exactly
+    // two are compatible and they share no member, so a valid side never carries three --
+    // and the refusal stays a single message, which is what lot C8 was promised.
+    const result = PageSetupSchema.safeParse(
+      withBands(side, ['firstOnly', 'exceptFirst', 'lastOnly']),
+    );
 
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues).toHaveLength(1);
-      expect(result.error.issues[0]?.path).toStrictEqual(['footer', 2, 'on']);
+      expect(result.error.issues[0]?.code).toBe('too_big');
+      expect(result.error.issues[0]?.path).toStrictEqual([side]);
+      expect(result.error.issues[0]?.message).toBe('A side carries at most two bands.');
+    }
+  });
+
+  it('answers a hostile band list in one message, not one per band', () => {
+    // The cost bound, asserted rather than described. Before `MAX_BANDS_PER_SIDE` this input
+    // was O(n) issue objects on top of an O(n^2) scan -- MEASURED at 62 s of blocked CPU for
+    // 100 000 bands ordered `exceptFirst` then `firstOnly`, the ordering that defeats the
+    // short-circuit. It is the denial of service `template/guard.ts` bounds one layer down,
+    // reopened by the refusal itself.
+    const hostile = Array.from({ length: 5_000 }, (_unused, index) => ({
+      on: index < 2_500 ? 'exceptFirst' : 'firstOnly',
+      content: { type: 'container', id: `b${index}`, children: [] },
+    }));
+    const result = PageSetupSchema.safeParse({ ...RECIPE_PAGE, header: [], footer: hostile });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toHaveLength(1);
+      expect(result.error.issues[0]?.code).toBe('too_big');
     }
   });
 

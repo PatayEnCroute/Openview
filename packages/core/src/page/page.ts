@@ -14,8 +14,10 @@
  */
 export { printableAreaOf } from './area.js';
 export {
+  MAX_BANDS_PER_SIDE,
   PAGE_SETUP_SCHEMA_SATISFIES_TYPE,
   PageBandSchema,
+  PageBandsSchema,
   PageMarginsSchema,
   PageSetupSchema,
   SheetSchema,

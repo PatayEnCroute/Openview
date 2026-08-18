@@ -180,10 +180,12 @@ export type {
   StandardSheetName,
 } from './page/page.js';
 export {
+  MAX_BANDS_PER_SIDE,
   MAX_SHEET_MM,
   MIN_SHEET_MM,
   PAGE_BAND_OCCURRENCES,
   PageBandSchema,
+  PageBandsSchema,
   PageMarginsSchema,
   PageSetupSchema,
   printableAreaOf,

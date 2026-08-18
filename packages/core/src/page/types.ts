@@ -1,4 +1,4 @@
-import type { ContainerNode } from '../ast/types.js';
+import type { ContainerNode } from '../ast/nodes.js';
 
 /**
  * The sheet a template prints on, in millimetres.
