@@ -106,8 +106,45 @@ import { PageSetupSchema } from '../page/page.js';
  * is publishable -- and "not publishable" is STRICTER here than it was for C1, C2 and C3,
  * which were purely widening: a build taken between the `page` field and this stamp refuses
  * EVERY existing v4 document, not merely the documents of the build that follows.
+ *
+ * ## What version 6 means
+ *
+ * Version 6 is version 5 plus lot C5, the appearance: TWO stored shapes -- `BoxStyle` (a
+ * background, four border edges, an inner inset) and `Typography` (a family, a size in points,
+ * bold, italic, a colour) -- plus one isolated field, `TextNode.align`. NINE accrual sites: a
+ * `box` on `text`, `image`, `container`, `table` and `tableRow`; a `typography` on `text` and on
+ * the three segment kinds.
+ *
+ * It is the SILENT LOSS case described above, and NOT the illegible refusal -- every field of
+ * this lot is OPTIONAL, so no union widens and no older build meets an unknown discriminant.
+ * That makes it the dangerous class, and it is measured rather than argued. A document carrying
+ * a complete style at all nine sites, stamped 5, read by the build that precedes this lot:
+ *
+ *     ACCEPTED WITH NO ERROR AT ALL
+ *     in : 81 values   out : 37 values   ERASED: 44 of 81 (-54.3 %)
+ *
+ * `box` and `typography` -- gone, down to the `typography` of a `pageField` segment INSIDE A
+ * PAGE BAND, and an `onSave` persists the whole loss. The figure belongs to THAT document and is
+ * not quoted without it: a document carrying fewer style positions loses proportionally less.
+ *
+ * With the stamp, that same document yields
+ * `TemplateMigrationError: Template uses schema version 6 but this build understands at most 5.
+ * It was written by a newer release of Openview; upgrade before opening it.` -- and THE STAMP
+ * ALONE IS WHAT PRODUCES IT, independently of the new shapes.
+ *
+ * UNLIKE VERSION 5, THERE IS NO `root`/`page` ASYMMETRY, and the v5 paragraph above must not be
+ * read forward. A version 4 build did not KNOW the `page` key and stripped the whole field
+ * without validating inside it; a version 5 build KNOWS it, descends into it and validates
+ * there. So a style written in a header band is stripped just as visibly as one written in the
+ * flow, and the detectability argument of the v5 entry does not need restating.
+ *
+ * Stamped ONCE, after the last persisted shape of the lot. No commit of C5 before that one is
+ * publishable, for the reason version 2 already records -- and "not publishable" is as WEAK here
+ * as it was for C1, C2 and C3 rather than as strict as for C4: this lot narrows nothing, so a
+ * build taken mid-lot refuses no existing document, it merely loses the fields of the build that
+ * follows.
  */
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 /**
  * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape
