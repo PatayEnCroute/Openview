@@ -1,3 +1,4 @@
+import type { TableColumnAlignment, TextAlignment } from '../ast/types.js';
 import type { Typography } from './types.js';
 
 /**
@@ -69,4 +70,65 @@ export function resolveTypography(sources: TypographySources): Typography {
     italic: run?.italic ?? block?.italic,
     color: run?.color ?? block?.color,
   };
+}
+
+/**
+ * The two places the alignment of ONE TEXT BLOCK can come from: the block, or its column.
+ *
+ * VALUES and not objects, unlike {@link TypographySources}, and the asymmetry has a reason: a
+ * per-property merge needs the objects, a single property does not. What the named object buys
+ * is that the two terms cannot be passed in the wrong order -- which is the whole risk in a
+ * function whose body is one nullish fallback.
+ *
+ * ## The two fields have DIFFERENT TYPES, and that is the contract, not an oversight
+ *
+ * `text` is a `TextAlignment`: four members, `justify` included. `column` is a
+ * `TableColumnAlignment`: three, and a column cannot declare `justify` because a column
+ * justifies nothing -- it states a default, and it is the run that gets stretched. The second
+ * type being a STRICT SUBSET of the first is what lets the body stay a bare fallback with no
+ * widening and no assertion, and it is structural: the tuples are derived one from the other.
+ *
+ * `column` is not optional at its source -- `TableColumn.align` is REQUIRED. It is optional here
+ * because a text block outside any table has no column at all.
+ */
+export interface TextAlignSources {
+  readonly text?: TextAlignment | undefined;
+  readonly column?: TableColumnAlignment | undefined;
+}
+
+/**
+ * Says WHERE A TEXT BLOCK'S ALIGNMENT COMES FROM when it sits in a table cell: itself, then its
+ * column.
+ *
+ * ## What this is NOT: a precedence between two declarations of one fact
+ *
+ * An earlier draft called it that, and it was wrong. A column's alignment and a block's are two
+ * DIFFERENT facts that happen to share three value names. The column states the default for the
+ * TEXT BLOCKS of its cells; the block distributes ITS OWN runs. A cell holding an image has the
+ * first and not the second -- there is no run to align -- and a cell holding two paragraphs has
+ * one column default and TWO block alignments, which may differ. Calling that a rivalry made a
+ * degenerate case (one cell, one paragraph, where the two coincide) look like the general one.
+ *
+ * ## Why this function has to exist anyway
+ *
+ * Because the DEFAULT still has to be resolved somewhere, and a rule of precedence written in
+ * prose gets reimplemented twice -- once in the engine, once in the viewer -- with the right to
+ * diverge. What is exported is an ORDER, not an arithmetic: a nullish fallback has no
+ * floating-point representation, so the `printableAreaOf` motive does not apply here and citing
+ * it would be invoking a precedent that does not hold. The motive that does hold is
+ * `Template.page`'s: a convention written once in `core` beats one reinvented by every renderer.
+ *
+ * The block wins because it is the MORE LOCAL declaration and the one an editor Command can
+ * address: a cell is not a node, it has no id. The column keeps its meaning unchanged -- ADR
+ * 0005 fixed that form twice over: an override "s'ajoute, elle ne déplace pas le champ de
+ * colonne", and "la porte reste ouverte dans le seul sens qui ne coûte rien".
+ *
+ * Returns `undefined` when neither is declared. Which alignment a renderer then applies, how it
+ * honours `justify` (last line to `start`, slack between words), and against WHICH WRITING
+ * DIRECTION it resolves `start` and `end`, are expectations named in ADR 0007 -- the second site
+ * at which this repository inherits that last open question.
+ */
+export function resolveTextAlign(sources: TextAlignSources): TextAlignment | undefined {
+  const { text, column } = sources;
+  return text ?? column;
 }

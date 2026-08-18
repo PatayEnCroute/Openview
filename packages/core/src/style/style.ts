@@ -32,8 +32,8 @@
  * `ResolvedTypography`, and no bounded door of its own -- a style is never a standalone
  * fragment, it always lives in a node, and `parseBlockNode` validates it already.
  */
-export type { TypographySources } from './resolve.js';
-export { resolveTypography } from './resolve.js';
+export type { TextAlignSources, TypographySources } from './resolve.js';
+export { resolveTextAlign, resolveTypography } from './resolve.js';
 export {
   BorderEdgeSchema,
   BoxBorderSchema,

@@ -19,6 +19,7 @@ import {
   MIN_FONT_SIZE_PT,
   mmFromPt,
   ptFromMm,
+  resolveTextAlign,
   resolveTypography,
   type Typography,
   TypographySchema,
@@ -556,5 +557,19 @@ describe('the two resolutions', () => {
       italic: undefined,
       color: '#3A3A3A',
     });
+  });
+
+  it('gives the BLOCK the last word on an alignment, over its column', () => {
+    // A precedence is a decision of the contract, not a paraphrase of the body: this is the one
+    // assertion that would redden if someone swapped the two terms. And swapping them COMPILES --
+    // `column ?? text` yields the wider of the two types, so gate 3 stays silent; only this `it`
+    // sees it.
+    expect(resolveTextAlign({ text: 'end', column: 'start' })).toBe('end');
+    expect(resolveTextAlign({ column: 'start' })).toBe('start');
+    expect(resolveTextAlign({ text: 'center' })).toBe('center');
+    expect(resolveTextAlign({})).toBeUndefined();
+    // `justify` travels UP from the block and can never come from the column: the second call is
+    // what a cell holding a justified paragraph inside a `start` column really resolves to.
+    expect(resolveTextAlign({ text: 'justify', column: 'start' })).toBe('justify');
   });
 });
