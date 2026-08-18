@@ -18,11 +18,15 @@ export interface TypographySources {
  *
  * ## What it returns, and why the name does not say "resolved"
  *
- * A {@link Typography}, whose five fields stay optional. An earlier draft returned a
- * `ResolvedTypography` defined by mapping every key of `Typography` to a required one, and that
- * type RESOLVES NOTHING: making a KEY required does not make its VALUE defined, and the value
- * type already contains `undefined` because `exactOptionalPropertyTypes` demands it. MEASURED,
- * twice and independently, five diagnostics:
+ * A {@link Typography} when at least one value is declared, `undefined` otherwise. The five
+ * fields of a returned object stay optional. This signals the canonical absence as `undefined`,
+ * so a producer can omit the stored field instead of persisting the empty object that
+ * `TypographySchema` refuses.
+ *
+ * An earlier draft returned a `ResolvedTypography` defined by mapping every key of `Typography`
+ * to a required one, and that type RESOLVES NOTHING: making a KEY required does not make its
+ * VALUE defined, and the value type already contains `undefined` because
+ * `exactOptionalPropertyTypes` demands it. MEASURED, twice and independently, five diagnostics:
  *
  *     error TS2322: Type 'string | undefined' is not assignable to type 'string'.
  *
@@ -61,15 +65,16 @@ export interface TypographySources {
  * one-level inheritance already exists unchallenged in this contract (`TableColumn.align`,
  * "Inherited by every cell of this column"). What would reopen the objection is a third term.
  */
-export function resolveTypography(sources: TypographySources): Typography {
+export function resolveTypography(sources: TypographySources): Typography | undefined {
   const { run, block } = sources;
-  return {
+  const typography: Typography = {
     family: run?.family ?? block?.family,
     sizePt: run?.sizePt ?? block?.sizePt,
     bold: run?.bold ?? block?.bold,
     italic: run?.italic ?? block?.italic,
     color: run?.color ?? block?.color,
   };
+  return Object.values(typography).some((value) => value !== undefined) ? typography : undefined;
 }
 
 /**

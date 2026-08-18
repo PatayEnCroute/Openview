@@ -359,9 +359,11 @@ ne sait pas exprimer — et à ce jour, **rien ne l'indique**.
 
 **Décision.** `readonly typography?: Typography | undefined` sur **`TextLiteralSegment`,
 `TextBindingSegment`, `TextPageFieldSegment`** et sur **`TextNode`**. La résolution est
-**`resolveTypography({ run, block }): Typography`** — **deux** termes, fusion **par propriété**,
-`run` d'abord. Elle rend un **`Typography`**, dont les cinq champs restent optionnels. **Il n'y a
-pas de type `ResolvedTypography`.**
+**`resolveTypography({ run, block }): Typography | undefined`** — **deux** termes, fusion **par
+propriété**, `run` d'abord. Elle rend un **`Typography`** dont les cinq champs restent optionnels
+dès qu'au moins une valeur est déclarée, et `undefined` sinon. Elle préserve ainsi la forme
+canonique : jamais l'objet vide que `TypographySchema` refuse. **Il n'y a pas de type
+`ResolvedTypography`.**
 
 **Pourquoi le nom disparaît, et c'est mesuré.** Un type qui rendrait chaque clé de `Typography`
 obligatoire **ne résout rien** : rendre la **clé** obligatoire ne rend pas la **valeur** définie, et
@@ -408,7 +410,9 @@ marqueur est cohérent ; y poser une **expression** rouvrirait la boucle de rét
 
 **Ce que la fonction ne fait pas.** Elle ne fournit **aucun défaut** : les cinq valeurs manquantes
 sont des **attentes envers le moteur**, écrites au [§ Conséquences] et **jamais** dans une
-docstring.
+docstring. Quand les cinq manquent, elle rend `undefined` plutôt qu'un `Typography` vide : c'est la
+même forme canonique que la décision 10 impose aux documents, appliquée à la fonction publique qui
+pourrait autrement en fabriquer une forme refusée.
 
 **Écarté.** (a) **Segments seuls** : coûte **41×** la déclaration la plus fréquente, mesuré.
 (b) **`TextNode` seul** : « Total : **1 200 €** » — une graisse à l'intérieur d'une phrase — devient
@@ -1559,9 +1563,10 @@ dépôt.
    qu'il fait des dix valeurs qui désignent la machine (décision 9). Propriétaires : **E6**
    (déterminisme, « au caractère près : polices, images »), **E8** (liste blanche des requêtes
    sortantes, polices incluses).
-3. **Les cinq valeurs typographiques absentes.** `resolveTypography` rend cinq `T | undefined` : c'est
-   le moteur qui décide de la police, de la taille, de la graisse, de l'italique et de la couleur d'un
-   run qui n'en déclare aucune. **Cette ADR les nomme comme une dette**, et l'argument de réouverture
+3. **Les cinq valeurs typographiques absentes.** `resolveTypography` laisse chaque valeur absente à
+   `undefined`, et rend `undefined` lui-même quand les cinq manquent : c'est le moteur qui décide de
+   la police, de la taille, de la graisse, de l'italique et de la couleur d'un run qui n'en déclare
+   aucune. **Cette ADR les nomme comme une dette**, et l'argument de réouverture
    est mesurable : si un modèle réel répète la même famille sur plus de la moitié de ses runs, le
    troisième terme redevient légitime. Propriétaires : **E1**, **V1**.
 4. **L'espace colorimétrique.** Le contrat **déclare** sRGB ; c'est au moteur d'écrire un `DeviceRGB`

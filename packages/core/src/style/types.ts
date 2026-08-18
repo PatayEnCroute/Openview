@@ -78,9 +78,10 @@ export type Color = string;
  * ## Why all five are optional, and what that costs
  *
  * Because nothing else in this contract decides them: there is no cascade, no document
- * baseline and no schema default. `resolveTypography` therefore returns five `T | undefined`,
- * and WHO decides the missing five is an expectation named in ADR 0007 -- never in a docstring,
- * which is the mistake lot C3 had to undo in its own.
+ * baseline and no schema default. `resolveTypography` therefore leaves every undeclared value
+ * undefined, and returns `undefined` when all five are absent so it never manufactures the empty
+ * style object this contract refuses. WHO decides the missing five is an expectation named in
+ * ADR 0007 -- never in a docstring, which is the mistake lot C3 had to undo in its own.
  *
  * ## An empty object is REFUSED, and the canonical spelling of "no typography" is the absent
  * field

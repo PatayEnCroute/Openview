@@ -245,8 +245,8 @@ const APPARENCE_A: Apparence = {
   },
   bandeau: { background: '#eef2f9', padding: { top: 1.2, right: 1.2, bottom: 1.2, left: 1.2 } },
   tableau: { border: { bottom: { width: 0.28, color: '#1b3a6f' } } },
-  titre: { family: 'Georgia, serif', sizePt: 17, bold: true, color: '#1b3a6f' },
-  corps: { family: 'Georgia, serif', sizePt: 9.5, color: '#22262b' },
+  titre: { family: 'Georgia', sizePt: 17, bold: true, color: '#1b3a6f' },
+  corps: { family: 'Georgia', sizePt: 9.5, color: '#22262b' },
   accent: { bold: true, color: '#1b3a6f' },
   alignementMentions: 'start',
 };
@@ -263,8 +263,8 @@ const APPARENCE_B: Apparence = {
   cadre: { padding: { top: 2, right: 0, bottom: 2, left: 0 } },
   bandeau: { border: { bottom: { width: 1.2, color: '#8C3A1B' } } },
   tableau: {},
-  titre: { family: 'Inter, system-ui, sans-serif', sizePt: 13, italic: true, color: '#8C3A1B' },
-  corps: { family: 'Inter, system-ui, sans-serif', sizePt: 8.5, color: '#3A3A3A' },
+  titre: { family: 'Arial', sizePt: 13, italic: true, color: '#8C3A1B' },
+  corps: { family: 'Arial', sizePt: 8.5, color: '#3A3A3A' },
   accent: { color: '#8C3A1B' },
   alignementMentions: 'justify',
 };
@@ -805,7 +805,7 @@ function texteDeSegments(
 /** Un run prêt à peindre : son texte, et la typographie RÉSOLUE qui s'y applique. */
 interface RunAffiche {
   readonly texte: string;
-  readonly typographie: Typography;
+  readonly typographie: Typography | undefined;
 }
 
 /**
@@ -867,6 +867,40 @@ function runsDeSegments(
 const PX_PAR_MM = 2.6;
 
 /**
+ * Transcrit UN nom de police opaque en chaîne CSS, sans lui donner la grammaire d'une pile.
+ *
+ * Passer le nom brut à `fontFamily` ferait de la virgule un séparateur et de `serif` ou
+ * `system-ui` des indirections vers la machine. Le contrat autorise au contraire une police qui
+ * s'appellerait réellement « Serif » et refuse toute pile de repli : les guillemets portent cette
+ * différence. Les caractères de contrôle passent par un échappement hexadécimal CSS ; le guillemet
+ * et la barre oblique inverse sont échappés directement.
+ */
+function familleDePoliceCss(famille: string | undefined): string | undefined {
+  if (famille === undefined) {
+    return undefined;
+  }
+
+  const morceaux: string[] = [];
+  for (const caractere of famille) {
+    const pointDeCode = caractere.codePointAt(0);
+    if (pointDeCode === undefined) {
+      continue;
+    }
+    if (caractere === '"' || caractere === '\\') {
+      morceaux.push(`\\${caractere}`);
+    } else if (pointDeCode <= 0x1f || pointDeCode === 0x7f) {
+      morceaux.push(`\\${pointDeCode.toString(16)} `);
+    } else {
+      morceaux.push(caractere);
+    }
+  }
+  return `"${morceaux.join('')}"`;
+}
+
+const filetCss = (arete: BorderEdge | undefined): string | undefined =>
+  arete === undefined ? undefined : `${arete.width * PX_PAR_MM}px solid ${arete.color}`;
+
+/**
  * Le CSS d'un nœud, DÉRIVÉ de ce que le nœud déclare — jamais l'inverse.
  *
  * C'est le sens de la dérivation qui compte. Une feuille de style écrite à la main à côté du
@@ -890,20 +924,18 @@ const PX_PAR_MM = 2.6;
  */
 function styleCssDe(box: BoxStyle | undefined, typo: Typography | undefined): CSSProperties {
   const mm = (valeur: number): string => `${valeur * PX_PAR_MM}px`;
-  const filet = (arete: BorderEdge | undefined): string | undefined =>
-    arete === undefined ? undefined : `${arete.width * PX_PAR_MM}px solid ${arete.color}`;
 
   return {
     backgroundColor: box?.background,
-    borderTop: filet(box?.border?.top),
-    borderRight: filet(box?.border?.right),
-    borderBottom: filet(box?.border?.bottom),
-    borderLeft: filet(box?.border?.left),
+    borderTop: filetCss(box?.border?.top),
+    borderRight: filetCss(box?.border?.right),
+    borderBottom: filetCss(box?.border?.bottom),
+    borderLeft: filetCss(box?.border?.left),
     paddingTop: box?.padding === undefined ? undefined : mm(box.padding.top),
     paddingRight: box?.padding === undefined ? undefined : mm(box.padding.right),
     paddingBottom: box?.padding === undefined ? undefined : mm(box.padding.bottom),
     paddingLeft: box?.padding === undefined ? undefined : mm(box.padding.left),
-    fontFamily: typo?.family,
+    fontFamily: familleDePoliceCss(typo?.family),
     // Points -> millimètres par la conversion DU CONTRAT, puis millimètres -> pixels par
     // l'échelle déclarée. Deux étapes, une seule orthographe de la première.
     fontSize: typo?.sizePt === undefined ? undefined : mm(mmFromPt(typo.sizePt)),
@@ -1045,12 +1077,11 @@ function Tableau({
                 row.box?.padding === undefined ? undefined : { padding: row.box.padding },
                 undefined,
               ),
-              borderTop: row.box?.border?.top
-                ? `${row.box.border.top.width * PX_PAR_MM}px solid ${row.box.border.top.color}`
-                : undefined,
-              borderBottom: row.box?.border?.bottom
-                ? `${row.box.border.bottom.width * PX_PAR_MM}px solid ${row.box.border.bottom.color}`
-                : undefined,
+              borderTop: filetCss(row.box?.border?.top),
+              borderRight:
+                index === tableau.columns.length - 1 ? filetCss(row.box?.border?.right) : undefined,
+              borderBottom: filetCss(row.box?.border?.bottom),
+              borderLeft: index === 0 ? filetCss(row.box?.border?.left) : undefined,
               textAlign: alignementCss(column.align),
             }}
           >

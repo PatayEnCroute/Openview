@@ -579,17 +579,13 @@ describe('the two resolutions', () => {
     });
   });
 
-  it('returns undefined for what neither source declares, and resolves nothing else', () => {
+  it('returns the canonical absence when neither source declares anything, and resolves nothing else', () => {
     // The honest half of the name: the five values a document does not declare are decided by the
     // renderer, and ADR 0007 names them as a debt. A type promising five defined fields would
-    // have been a lie -- measured, five diagnostics of TS2322.
-    expect(resolveTypography({})).toStrictEqual({
-      family: undefined,
-      sizePt: undefined,
-      bold: undefined,
-      italic: undefined,
-      color: undefined,
-    });
+    // have been a lie -- measured, five diagnostics of TS2322. Returning an object whose five
+    // values are undefined would be another lie: persisted as `typography`, it becomes `{}`, the
+    // exact non-canonical spelling TypographySchema refuses.
+    expect(resolveTypography({})).toBeUndefined();
     expect(resolveTypography({ block: styleOfCase('b').body })).toStrictEqual({
       family: 'Inter',
       sizePt: 9,
@@ -597,6 +593,18 @@ describe('the two resolutions', () => {
       italic: undefined,
       color: '#3A3A3A',
     });
+
+    // `false` is a declaration, not an absence. This is the branch an Object.values-based
+    // canonicalisation can accidentally lose by testing truthiness instead of `undefined`.
+    const explicitFalse = resolveTypography({ run: { bold: false } });
+    expect(explicitFalse).toStrictEqual({
+      family: undefined,
+      sizePt: undefined,
+      bold: false,
+      italic: undefined,
+      color: undefined,
+    });
+    expect(TypographySchema.safeParse(explicitFalse).success).toBe(true);
   });
 
   it('takes the fourth member from a text block and never from a column', () => {
