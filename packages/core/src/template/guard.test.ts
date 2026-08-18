@@ -12,6 +12,8 @@ import {
   parsePageSetup,
   resolveShapeLimits,
 } from './guard.js';
+import { parseTemplate } from './migrate.js';
+import { CURRENT_SCHEMA_VERSION, type Template } from './template.js';
 
 /** A chain of `levels` nested objects, so the innermost value sits at that depth. */
 function nest(levels: number): unknown {
@@ -317,6 +319,78 @@ describe('the bounded entry points', () => {
     expect(bounded.code).toBe('too-deep');
     expect(bounded.limit).toBe(DEFAULT_SHAPE_LIMITS.maxDepth);
     expect(() => PageSetupSchema.parse(deepBand)).toThrow();
+  });
+
+  it('agrees with `parseTemplate` on where the depth ceiling falls', () => {
+    // The door charges the fragment for the level `page` occupies inside a `Template`, and
+    // this is the `it` that pins it. Measured before the fix: a band of 28 nested containers
+    // passed `parsePageSetup` and was then refused `too-deep` by `parseTemplate` carrying the
+    // very same page -- so the documented pre-storage check said yes and the store call said
+    // no, which is the divergence a bounded door exists to close rather than open.
+    //
+    // Written as a SEARCH for the boundary rather than against a hard-coded 28, because the
+    // figure moves with `maxDepth` and a literal would rot silently the day it changes.
+    const nestedContainers = (depth: number): unknown => {
+      let node: unknown = { type: 'text', id: 'leaf', content: [] };
+      for (let level = 0; level < depth; level += 1) {
+        node = { type: 'container', id: `c${level}`, children: [node] };
+      }
+      return node;
+    };
+    const pageOfDepth = (depth: number): unknown => ({
+      ...RECIPE_PAGE,
+      header: [],
+      footer: [{ on: 'every', content: nestedContainers(depth) }],
+    });
+    const accepts = (parse: () => unknown): boolean => {
+      try {
+        parse();
+        return true;
+      } catch (error) {
+        if (error instanceof TemplateShapeError) {
+          return false;
+        }
+        throw error;
+      }
+    };
+
+    for (let depth = 1; depth <= 40; depth += 1) {
+      const page = pageOfDepth(depth);
+      const viaFragment = accepts(() => parsePageSetup(page));
+      const viaTemplate = accepts(() =>
+        parseTemplate({
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          id: 'tpl_depth',
+          name: 'Profondeur',
+          version: '1.0.0',
+          page,
+          root: { type: 'container', id: 'racine', children: [] },
+        }),
+      );
+
+      expect({ depth, viaFragment }).toStrictEqual({ depth, viaFragment: viaTemplate });
+    }
+  });
+
+  it('returns a page that can be written straight back into a Template', () => {
+    // A COMPILE-time contract, asserted at runtime only so the file has something to run.
+    // `parsePageSetup` used to return the hand-written `PageSetup`, whose arrays are
+    // `readonly`, while `Template['page']` is inferred from zod with mutable ones -- so the
+    // pre-storage workflow the door's own docstring names was `TS2322`, and the two symbols
+    // this lot exports did not compose. Gate 3 covers this file, so the annotation below is
+    // the real assertion.
+    const stored: Template = parseTemplate({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'tpl_compose',
+      name: 'Composition',
+      version: '1.0.0',
+      page: RECIPE_PAGE,
+      root: { type: 'container', id: 'racine', children: [] },
+    });
+    const page: Template['page'] = parsePageSetup(RECIPE_PAGE);
+    const updated: Template = { ...stored, page };
+
+    expect(updated.page).toStrictEqual(stored.page);
   });
 
   it('strips an unknown key, so none of the four doors is a persistence boundary', () => {

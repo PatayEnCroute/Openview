@@ -8,7 +8,7 @@ import {
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { type Expression, ExpressionSchema } from '../expression/expression.js';
 import { limitSchema, resolveLimits } from '../expression/limits.js';
-import { type PageSetup, PageSetupSchema } from '../page/page.js';
+import { PageSetupSchema } from '../page/page.js';
 
 /**
  * The shape guard, and the bounded doors that were missing beside it (ADR 0003,
@@ -305,6 +305,21 @@ export function parseBlockNode(raw: unknown, limits?: Partial<ShapeLimits>): Blo
  * reopened for the one shape this lot adds. Three lines close it, exactly as `parseBlockNode`
  * did for lot C3.
  *
+ * THE FRAGMENT IS CHARGED FOR THE POSITION IT WILL OCCUPY, which is why the guard is handed
+ * `{ page: raw }` and not `raw`. A page sits one JSON level below a template's root, so
+ * measuring it bare spends a depth budget it will not have at save time -- MEASURED, a band
+ * of 28 nested containers passed this door and was then refused `too-deep` by `parseTemplate`
+ * carrying the very same page. The integrator's pre-storage check would have said yes and the
+ * store call no, which is the divergence this door exists to close rather than create. The
+ * wrapper costs exactly the one level and the one value that `page` costs inside a `Template`.
+ *
+ * THE RETURN TYPE IS THE SCHEMA'S OUTPUT, not the hand-written `PageSetup`, and that is a
+ * composition fix rather than a stylistic one: `PageSetup` declares `readonly PageBand[]`
+ * where `Template['page']` is inferred from zod with MUTABLE arrays, so
+ * `{ ...template, page: parsePageSetup(raw) }` -- the pre-storage workflow this docstring
+ * names -- was `TS2322`. The inferred type assigns to both, so the two symbols this lot
+ * exports finally compose.
+ *
  * THIS IS NOT A PERSISTENCE BOUNDARY, and neither are its three siblings. It VALIDATES a
  * fragment -- for an editor's partial check, for an integrator's pre-storage check -- and its
  * output is not what you store. `z.object` strips keys it does not know (measured: a `bleed`
@@ -315,7 +330,10 @@ export function parseBlockNode(raw: unknown, limits?: Partial<ShapeLimits>): Blo
  * Same caveat, unchanged, for `parseExpression`, `parseDocumentNode` and `parseBlockNode`:
  * store templates, validate fragments.
  */
-export function parsePageSetup(raw: unknown, limits?: Partial<ShapeLimits>): PageSetup {
-  assertBoundedShape(raw, limits);
+export function parsePageSetup(
+  raw: unknown,
+  limits?: Partial<ShapeLimits>,
+): z.infer<typeof PageSetupSchema> {
+  assertBoundedShape({ page: raw }, limits);
   return PageSetupSchema.parse(raw);
 }
