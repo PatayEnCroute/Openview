@@ -1673,14 +1673,15 @@ parce qu'une sonde corrigée sans son motif se refera casser au lot suivant.
 | 5 | `git grep -nE "\bgap\b *\??:" -- packages/core/src/style` | **zéro** — aucun **champ** et aucune **clé de schéma** | `git grep -nE "\bpadding\b *\??:" -- packages/core/src/style` **doit** rendre au moins une ligne |
 | 6 | `git grep -nE ": *z\.ZodType<" -- packages/core/src/style` | **zéro** — annoter détruit la porte de type | la même sur `packages/core/src/ast` **doit** rendre **deux** lignes (l'AST récursif, lui, en a besoin) |
 | 7 | `git grep -n "core C5" -- docs/roadmap` | **zéro** — l'**attribution** vit dans la roadmap | la même sur `docs/adr` **doit** rendre une ligne : l'ADR 0005 **signale** la faute, elle ne la commet pas, et un lot ne réécrit pas le journal d'un autre |
-| 8 | `git grep -nE "(bleed\|gutter)\??:" -- packages/core/src/page` | **zéro** — aucun **champ** sur `Sheet` ni sur `PageMargins` | `git grep -nE "bleed" -- docs/adr` **doit** rendre au moins une ligne (l'ADR 0006 les refuse par écrit) |
+| 8 | `git grep -nE "^ *(readonly )?(bleed\|gutter)\??:" -- packages/core/src/page` | **zéro** — aucun **champ déclaré** sur `Sheet` ni sur `PageMargins` | `git grep -nE "^ *(readonly )?(top\|bottom)\??:" -- packages/core/src/page/types.ts` **doit** rendre **deux** lignes : de vraies arêtes, elles, sont déclarées ainsi |
 | 9 | `git grep -n "TABLE_COLUMN_ALIGNMENTS = " -- packages/core/src/ast/types.ts` | **une ligne, et son tuple porte TROIS membres** | `git grep -n "TEXT_ALIGNMENTS = " -- packages/core/src/ast/types.ts` **doit** rendre une ligne, **dérivée par étalement** et portant `'justify'` |
 | 10 | `git grep -c "_KEYS_IN_STEP" -- packages/core/src/ast/__tests__/nodes.test.ts` | **13** — 5 à l'entrée du lot, +8 | retirer une paire **doit** faire rougir la porte 3 |
 | 11 | `node -e "import('./packages/core/dist/index.js').then(m => console.log(Object.keys(m).length))"` | **117** valeurs | la même commande sur le `dist` du commit précédant le lot **doit** rendre **104** |
 | 12a | `git grep -n "CURRENT_SCHEMA_VERSION = 6" -- packages/core/src/template/template.ts` | **une ligne** | `git grep -n "CURRENT_SCHEMA_VERSION = 5"` **doit** rendre zéro |
-| 12b | `git grep -n "schemaVersion: 6" -- packages/core/src/template/migrate.ts` | **une ligne** — l'estampille de l'entrée 5 → 6 | `git grep -n "from: 5" -- packages/core/src/template/migrate.ts` **doit** rendre une ligne |
+| 12b | `git grep -nE "migrate: .*schemaVersion: 6" -- packages/core/src/template/migrate.ts` | **une ligne** — l'estampille de l'entrée 5 → 6. Le motif retient `migrate:` **exprès** : sans lui la sonde rend **deux** lignes, la seconde étant la docstring qui explique la première, et c'est le même faux positif que les sondes 3, 6, 7, 8 et 15 | `git grep -n "from: 5" -- packages/core/src/template/migrate.ts` **doit** rendre une ligne |
 | 13 | `git grep -nE "(BoxStyleSchema\|TypographySchema\|BoxBorderSchema)\.(extend\|pick\|omit)" -- packages` | **zéro** — un contrôle d'objet **ne survit pas** à ces trois appels, mesuré | `git grep -c "check(refuseEmptyStyle)" -- packages/core/src/style/schemas.ts` **doit** rendre **trois** |
 | 14 | `git grep -nE "widthMm\|heightMm" -- packages/core/src` | **zéro** — le lot ne stocke **aucune** dimension | `git grep -n "MIN_COLUMN_WIDTH" -- packages/core/src/ast` **doit** rendre au moins une ligne (le poids de colonne, lui, existe) |
+| 15 | `git grep -niE "the engine (will\|must\|repeats\|paginates\|decides)" -- packages/core/src \| grep -v '"the engine'` | **zéro** — **le critère mécanique de la décision 16, hérité de C4** : aucune docstring ne prescrit au moteur | `git grep -n "Repeated page after page by the engine" -- packages/core/src` **doit** rendre **zéro** aussi — c'est la prescription que C3 a dû retirer, et la contre-épreuve vérifie qu'elle n'est pas revenue |
 
 **Les quatre corrections, avec leur motif.**
 
@@ -1696,8 +1697,19 @@ parce qu'une sonde corrigée sans son motif se refera casser au lot suivant.
 4. **Sonde 8.** Chercher `bleed|gutter` sur `packages/core/src` rendait **treize lignes déjà avant ce
    lot** — le mot est un **nom de champ de sonde** dans les tests de `page/`, et il apparaît dans deux
    docstrings de `page/types.ts` qui expliquent que le besoin est couvert sans champ. La sonde ne rendait
-   donc pas zéro pour la mauvaise raison : elle ne rendait pas zéro du tout. La sonde corrigée cherche
-   une **déclaration de champ**.
+   donc pas zéro pour la mauvaise raison : elle ne rendait pas zéro du tout. La sonde corrigée cherche une
+   **déclaration de champ en début de ligne** — et il faut aller jusque-là, parce qu'une prose de test de
+   C4 **cite** l'annotation `readonly bleed?: number | undefined` entre accents graves pour raconter une
+   mesure. Un motif qui n'ancre pas le début de ligne attrape la citation.
+5. **Sonde 15, et c'est un critère HÉRITÉ dont ce lot découvre le faux positif.** C4 s'est imposé
+   `git grep -niE "the engine (will|must|repeats|paginates|decides)"` comme critère mécanique de sa
+   décision 16, et ce lot en hérite. **Joué tel quel, il ÉCHOUAIT DÉJÀ AVANT ce lot** : mesuré au commit
+   qui le précède, `expression/limits.ts` porte « *so "the engine will bound the time" is unkeepable
+   short of killing a worker* » — la phrase est **entre guillemets** et dit exactement le contraire d'une
+   prescription, puisqu'elle la déclare intenable. Le critère est donc corrigé plutôt que reconduit : il
+   exclut les occurrences **citées**. Et sa contre-épreuve n'est pas « au moins une ligne » mais « zéro
+   aussi », sur la prescription nommée que l'ADR 0005 a fait retirer de C3 — une contre-épreuve qui
+   vérifie qu'une faute réparée n'est pas revenue.
 
 **Ce que la définition de fini ne peut pas cocher**, et qui reste une revue : « deux factures
 visuellement très différentes », la conformité d'`App.tsx` (hors du glob de Vitest), et la justesse des
@@ -1731,6 +1743,7 @@ Un signalement est un fait constaté que **ce lot ne corrige pas**, avec la rais
 | **O** | **`style/types.ts` importe `../page/types.js` et NON le barrel `page/page.js`**, contre la convention que `page/page.ts` demande. Le barrel ferme un cycle ESM et rend `ReferenceError: Cannot access 'ContainerNodeSchema' before initialization` — **exit 0 aux portes 2 et 3, casse à la 4**, mesuré dans les deux sens | La dérogation est écrite **avec sa mesure**, dans la docstring de `MAX_FONT_SIZE_PT` et dans celle du barrel de `style/`. Et la règle générale qui en découle est énoncée : dans `core`, un import de **valeur** entre dossiers passe par le module **feuille**, pas par le barrel, dès que le dossier cible importe le dossier source |
 | **P** | **`ast/__tests__/table.test.ts` est un SECOND filet mécanique** sous l'estampille, qu'aucun document de reconnaissance ne citait. Il attrape un champ **optionnel** — ce qu'aucune paire `*_KEYS_IN_STEP` ne fait — **mais seulement parce que la fixture le porte** | Nommé comme **la forme générale du filet** : une assertion de liste de clés sur une fixture qui **porte** le champ. C'est plus fort qu'un `keyof` sur un site que la fixture ignore. Conséquence de rédaction : l'ordre d'insertion du champ dans la fixture est **porteur**, et le lot l'écrit dans le commentaire |
 | **Q** | **`Array.prototype.toSorted` est `TS2550` sous `lib: ["ES2022"]`**, et le diagnostic **suggère lui-même de desserrer le `tsconfig`** (« *Do you need to change your target library?* ») | C'est le cas d'école d'`AGENTS.md` §7 : **un compilateur qui propose la dérogation**. La réponse est `.sort()` sur le tableau frais de `Object.keys`, et la contrainte est **rencontrée plutôt qu'esquivée** |
+| **S** | Le **critère mécanique de C4** sur les prescriptions au moteur — `git grep -niE "the engine (will\|must\|…)"` — **échouait déjà avant ce lot**, sur `expression/limits.ts`, où la phrase est **citée** pour être déclarée intenable | Corrigé **en tant que sonde**, pas en tant que code : la ligne de `limits.ts` est juste, c'est le motif qui était trop large. La sonde 15 exclut désormais les occurrences citées, et sa contre-épreuve vérifie que la prescription que C3 a dû retirer n'est pas revenue |
 | **R** | Le **pre-commit** rapporte trois `suppressions/unused` sur trois `biome-ignore` **préexistants** d'`App.tsx`, là où `pnpm run lint` — la porte réelle — n'en rapporte aucun | Constaté, et **hors périmètre** : ces trois suppressions précèdent le lot, la porte de la CI est verte dans les deux états, et la divergence vient du chemin « contenu indexé » de Biome. Le lot **n'ajoute aucune suppression** de son côté |
 
 ---
