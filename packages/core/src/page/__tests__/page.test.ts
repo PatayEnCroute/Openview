@@ -40,8 +40,18 @@ import { RECIPE_PAGE } from './fixtures.js';
  * sidesteps the array variance that forces the assertion in `schemas.ts` to be
  * one-directional: `keyof` yields a union of strings, and `readonly` never enters it.
  *
- * The likeliest drift site is `Sheet` or `PageMargins`: lot C5 has a bleed and a gutter in
- * its declared future, and both are optional by nature.
+ * The likeliest drift site was said here to be `Sheet` or `PageMargins`, on the grounds that
+ * "lot C5 has a bleed and a gutter in its declared future". LOT C5 DECLINED BOTH, and this
+ * sentence was the ONLY place in the repository attributing them to it. ADR 0006 decision 13
+ * ranges the binding margin and the bleed in "un SILENCE que ce lot décide de ne pas rompre",
+ * which is not a declared future and is attributed to NOBODY; the need is moreover already
+ * covered with no field at all, `page/types.ts`: "Zero is legal -- a full-bleed label, or a
+ * template that manages its own gutter". A lot does not break a silence it did not open.
+ *
+ * The four pairs below stay, and they earned their keep elsewhere: lot C5 attaches a style to
+ * nine sites, and MEASURED, the type gate saw nine of this package's fifteen sites not at all
+ * before that lot wrote its own eight pairs in `ast/__tests__/nodes.test.ts`. `PageBand` was one
+ * of the six it DID see, thanks to the third pair here.
  */
 export const SHEET_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof SheetSchema>,
@@ -231,9 +241,27 @@ describe('the recipe page', () => {
       root: { type: 'container', id: 'racine', children: [] },
     };
 
-    expect(() => parseTemplate(noPage)).toThrow(
-      /Invalid input: expected object, received undefined/,
-    );
+    // ANCHORED ON THE PATH rather than on a substring of the aggregated message, and the reason
+    // is measured. With a REQUIRED field added to `Template`, the parse yields TWO issues, the new
+    // one BEFORE `page`, and an unanchored regular expression still matches -- so this test would
+    // stay GREEN while assuring nothing, which is worse than a red test because a red test is
+    // visible. Lot C5 adds no required field, so the hazard does not fire today; the anchor is a
+    // few lines, and it is preventive.
+    let caught: unknown;
+    try {
+      parseTemplate(noPage);
+    } catch (error: unknown) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(z.ZodError);
+    if (caught instanceof z.ZodError) {
+      expect(caught.issues).toHaveLength(1);
+      expect(caught.issues.map((issue) => issue.path)).toStrictEqual([['page']]);
+      expect(caught.issues.map((issue) => issue.message)).toStrictEqual([
+        'Invalid input: expected object, received undefined',
+      ]);
+    }
   });
 });
 

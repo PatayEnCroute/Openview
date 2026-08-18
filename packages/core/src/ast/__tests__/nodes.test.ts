@@ -124,8 +124,14 @@ export const TABLE_BODY_SCHEMA_IN_STEP: MutuallyAssignable<
  * *perte silencieuse* AGENTS.md 1.2 exists to prevent.
  *
  * `keyof` includes optional keys, so comparing key sets catches both directions for required
- * and optional fields alike. `TableCell` is first because it is the likeliest site: a per-cell
- * alignment override is lot C5's declared future.
+ * and optional fields alike.
+ *
+ * `TableCell` was said here to be the likeliest site, "a per-cell alignment override is lot C5's
+ * declared future". IT WAS NOT A DECLARED FUTURE: ADR 0005 wrote "s'IL la décide", a conditional
+ * reservation this comment hardened into a promise. Lot C5 delivered the override on the BLOCK IN
+ * THE CELL instead -- a cell is not a node, it has no `id`, and an editor Command cannot address
+ * it. THE PAIR STAYS, and it earned its place: it is one of the six sites that DID redden when a
+ * field was added to a schema alone, and it is what a future field on `TableCell` will meet.
  */
 export const TABLE_CELL_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof TableCellSchema>,

@@ -216,7 +216,16 @@ export interface ConditionNode extends NodeBase {
 }
 
 /**
- * How the cells of one column sit inside their column box (lot C3).
+ * The DEFAULT alignment the text blocks of this column's cells take when they declare none.
+ *
+ * NOT "how the cells sit in their column box", which is what this line used to say and what
+ * neither lot C3 nor lot C5 can honour: placing a CELL takes a table layout model, and a cell
+ * holding an image or a container shows it in one glance -- there is no run to align, and this
+ * contract declares no block width, so every block already fills its cell's content width and
+ * there is nothing left to move. The narrower reading is the one the contract can keep.
+ *
+ * The stored shape does not change by one character: this is a docstring correction, no
+ * migration is owed, and no existing document becomes invalid.
  *
  * `start | center | end` rather than `left | center | right`, and **nothing is resolved
  * here.** A column that stores `left` has already decided the writing direction of every
@@ -231,8 +240,24 @@ export interface ConditionNode extends NodeBase {
  * interdiction is already settled and is not reopened by it -- no engine derives that
  * direction from the machine it runs on (lot E6).
  *
- * Three members and no `justify`: justification stretches inter-word space, which is
- * typography, and typography is lot C5.
+ * Three members and no `justify`, and lot C5 kept it that way ON PURPOSE while DELIVERING the
+ * member elsewhere. An earlier version of this sentence promised `justify` to that lot; the
+ * promise is kept on {@link TEXT_ALIGNMENTS}, which this tuple is a strict subset of, and NOT
+ * here -- because a COLUMN justifies nothing. A column states the default its cells' text blocks
+ * take when they declare none, and it is the BLOCK that distributes inter-word space.
+ *
+ * The motive an earlier draft gave for refusing it outright -- "measuring words takes font
+ * metrics, which is reading the machine" -- PROVES TOO MUCH and is not repeated: centring a line
+ * takes the same metric, and `center` is a member here. What lot E6 forbids is reading the
+ * ENVIRONMENT, never measuring a font the engine loaded itself. What justification really costs
+ * is two CONVENTIONS -- the last line is not justified, and the slack goes between words, never
+ * between letters -- and this contract takes them, as it takes sRGB, in ADR 0007.
+ *
+ * Widening THIS tuple would moreover be a THIRD form of incompatibility, beside the two
+ * AGENTS.md 1.2 names: an older build meets `invalid_value` with the message
+ * `Invalid option: expected one of "start"|"center"|"end"` on a discriminant path -- more
+ * legible than "No matching discriminator", still with no typed error, no version named and no
+ * remedy. Measured.
  */
 export const TABLE_COLUMN_ALIGNMENTS = ['start', 'center', 'end'] as const;
 
@@ -302,7 +327,11 @@ export const MAX_COLUMN_WIDTH = 1000;
  * `sum` nor a `dateAdd`; (4) it asks the integrator to name no field of their data.
  *
  * Identity and width pass all four. A font, a rule, a background, a spacing fail the SECOND
- * -- they are written on any block whatsoever, and lot C5 defines them there. A number
+ * -- they are written on any block that OCCUPIES SPACE, and lot C5 defines them there. "That
+ * occupies space" is not a hedge added after the fact: it is the cut lot C5 actually made, and it
+ * excludes `loop`, `condition` and `tableRowGroup`, which produce N sequences, their children or
+ * nothing, so a box on them has no subject at all. The three of them are exactly the nodes
+ * carrying an `Expression` field directly. A number
  * format, a separator, a currency symbol, a display scale fail it too, and are lot C6's. A
  * total, a subtotal, an aggregation operator fail the THIRD. A header derived from a data
  * key, columns derived from the keys of the data, an alignment derived from the type of the
@@ -349,7 +378,21 @@ export interface TableColumn {
    * without one edit to the table.
    */
   readonly width: number;
-  /** Inherited by every cell of this column. A per-cell override belongs to lot C5. */
+  /**
+   * The DEFAULT of {@link TextNode.align} for the text blocks of this column's cells, and
+   * OVERRIDDEN BY THE BLOCK rather than by the cell.
+   *
+   * Lot C5 delivered the override announced here, at a different site: {@link TextNode.align},
+   * with `resolveTextAlign` as the one spelling of where the default comes from -- the block
+   * wins, this field is untouched. Not on {@link TableCell}, and the reason is a matter of form:
+   * a cell is not a node, it has no `id`, and an editor Command cannot address it. The block
+   * inside it is addressable.
+   *
+   * "The same fact under two names" is what an earlier draft called this pair, and it was wrong:
+   * this field defaults a whole column's text blocks, that one distributes ONE block's runs, and
+   * a cell holding an image has one of them and not the other. The two types differ accordingly
+   * -- {@link TextAlignment} adds `justify`, which is not declarable here.
+   */
   readonly align: TableColumnAlignment;
 }
 
@@ -492,12 +535,22 @@ export type TableBodyNode = TableRowNode | TableRowGroupNode;
  *
  * ## What it does not carry, and who does
  *
- * No border, no shading, no font, no spacing, no per-cell alignment override (lot C5). No
- * page format, no margins (lot C4). No "repeat the header on every page", no widow or orphan
- * policy, no page numbering VALUE and no carry-forward (lots E2 and E3 compute those; lot C4
- * lets a template PLACE a page number, with a `pageField` segment inside a page band -- see
- * page/). No number format, no currency, no display scale, no column type (lot C6). No
- * rounding default and no per-subtree rounding inheritance (ADR 0004 decision 8).
+ * A BORDER, A SHADING AND A SPACING IT NOW DOES CARRY: lot C5 put a `box` on this node, so the
+ * three refusals this paragraph used to list are no longer true and are not restated. What stays
+ * true is "no font" -- typography lives on the runs, never on a table -- and "no per-cell
+ * alignment override", which lot C5 delivered on the BLOCK IN THE CELL instead, see
+ * {@link TableColumn.align}. No page format, no margins (lot C4). No "repeat the header on every
+ * page", no widow or orphan policy, no page numbering VALUE and no carry-forward (lots E2 and E3
+ * compute those; lot C4 lets a template PLACE a page number, with a `pageField` segment inside a
+ * page band -- see page/). No number format, no currency, no display scale, no column type (lot
+ * C6). No rounding default and no per-subtree rounding inheritance (ADR 0004 decision 8).
+ *
+ * A WIDTH IS STILL NOT STORED, AND IT IS NO LONGER MISSING. A table occupies its parent's content
+ * width, its own `padding` is subtracted from that, and the column weights share the remainder --
+ * see {@link TableNode.box}. So {@link TableColumn.width}'s "of whatever width the table itself is
+ * given" now has an answer, and it needed one: without it the integer weights, whose whole purpose
+ * is "the same number in the preview and in the PDF", resolved against nothing. A HEIGHT is
+ * neither stored nor derived, and it cannot be: a row's height is measured on its content.
  */
 export interface TableNode extends NodeBase {
   readonly type: 'table';
