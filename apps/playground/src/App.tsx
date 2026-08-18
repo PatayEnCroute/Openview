@@ -1,5 +1,7 @@
 import {
   type BlockNode,
+  type BorderEdge,
+  type BoxStyle,
   CURRENT_SCHEMA_VERSION,
   childScope,
   collectTemplateDataPaths,
@@ -16,6 +18,7 @@ import {
   findNodeById,
   MAX_ROUND_DECIMALS,
   MIN_ROUND_DECIMALS,
+  mmFromPt,
   type PageBand,
   type PageBandOccurrence,
   type PageSetup,
@@ -26,18 +29,24 @@ import {
   type RoundExpression,
   RoundExpressionSchema,
   type RoundMode,
+  resolveTextAlign,
+  resolveTypography,
   STANDARD_SHEETS_MM,
   type TableCell,
   type TableColumn,
+  type TableColumnAlignment,
   type TableNode,
   type TableRowNode,
   type Template,
+  type TextAlignment,
   type TextNode,
   type TextSegment,
+  type Typography,
   visitNode,
   visitSegment,
   walk,
 } from '@openview/core';
+import type { CSSProperties, ReactNode } from 'react';
 
 // Exercises the core contract end to end: recursive parsing, Visitor traversal,
 // static path analysis, expression evaluation, loop scoping, the C1 algebra and the
@@ -197,263 +206,374 @@ const titre: PrintableExpression = {
 // `prixUnitaire`) sont ceux qu'une application intégratrice aurait choisis : Openview
 // n'en réserve aucun et n'en attend aucun. Le même moteur rend un relevé, un bon de
 // livraison ou un courrier avec un tout autre vocabulaire.
-const sampleTemplate = parseTemplate({
-  schemaVersion: CURRENT_SCHEMA_VERSION,
-  id: 'tpl_demo_1',
-  name: 'Facture Exemple',
-  version: '1.0.0',
-  // La feuille, ses marges et ses bandes — lot C4. Les dimensions ci-dessous sont celles
-  // d'une A4 PARCE QUE L'AUTEUR DU MODÈLE L'A ÉCRIT : Openview n'impose aucun format, n'en
-  // réserve aucun nom et n'en déduit aucun d'une locale — même règle que pour les noms de
-  // champs et les identifiants de colonnes. `STANDARD_SHEETS_MM` est une COMMODITÉ
-  // D'ÉCRITURE : elle est étalée ici, et le document, lui, n'enregistre que deux nombres.
-  // Ajouter un format à cette table ne change ni le schéma, ni la version, ni un document.
-  page: {
-    sheet: { ...STANDARD_SHEETS_MM.a4 },
-    margins: { top: 18, right: 15, bottom: 18, left: 15 },
-    header: [
-      {
-        on: 'every',
-        content: {
-          type: 'container',
-          id: 'bandeau',
-          children: [
-            {
-              type: 'text',
-              id: 'bandeau-titre',
-              content: [
-                { kind: 'literal', text: 'Commande ' },
-                { kind: 'binding', value: { kind: 'path', path: 'commande.numero' } },
-              ],
-            },
-          ],
-        },
-      },
-    ],
-    // Un pied COURANT et un pied de DERNIÈRE page. `every` + `lastOnly` serait refusé par le
-    // schéma — les deux tomberaient sur la dernière feuille —, donc le pied courant est
-    // `exceptLast`. C'est la seule écriture licite de cette intention, et c'est la raison
-    // d'exister de la troisième occurrence.
-    footer: [
-      {
-        on: 'exceptLast',
-        content: {
-          type: 'container',
-          id: 'pied',
-          children: [{ type: 'text', id: 'pied-num', content: PAGINATION }],
-        },
-      },
-      {
-        on: 'lastOnly',
-        content: {
-          type: 'container',
-          id: 'pied-dernier',
-          children: [
-            { type: 'text', id: 'pied-dernier-num', content: PAGINATION },
-            // Cette liaison est lue PAR LA BANDE ET PAR ELLE SEULE : aucun bloc du flux ne la
-            // porte. C'est ce qui rend visible, sur l'écran « Données requises » plus haut, la
-            // différence entre `collectTemplateDataPaths` et `collectDataPaths(root)` — sans
-            // elle, l'appelant ne fournirait pas la clé et le pied s'imprimerait vide.
-            {
-              type: 'text',
-              id: 'pied-mentions',
-              content: [
-                { kind: 'binding', value: { kind: 'path', path: 'societe.mentionsLegales' } },
-              ],
-            },
-          ],
-        },
-      },
-    ],
+/**
+ * Ce qu'une apparence déclare, et RIEN d'autre — lot C5.
+ *
+ * Sept entrées, toutes des formes du contrat : trois `BoxStyle`, trois `Typography` et un
+ * `TextAlignment`. Aucune n'est une propriété CSS : le CSS est DÉRIVÉ du nœud par
+ * `styleCssDe`, jamais l'inverse, et c'est ce sens de dérivation qui fait de cette page une
+ * démonstration du contrat plutôt qu'une feuille de style qui lui ressemble.
+ */
+interface Apparence {
+  readonly nom: string;
+  /** La boîte du conteneur racine : le cadre du document. */
+  readonly cadre: BoxStyle;
+  /** La bande d'en-tête du tableau — le SECOND dispositif de différenciation d'une facture. */
+  readonly bandeau: BoxStyle;
+  /** La boîte du tableau lui-même : c'est sa largeur de CONTENU que les poids se partagent. */
+  readonly tableau: BoxStyle;
+  readonly titre: Typography;
+  readonly corps: Typography;
+  /** Posée sur UN SEGMENT, jamais sur le bloc : c'est ce qui rend « Total : 1 200 € » exprimable. */
+  readonly accent: Typography;
+  /** `justify` n'est légal QUE sur un bloc de texte, jamais sur une colonne. */
+  readonly alignementMentions: TextAlignment;
+}
+
+/** Apparence A — bleu marine, un cadre complet, une bande claire, une serif. */
+const APPARENCE_A: Apparence = {
+  nom: 'A — marine, encadrée, serif',
+  cadre: {
+    background: '#FFFFFF',
+    border: {
+      top: { width: 0.4, color: '#1b3a6f' },
+      right: { width: 0.4, color: '#1b3a6f' },
+      bottom: { width: 0.4, color: '#1b3a6f' },
+      left: { width: 0.4, color: '#1b3a6f' },
+    },
+    padding: { top: 4, right: 4, bottom: 4, left: 4 },
   },
-  root: {
-    type: 'container',
-    id: 'root',
-    children: [
-      { type: 'text', id: 'title', content: [{ kind: 'binding', value: titre }] },
-      // Les cinq identifiants de colonne ci-dessous — `sku`, `quantite`, `prixUnitaire`,
-      // `montant`, `remise` — appellent le même avertissement que les noms de champs plus
-      // haut, adapté : ce sont un JEU D'ÉPREUVE, choisis par l'auteur du modèle. Openview
-      // n'impose aucun identifiant de colonne, et le premier tableau réellement décrit est
-      // celui qui sera recopié — le dépôt nomme déjà ce mécanisme, « position par défaut de
-      // fait ». Un relevé bancaire ou un bordereau se décrivent avec un tout autre
-      // vocabulaire, et le contrat est le même.
-      //
-      // Avant le lot C3, une ligne entière de facture était UN SEUL nœud texte dont les
-      // segments mimaient des colonnes (`line-label`). Rien ne disait qu'il y avait des
-      // colonnes, aucune largeur, aucun alignement, et l'en-tête n'existait pas.
-      {
-        type: 'table',
-        id: 'lignes',
-        columns: [
-          { id: 'sku', width: 6, align: 'start' },
-          { id: 'quantite', width: 2, align: 'end' },
-          { id: 'prixUnitaire', width: 3, align: 'end' },
-          { id: 'montant', width: 3, align: 'end' },
-          { id: 'remise', width: 4, align: 'start' },
-        ],
-        header: [
-          {
-            type: 'tableRow',
-            id: 'entete',
-            cells: [
-              { columnId: 'sku', children: [txt('th-sku', 'Référence')] },
-              { columnId: 'quantite', children: [txt('th-quantite', 'Qté')] },
-              { columnId: 'prixUnitaire', children: [txt('th-prix', 'Prix unitaire')] },
-              { columnId: 'montant', children: [txt('th-montant', 'Montant')] },
-              { columnId: 'remise', children: [txt('th-remise', 'Remise')] },
-            ],
-          },
-        ],
-        body: [
-          {
-            type: 'tableRowGroup',
-            id: 'corps',
-            each: { kind: 'path', path: 'commande.lignes' },
-            as: 'line',
-            rows: [
+  bandeau: { background: '#eef2f9', padding: { top: 1.2, right: 1.2, bottom: 1.2, left: 1.2 } },
+  tableau: { border: { bottom: { width: 0.28, color: '#1b3a6f' } } },
+  titre: { family: 'Georgia, serif', sizePt: 17, bold: true, color: '#1b3a6f' },
+  corps: { family: 'Georgia, serif', sizePt: 9.5, color: '#22262b' },
+  accent: { bold: true, color: '#1b3a6f' },
+  alignementMentions: 'start',
+};
+
+/**
+ * Apparence B — rouille, aucun cadre, un seul filet, une sans-serif, mentions JUSTIFIÉES.
+ *
+ * La casse HAUTE des couleurs est délibérée : les deux casses sont légales, et une fixture est
+ * l'endroit où cette décision s'exerce plutôt que de rester écrite. Le contrat ne replie pas la
+ * casse au parse — un consommateur qui compare deux couleurs la replie lui-même.
+ */
+const APPARENCE_B: Apparence = {
+  nom: 'B — rouille, sans cadre, sans-serif, mentions justifiées',
+  cadre: { padding: { top: 2, right: 0, bottom: 2, left: 0 } },
+  bandeau: { border: { bottom: { width: 1.2, color: '#8C3A1B' } } },
+  tableau: {},
+  titre: { family: 'Inter, system-ui, sans-serif', sizePt: 13, italic: true, color: '#8C3A1B' },
+  corps: { family: 'Inter, system-ui, sans-serif', sizePt: 8.5, color: '#3A3A3A' },
+  accent: { color: '#8C3A1B' },
+  alignementMentions: 'justify',
+};
+
+/**
+ * Le modèle, PARAMÉTRÉ PAR SON APPARENCE — et c'est le geste central de cette démonstration.
+ *
+ * Le critère de recette demande « deux factures visuellement très différentes à partir d'un seul
+ * jeu de données ». Écrire deux littéraux à la main le satisferait à l'œil et prouverait moins :
+ * rien ne garantirait que la structure, les identifiants et les liaisons soient les mêmes. Une
+ * FONCTION rend l'identité structurelle MÉCANIQUE — un seul arbre, un seul jeu de liaisons, et la
+ * seule chose qui varie est ce que le lot C5 a ajouté. C'est aussi ce qui fait de l'égalité des
+ * deux listes de `collectTemplateDataPaths` un résultat plutôt qu'une coïncidence.
+ *
+ * ⚠️ `tableau` vaut `{}` dans l'apparence B, et le contrat REFUSE un objet de style vide : la
+ * forme canonique de « aucun style » est le champ ABSENT. C'est pourquoi les champs ci-dessous
+ * passent par `siNonVide`, qui est exactement le normalisateur que le contrat demande au
+ * PRODUCTEUR — « un producteur qui normalise vaut mieux que N consommateurs qui normalisent ».
+ */
+const siNonVide = (style: BoxStyle | Typography): BoxStyle | Typography | undefined =>
+  Object.values(style).some((entree) => entree !== undefined) ? style : undefined;
+
+const factureAvecApparence = (a: Apparence): Template =>
+  parseTemplate({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    id: 'tpl_demo_1',
+    name: 'Facture Exemple',
+    version: '1.0.0',
+    // La feuille, ses marges et ses bandes — lot C4. Les dimensions ci-dessous sont celles
+    // d'une A4 PARCE QUE L'AUTEUR DU MODÈLE L'A ÉCRIT : Openview n'impose aucun format, n'en
+    // réserve aucun nom et n'en déduit aucun d'une locale — même règle que pour les noms de
+    // champs et les identifiants de colonnes. `STANDARD_SHEETS_MM` est une COMMODITÉ
+    // D'ÉCRITURE : elle est étalée ici, et le document, lui, n'enregistre que deux nombres.
+    // Ajouter un format à cette table ne change ni le schéma, ni la version, ni un document.
+    page: {
+      sheet: { ...STANDARD_SHEETS_MM.a4 },
+      margins: { top: 18, right: 15, bottom: 18, left: 15 },
+      header: [
+        {
+          on: 'every',
+          content: {
+            type: 'container',
+            id: 'bandeau',
+            // Une bande a le style GRATUITEMENT : `PageBand.content` EST un `ContainerNode`,
+            // donc pas une ligne de `page/` n'a bougé pour que ceci soit exprimable.
+            box: siNonVide(a.bandeau),
+            children: [
               {
-                type: 'tableRow',
-                id: 'ligne-detail',
-                cells: [
+                type: 'text',
+                id: 'bandeau-titre',
+                typography: a.corps,
+                content: [
+                  { kind: 'literal', text: 'Commande ' },
                   {
-                    columnId: 'sku',
-                    children: [
-                      {
-                        type: 'text',
-                        id: 'td-sku',
-                        content: [{ kind: 'binding', value: { kind: 'path', path: 'line.sku' } }],
-                      },
-                    ],
-                  },
-                  {
-                    columnId: 'quantite',
-                    children: [
-                      {
-                        type: 'text',
-                        id: 'td-quantite',
-                        content: [
-                          { kind: 'binding', value: { kind: 'path', path: 'line.quantite' } },
-                        ],
-                      },
-                    ],
-                  },
-                  {
-                    columnId: 'prixUnitaire',
-                    children: [
-                      {
-                        type: 'text',
-                        id: 'td-prix',
-                        content: [
-                          { kind: 'binding', value: { kind: 'path', path: 'line.prixUnitaire' } },
-                        ],
-                      },
-                    ],
-                  },
-                  {
-                    columnId: 'montant',
-                    children: [
-                      {
-                        type: 'text',
-                        id: 'td-montant',
-                        content: [{ kind: 'binding', value: lineAmount }],
-                      },
-                    ],
-                  },
-                  // Une cellule contient des BLOCS, pas des segments : la condition qui
-                  // portait la note de remise vit désormais DANS la cellule, et le parcours
-                  // l'atteint quand même — `childrenOf` aplatit la frontière de cellule.
-                  {
-                    columnId: 'remise',
-                    children: [
-                      {
-                        type: 'condition',
-                        id: 'discounted',
-                        when: discountApplies,
-                        children: [
-                          {
-                            type: 'text',
-                            id: 'discount-note',
-                            content: [
-                              { kind: 'literal', text: 'Remise appliquée : ' },
-                              {
-                                kind: 'binding',
-                                value: { kind: 'path', path: 'line.discount' },
-                              },
-                            ],
-                          },
-                        ],
-                      },
-                    ],
+                    kind: 'binding',
+                    value: { kind: 'path', path: 'commande.numero' },
+                    typography: a.accent,
                   },
                 ],
               },
             ],
           },
-        ],
-        footer: [
-          // UNE LIGNE COURTE : deux cellules pour cinq colonnes. Licite par construction, et
-          // c'est exactement la forme d'une ligne de total — l'appariement positionnel que ce
-          // contrat a refusé aurait exigé trois cellules de remplissage vides ici.
-          //
-          // Le total est une EXPRESSION DU MODÈLE, visible dans l'arbre. Le tableau ne somme
-          // rien : son `footer` n'a nulle part où poser un agrégat.
-          {
-            type: 'tableRow',
-            id: 'ligne-total',
-            cells: [
-              { columnId: 'sku', children: [txt('tf-libelle', 'Total HT')] },
+        },
+      ],
+      // Un pied COURANT et un pied de DERNIÈRE page. `every` + `lastOnly` serait refusé par le
+      // schéma — les deux tomberaient sur la dernière feuille —, donc le pied courant est
+      // `exceptLast`. C'est la seule écriture licite de cette intention, et c'est la raison
+      // d'exister de la troisième occurrence.
+      footer: [
+        {
+          on: 'exceptLast',
+          content: {
+            type: 'container',
+            id: 'pied',
+            children: [{ type: 'text', id: 'pied-num', content: PAGINATION }],
+          },
+        },
+        {
+          on: 'lastOnly',
+          content: {
+            type: 'container',
+            id: 'pied-dernier',
+            children: [
+              { type: 'text', id: 'pied-dernier-num', content: PAGINATION },
+              // Cette liaison est lue PAR LA BANDE ET PAR ELLE SEULE : aucun bloc du flux ne la
+              // porte. C'est ce qui rend visible, sur l'écran « Données requises » plus haut, la
+              // différence entre `collectTemplateDataPaths` et `collectDataPaths(root)` — sans
+              // elle, l'appelant ne fournirait pas la clé et le pied s'imprimerait vide.
               {
-                columnId: 'montant',
-                children: [
-                  {
-                    type: 'text',
-                    id: 'tf-montant',
-                    content: [{ kind: 'binding', value: totalHT }],
-                  },
+                type: 'text',
+                id: 'pied-mentions',
+                content: [
+                  { kind: 'binding', value: { kind: 'path', path: 'societe.mentionsLegales' } },
                 ],
               },
             ],
           },
-        ],
-      },
-      {
-        type: 'text',
-        id: 'totals',
-        content: [
-          { kind: 'literal', text: 'Total HT ' },
-          { kind: 'binding', value: totalHT },
-          { kind: 'literal', text: ' — remise ' },
-          { kind: 'binding', value: remise },
-          { kind: 'literal', text: ' — reste à payer ' },
-          { kind: 'binding', value: restePayer },
-          { kind: 'literal', text: ' — prix moyen ' },
-          { kind: 'binding', value: prixMoyen },
-        ],
-      },
-      {
-        type: 'text',
-        id: 'dates',
-        content: [
-          { kind: 'literal', text: 'Échéance ' },
-          { kind: 'binding', value: echeance },
-          { kind: 'literal', text: ' — 45 jours fin de mois ' },
-          { kind: 'binding', value: echeanceFinDeMois },
-          { kind: 'literal', text: ' — jours de retard ' },
-          { kind: 'binding', value: joursRetard },
-        ],
-      },
-      {
-        type: 'text',
-        id: 'discount-count',
-        content: [
-          { kind: 'literal', text: 'Lignes remisées ' },
-          { kind: 'binding', value: lignesRemisees },
-        ],
-      },
-    ],
-  },
-});
+        },
+      ],
+    },
+    root: {
+      type: 'container',
+      id: 'root',
+      box: siNonVide(a.cadre),
+      children: [
+        {
+          type: 'text',
+          id: 'title',
+          typography: a.titre,
+          content: [{ kind: 'binding', value: titre }],
+        },
+        // Les cinq identifiants de colonne ci-dessous — `sku`, `quantite`, `prixUnitaire`,
+        // `montant`, `remise` — appellent le même avertissement que les noms de champs plus
+        // haut, adapté : ce sont un JEU D'ÉPREUVE, choisis par l'auteur du modèle. Openview
+        // n'impose aucun identifiant de colonne, et le premier tableau réellement décrit est
+        // celui qui sera recopié — le dépôt nomme déjà ce mécanisme, « position par défaut de
+        // fait ». Un relevé bancaire ou un bordereau se décrivent avec un tout autre
+        // vocabulaire, et le contrat est le même.
+        //
+        // Avant le lot C3, une ligne entière de facture était UN SEUL nœud texte dont les
+        // segments mimaient des colonnes (`line-label`). Rien ne disait qu'il y avait des
+        // colonnes, aucune largeur, aucun alignement, et l'en-tête n'existait pas.
+        {
+          type: 'table',
+          id: 'lignes',
+          box: siNonVide(a.tableau),
+          columns: [
+            { id: 'sku', width: 6, align: 'start' },
+            { id: 'quantite', width: 2, align: 'end' },
+            { id: 'prixUnitaire', width: 3, align: 'end' },
+            { id: 'montant', width: 3, align: 'end' },
+            { id: 'remise', width: 4, align: 'start' },
+          ],
+          header: [
+            {
+              type: 'tableRow',
+              id: 'entete',
+              box: siNonVide(a.bandeau),
+              cells: [
+                { columnId: 'sku', children: [txt('th-sku', 'Référence')] },
+                { columnId: 'quantite', children: [txt('th-quantite', 'Qté')] },
+                { columnId: 'prixUnitaire', children: [txt('th-prix', 'Prix unitaire')] },
+                { columnId: 'montant', children: [txt('th-montant', 'Montant')] },
+                { columnId: 'remise', children: [txt('th-remise', 'Remise')] },
+              ],
+            },
+          ],
+          body: [
+            {
+              type: 'tableRowGroup',
+              id: 'corps',
+              each: { kind: 'path', path: 'commande.lignes' },
+              as: 'line',
+              rows: [
+                {
+                  type: 'tableRow',
+                  id: 'ligne-detail',
+                  cells: [
+                    {
+                      columnId: 'sku',
+                      children: [
+                        {
+                          type: 'text',
+                          id: 'td-sku',
+                          content: [{ kind: 'binding', value: { kind: 'path', path: 'line.sku' } }],
+                        },
+                      ],
+                    },
+                    {
+                      columnId: 'quantite',
+                      children: [
+                        {
+                          type: 'text',
+                          id: 'td-quantite',
+                          content: [
+                            { kind: 'binding', value: { kind: 'path', path: 'line.quantite' } },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      columnId: 'prixUnitaire',
+                      children: [
+                        {
+                          type: 'text',
+                          id: 'td-prix',
+                          content: [
+                            { kind: 'binding', value: { kind: 'path', path: 'line.prixUnitaire' } },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      columnId: 'montant',
+                      children: [
+                        {
+                          type: 'text',
+                          id: 'td-montant',
+                          content: [{ kind: 'binding', value: lineAmount }],
+                        },
+                      ],
+                    },
+                    // Une cellule contient des BLOCS, pas des segments : la condition qui
+                    // portait la note de remise vit désormais DANS la cellule, et le parcours
+                    // l'atteint quand même — `childrenOf` aplatit la frontière de cellule.
+                    {
+                      columnId: 'remise',
+                      children: [
+                        {
+                          type: 'condition',
+                          id: 'discounted',
+                          when: discountApplies,
+                          children: [
+                            {
+                              type: 'text',
+                              id: 'discount-note',
+                              content: [
+                                { kind: 'literal', text: 'Remise appliquée : ' },
+                                {
+                                  kind: 'binding',
+                                  value: { kind: 'path', path: 'line.discount' },
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          footer: [
+            // UNE LIGNE COURTE : deux cellules pour cinq colonnes. Licite par construction, et
+            // c'est exactement la forme d'une ligne de total — l'appariement positionnel que ce
+            // contrat a refusé aurait exigé trois cellules de remplissage vides ici.
+            //
+            // Le total est une EXPRESSION DU MODÈLE, visible dans l'arbre. Le tableau ne somme
+            // rien : son `footer` n'a nulle part où poser un agrégat.
+            {
+              type: 'tableRow',
+              id: 'ligne-total',
+              cells: [
+                { columnId: 'sku', children: [txt('tf-libelle', 'Total HT')] },
+                {
+                  columnId: 'montant',
+                  children: [
+                    {
+                      type: 'text',
+                      id: 'tf-montant',
+                      content: [{ kind: 'binding', value: totalHT }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'text',
+          id: 'totals',
+          typography: a.corps,
+          align: 'end',
+          content: [
+            { kind: 'literal', text: 'Total HT ' },
+            { kind: 'binding', value: totalHT, typography: a.accent },
+            { kind: 'literal', text: ' — remise ' },
+            { kind: 'binding', value: remise },
+            { kind: 'literal', text: ' — reste à payer ' },
+            { kind: 'binding', value: restePayer },
+            { kind: 'literal', text: ' — prix moyen ' },
+            { kind: 'binding', value: prixMoyen },
+          ],
+        },
+        {
+          type: 'text',
+          id: 'dates',
+          typography: a.corps,
+          align: a.alignementMentions,
+          content: [
+            { kind: 'literal', text: 'Échéance ' },
+            { kind: 'binding', value: echeance },
+            { kind: 'literal', text: ' — 45 jours fin de mois ' },
+            { kind: 'binding', value: echeanceFinDeMois },
+            { kind: 'literal', text: ' — jours de retard ' },
+            { kind: 'binding', value: joursRetard },
+          ],
+        },
+        {
+          type: 'text',
+          id: 'discount-count',
+          typography: a.corps,
+          align: a.alignementMentions,
+          content: [
+            { kind: 'literal', text: 'Lignes remisées ' },
+            { kind: 'binding', value: lignesRemisees, typography: a.accent },
+          ],
+        },
+      ],
+    },
+  });
+
+/**
+ * Les deux factures. MÊME structure, MÊMES identifiants, MÊME jeu de données — et le seul écart
+ * est l'apparence, ce que le lot C5 vient d'ajouter au contrat.
+ */
+const sampleTemplate = factureAvecApparence(APPARENCE_A);
+const factureVariante = factureAvecApparence(APPARENCE_B);
 
 // Le jeu de données de l'application hôte. Sa structure et ses noms de champs lui
 // appartiennent ; `core` ne les connaît pas et ne les valide pas. AUCUN MONTANT n'y
@@ -677,24 +797,313 @@ function texteDeSegments(
   scope: EvaluationScope,
   budget: EvaluationBudget,
 ): string {
-  return segments
-    .map((segment) =>
-      visitSegment(segment, {
-        literal: (literal) => literal.text,
-        binding: (binding) => {
-          const value = evaluateExpression(binding.value, scope, { budget });
-          // Une donnée absente rend une cellule vide. L'ADR 0001 laisse la politique de la
-          // valeur absente ouverte, et une cellule de tableau n'est pas l'endroit où la
-          // trancher : `rawSegments` garde le `(absent)` explicite pour les sections de dump.
-          return value === undefined ? '' : String(value);
-        },
-        // Même raison qu'au-dessus : pas de paginateur, donc pas de valeur. `1` est un espace
-        // réservé, et la page le dit en toutes lettres plutôt que de faire croire à un calcul.
-        pageField: () => '1',
-      }),
-    )
+  return runsDeSegments(segments, scope, budget, undefined)
+    .map((run) => run.texte)
     .join('');
 }
+
+/** Un run prêt à peindre : son texte, et la typographie RÉSOLUE qui s'y applique. */
+interface RunAffiche {
+  readonly texte: string;
+  readonly typographie: Typography;
+}
+
+/**
+ * Les runs d'un bloc texte, chacun avec sa typographie résolue — lot C5.
+ *
+ * ## Pourquoi cette fonction existe, et pourquoi `texteDeSegments` en dérive
+ *
+ * `typography` vit sur LE SEGMENT autant que sur le bloc, donc « Total : **1 200 €** » — une
+ * graisse à l'intérieur d'une phrase — n'est peignable qu'avec un élément par run. Le rendu
+ * passe donc du texte au `<span>`, et le parcours des segments reste écrit UNE FOIS : la
+ * version texte n'est plus qu'une projection de celle-ci. Deux parcours auraient été deux
+ * orthographes d'un même fait, avec le droit de diverger sur la valeur absente.
+ *
+ * La résolution est `resolveTypography` DU CONTRAT, jamais un `??` réécrit ici. Ce que la
+ * fonction exportée garantit n'est pas une garantie de bit — `a ?? b` n'a aucun hasard
+ * numérique — mais une garantie d'UNICITÉ : il n'existe qu'une orthographe de « le style du run
+ * gagne sur celui du bloc », et ce fichier est un consommateur nommé de cette unicité.
+ */
+function runsDeSegments(
+  segments: readonly TextSegment[],
+  scope: EvaluationScope,
+  budget: EvaluationBudget,
+  bloc: Typography | undefined,
+): readonly RunAffiche[] {
+  return segments.map((segment) => {
+    const texte = visitSegment(segment, {
+      literal: (literal) => literal.text,
+      binding: (binding) => {
+        const value = evaluateExpression(binding.value, scope, { budget });
+        // Une donnée absente rend une cellule vide. L'ADR 0001 laisse la politique de la
+        // valeur absente ouverte, et une cellule de tableau n'est pas l'endroit où la
+        // trancher : `rawSegments` garde le `(absent)` explicite pour les sections de dump.
+        return value === undefined ? '' : String(value);
+      },
+      // Même raison qu'au-dessus : pas de paginateur, donc pas de valeur. `1` est un espace
+      // réservé, et la page le dit en toutes lettres plutôt que de faire croire à un calcul.
+      pageField: () => '1',
+    });
+    const typographie = resolveTypography({
+      run: visitSegment<Typography | undefined>(segment, {
+        literal: (literal) => literal.typography,
+        binding: (binding) => binding.typography,
+        pageField: (marqueur) => marqueur.typography,
+      }),
+      block: bloc,
+    });
+    return { texte, typographie };
+  });
+}
+
+/**
+ * L'échelle des deux factures peintes plus bas : des PIXELS PAR MILLIMÈTRE.
+ *
+ * Déclarée, et déclarée ici, parce que tout ce que le lot C5 stocke est en millimètres — sauf
+ * une taille de caractère, qui est en points. C'est ce qui rend la conversion du contrat
+ * réellement porteuse dans ce fichier plutôt que décorative : `fontSize: '10pt'` aurait marché
+ * en CSS et n'aurait rien démontré.
+ */
+const PX_PAR_MM = 2.6;
+
+/**
+ * Le CSS d'un nœud, DÉRIVÉ de ce que le nœud déclare — jamais l'inverse.
+ *
+ * C'est le sens de la dérivation qui compte. Une feuille de style écrite à la main à côté du
+ * modèle ressemblerait au résultat et ne prouverait rien ; ici, chaque propriété vient d'un champ
+ * que le contrat porte, et retirer le champ du modèle éteint la propriété.
+ *
+ * ## La conversion vient du CONTRAT, et c'est une dépendance plutôt qu'une convention
+ *
+ * `mmFromPt` est importée, pas réécrite. Le motif est mesuré et il est le même que celui de
+ * `printableAreaOf` : `(pt * 25.4) / 72` et `pt * (25.4 / 72)` rendent deux doubles différents
+ * pour 31,5 % des tailles entières, et la décision produit 7 promet un aperçu IDENTIQUE au PDF.
+ * Une conversion réécrite ici casserait cette promesse en silence. Ce fichier est le premier
+ * consommateur nommé de cette fonction.
+ *
+ * ## Ce que cette fonction NE fait PAS
+ *
+ * Elle n'invente aucune valeur par défaut. Un champ absent laisse la propriété CSS absente, et
+ * c'est le navigateur qui décide — ce qui est exactement la dette que l'ADR 0007 nomme pour les
+ * cinq valeurs typographiques qu'un run peut ne pas déclarer. Écrire un défaut ici serait écrire
+ * une règle de rendu dans une démonstration, au lieu de montrer le trou.
+ */
+function styleCssDe(box: BoxStyle | undefined, typo: Typography | undefined): CSSProperties {
+  const mm = (valeur: number): string => `${valeur * PX_PAR_MM}px`;
+  const filet = (arete: BorderEdge | undefined): string | undefined =>
+    arete === undefined ? undefined : `${arete.width * PX_PAR_MM}px solid ${arete.color}`;
+
+  return {
+    backgroundColor: box?.background,
+    borderTop: filet(box?.border?.top),
+    borderRight: filet(box?.border?.right),
+    borderBottom: filet(box?.border?.bottom),
+    borderLeft: filet(box?.border?.left),
+    paddingTop: box?.padding === undefined ? undefined : mm(box.padding.top),
+    paddingRight: box?.padding === undefined ? undefined : mm(box.padding.right),
+    paddingBottom: box?.padding === undefined ? undefined : mm(box.padding.bottom),
+    paddingLeft: box?.padding === undefined ? undefined : mm(box.padding.left),
+    fontFamily: typo?.family,
+    // Points -> millimètres par la conversion DU CONTRAT, puis millimètres -> pixels par
+    // l'échelle déclarée. Deux étapes, une seule orthographe de la première.
+    fontSize: typo?.sizePt === undefined ? undefined : mm(mmFromPt(typo.sizePt)),
+    fontWeight: typo?.bold === undefined ? undefined : typo.bold ? 700 : 400,
+    fontStyle: typo?.italic === undefined ? undefined : typo.italic ? 'italic' : 'normal',
+    color: typo?.color,
+  };
+}
+
+/** `start`/`end` restent tels quels : CSS les connaît, et rien n'est résolu ici. */
+const alignementCss = (align: TextAlignment | undefined): CSSProperties['textAlign'] => align;
+
+/**
+ * Apparie chaque élément d'une liste à une clé stable DANS CETTE LISTE.
+ *
+ * Un identifiant de nœud ne suffit pas, et c'est une propriété du contrat plutôt qu'un défaut :
+ * deux itérations d'une boucle rendent le MÊME id, puisque c'est le même sous-arbre répété. La
+ * position dans la liste rendue est donc la seule chose qui les distingue, et la calculer ICI
+ * plutôt que dans le JSX permet d'écrire la raison une fois au lieu de la répéter à chaque site.
+ */
+const avecCle = <T,>(
+  items: readonly T[],
+  nom: (item: T) => string,
+): readonly { readonly cle: string; readonly item: T }[] =>
+  items.map((item, index) => ({ cle: `${nom(item)}#${index}`, item }));
+
+/**
+ * Peint un bloc, AU SEGMENT, avec ce que le modèle déclare et rien de plus.
+ *
+ * ## Ce que cette fonction démontre, et ce qu'elle ne peut pas démontrer
+ *
+ * Elle démontre que l'apparence est ENTIÈREMENT dans le document : le même appel, sur deux
+ * modèles qui ne diffèrent que par leur apparence, rend deux factures très différentes. Elle ne
+ * démontre RIEN sur la pagination, la coupe, la fusion de deux filets adjacents ou la place d'une
+ * image sans dimension : ce sont les attentes que l'ADR 0007 nomme envers le moteur, et cette page
+ * n'est pas un moteur.
+ *
+ * Le parcours passe par `visitNode`, et les huit branches sont nommées : un neuvième type de bloc
+ * casse la compilation ICI, à un site unique.
+ */
+function Bloc({
+  bloc,
+  scope,
+  budget,
+  colonne,
+}: {
+  readonly bloc: BlockNode;
+  readonly scope: EvaluationScope;
+  readonly budget: EvaluationBudget;
+  readonly colonne?: TableColumnAlignment | undefined;
+}) {
+  const enfants = (blocs: readonly BlockNode[], portee: EvaluationScope = scope) =>
+    avecCle(blocs, (enfant) => enfant.id).map(({ cle, item }) => (
+      <Bloc key={cle} bloc={item} scope={portee} budget={budget} />
+    ));
+
+  return visitNode<ReactNode>(bloc, {
+    text: (texte) => (
+      <div
+        style={{
+          ...styleCssDe(texte.box, undefined),
+          // La précédence vient du CONTRAT : `resolveTextAlign` est la seule orthographe de
+          // « d'où vient le défaut », et la colonne n'est qu'un défaut.
+          textAlign: alignementCss(resolveTextAlign({ text: texte.align, column: colonne })),
+        }}
+      >
+        {/* Un <span> PAR RUN, parce que `typography` vit sur le segment autant que sur le
+            bloc : c'est ce qui rend « Total : 1 200 € » -- une graisse à l'intérieur d'une
+            phrase -- exprimable, et c'est nommément ce que l'ADR 0002 avait laissé ouvert. */}
+        {avecCle(
+          runsDeSegments(texte.content, scope, budget, texte.typography),
+          (run) => run.texte,
+        ).map(({ cle, item }) => (
+          <span key={cle} style={styleCssDe(undefined, item.typographie)}>
+            {item.texte}
+          </span>
+        ))}
+      </div>
+    ),
+    image: (image) => <div style={styleCssDe(image.box, undefined)}>{image.alt ?? image.src}</div>,
+    container: (conteneur) => (
+      <div style={styleCssDe(conteneur.box, undefined)}>{enfants(conteneur.children)}</div>
+    ),
+    // `null` et non un fragment vide : une condition fausse ne rend RIEN, et le dire avec
+    // `null` est ce qui distingue « rien » de « un élément qui se trouve être vide ».
+    condition: (condition) =>
+      evaluatePredicate(condition.when, scope, { budget }) ? enfants(condition.children) : null,
+    loop: (boucle) =>
+      avecCle(evaluateSequence(boucle.each, scope, { budget }), () => boucle.as).map(
+        ({ cle, item }) => (
+          // L'alias est lié ICI, dans la portée de l'itération : c'est `childScope` DU CONTRAT,
+          // et non une portée recomposée à la main -- ce qui est exactement ce que l'ADR 0002 a
+          // corrigé quand cette page inventait `{ line }` elle-même.
+          <div key={cle}>{enfants(boucle.children, childScope(scope, boucle.as, item))}</div>
+        ),
+      ),
+    table: (tableau) => <Tableau tableau={tableau} scope={scope} budget={budget} />,
+    tableRow: (ligne) => <div>[ligne {ligne.id} hors d'un tableau]</div>,
+    tableRowGroup: (groupe) => <div>[groupe {groupe.id} hors d'un tableau]</div>,
+  });
+}
+
+/**
+ * Peint un tableau : les trois sections nommées, les poids de colonne, et les trois `box`.
+ *
+ * Le `padding` du tableau est retranché de sa largeur AVANT que les poids se la partagent, et le
+ * `padding` d'une LIGNE insète le contenu de chaque cellule sans déplacer aucune frontière de
+ * colonne. Ce sont les deux phrases du modèle de boîte que le contrat a dû écrire, et cette
+ * fonction est ce qui les rend visibles : c'est `box-sizing: border-box` sur le tableau, et un
+ * padding porté par la CELLULE et non par la bande.
+ */
+function Tableau({
+  tableau,
+  scope,
+  budget,
+}: {
+  readonly tableau: TableNode;
+  readonly scope: EvaluationScope;
+  readonly budget: EvaluationBudget;
+}) {
+  const parts = partsDeLargeur(tableau.columns);
+  const ligne = (row: TableRowNode, portee: EvaluationScope, cle: string) => (
+    <tr key={cle} style={{ backgroundColor: row.box?.background }}>
+      {tableau.columns.map((column, index) => {
+        // Une cellule NOMME sa colonne : la recherche est par clé, jamais par position. C'est
+        // exactement ce que la docstring de `TableCell` dit que l'appariement par clé a supprimé.
+        const cellule = row.cells.find((candidate) => candidate.columnId === column.id);
+        return (
+          <td
+            key={column.id}
+            style={{
+              width: parts[index],
+              verticalAlign: 'top',
+              // ④ du modèle de boîte : le `padding` d'une LIGNE insète le contenu de CHAQUE
+              // CELLULE, à l'identique, et ne déplace AUCUNE frontière de colonne. Insérer la
+              // bande entière désalignerait l'en-tête du corps — le défaut que le lot existe
+              // pour empêcher.
+              ...styleCssDe(
+                row.box?.padding === undefined ? undefined : { padding: row.box.padding },
+                undefined,
+              ),
+              borderTop: row.box?.border?.top
+                ? `${row.box.border.top.width * PX_PAR_MM}px solid ${row.box.border.top.color}`
+                : undefined,
+              borderBottom: row.box?.border?.bottom
+                ? `${row.box.border.bottom.width * PX_PAR_MM}px solid ${row.box.border.bottom.color}`
+                : undefined,
+              textAlign: alignementCss(column.align),
+            }}
+          >
+            {avecCle(cellule?.children ?? [], (enfant) => enfant.id).map(({ cle, item }) => (
+              <Bloc key={cle} bloc={item} scope={portee} budget={budget} colonne={column.align} />
+            ))}
+          </td>
+        );
+      })}
+    </tr>
+  );
+
+  return (
+    <table
+      style={{
+        // ③ : les poids se résolvent contre la largeur de CONTENU du tableau, donc son
+        // `padding` est retranché AVANT le partage. `border-box` est ce qui l'exprime en CSS.
+        boxSizing: 'border-box',
+        width: '100%',
+        borderCollapse: 'collapse',
+        ...styleCssDe(tableau.box, undefined),
+      }}
+    >
+      <thead>{tableau.header.map((row) => ligne(row, scope, `h-${row.id}`))}</thead>
+      <tbody>
+        {tableau.body.flatMap((entree) =>
+          entree.type === 'tableRow'
+            ? [ligne(entree, scope, `b-${entree.id}`)]
+            : avecCle(evaluateSequence(entree.each, scope, { budget }), () => entree.id).flatMap(
+                ({ cle, item }) =>
+                  entree.rows.map((row) =>
+                    ligne(row, childScope(scope, entree.as, item), `b-${cle}-${row.id}`),
+                  ),
+              ),
+        )}
+      </tbody>
+      <tfoot>{tableau.footer.map((row) => ligne(row, scope, `f-${row.id}`))}</tfoot>
+    </table>
+  );
+}
+
+/**
+ * Les deux listes de chemins de données, et l'égalité est la moitié MÉCANIQUEMENT VÉRIFIABLE du
+ * critère de recette.
+ *
+ * L'autre moitié — « visuellement très différentes » — est une REVUE HUMAINE, et aucune assertion
+ * ne peut en tenir lieu. Le plan nomme qui la fait ; cette page se contente de mettre les deux
+ * factures côte à côte pour qu'elle soit possible.
+ */
+const cheminsA = collectTemplateDataPaths(sampleTemplate);
+const cheminsB = collectTemplateDataPaths(factureVariante);
+const cheminsIdentiques =
+  cheminsA.length === cheminsB.length && cheminsA.every((chemin, i) => chemin === cheminsB[i]);
 
 /**
  * Ce qu'un bloc affiche, dans la portée qu'on lui donne.
@@ -1424,6 +1833,88 @@ export default function App() {
         <strong>aucun document ne sort sur deux pages</strong> : le lot livre les faits qu'un
         paginateur devra respecter, et le paginateur est le lot E2. Un visiteur qui voudrait voir
         une bande se répéter devra l'attendre.
+      </p>
+
+      <h2>L'apparence : deux factures très différentes, un seul jeu de données (lot C5)</h2>
+      <p>
+        Les deux documents ci-dessous sortent de <strong>la même fonction</strong>,{' '}
+        <code>factureAvecApparence</code>, appelée avec deux <code>Apparence</code> différentes.
+        Même structure, <strong>mêmes identifiants</strong>, mêmes liaisons, même{' '}
+        <code>renderData</code> — et la seule chose qui varie est ce que le lot C5 a ajouté au
+        contrat : <code>box</code> sur cinq types de nœud, <code>typography</code> sur le nœud texte
+        et sur les trois kinds de segment, <code>align</code> sur le nœud texte.
+      </p>
+      <p>
+        Une <strong>fonction</strong> et non deux littéraux écrits à la main, et ce n'est pas une
+        commodité : deux littéraux satisferaient le critère <em>à l'œil</em> en ne prouvant rien —
+        rien ne garantirait que la structure et les liaisons soient identiques. Paramétrer le modèle
+        rend l'identité structurelle <strong>mécanique</strong>, et fait de l'égalité des deux
+        listes de <code>collectTemplateDataPaths</code> un <em>résultat</em> plutôt qu'une
+        coïncidence.
+      </p>
+      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+        {[
+          { apparence: APPARENCE_A, modele: sampleTemplate },
+          { apparence: APPARENCE_B, modele: factureVariante },
+        ].map(({ apparence, modele }) => (
+          <div key={apparence.nom} style={{ flex: '1 1 340px', minWidth: '320px' }}>
+            <p>
+              <strong>{apparence.nom}</strong>
+            </p>
+            <div
+              style={{
+                border: '1px solid #d0d4da',
+                background: '#fff',
+                padding: '8px',
+                overflowX: 'auto',
+              }}
+            >
+              <Bloc bloc={modele.root} scope={renderData} budget={createBudget()} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p>
+        Ce que ces deux vues <strong>dérivent</strong> du document, et rien d'autre : le fond, les
+        quatre arêtes et l'inset de chaque boîte ; la famille, la taille, la graisse, l'italique et
+        la couleur de chaque run ; l'alignement de chaque bloc de texte. Une propriété dont le champ
+        est <strong>absent</strong> reste absente du CSS — <em>aucun défaut n'est inventé ici</em>,
+        et c'est très exactement la dette que l'ADR 0007 nomme : les cinq valeurs typographiques
+        d'un run qui n'en déclare aucune appartiennent au moteur, pas à cette page.
+      </p>
+      <p>
+        La taille de caractère est la <strong>seule longueur en points</strong> du contrat ; tout le
+        reste est en millimètres. Elle passe donc par <code>mmFromPt</code>{' '}
+        <strong>du contrat</strong>, jamais par une division réécrite ici, avant d'être multipliée
+        par l'échelle déclarée de <code>{PX_PAR_MM}</code> px/mm. Le motif est mesuré :{' '}
+        <code>(pt * 25.4) / 72</code> et <code>pt * (25.4 / 72)</code> rendent{' '}
+        <strong>deux doubles différents pour 31,5 % des tailles entières</strong>, et la décision
+        produit 7 promet un aperçu identique au PDF. Cette page est le premier consommateur nommé de
+        cette fonction.
+      </p>
+      <p>
+        Et l'alignement passe par <code>resolveTextAlign</code>, pour la même raison de forme : la
+        colonne fournit un <strong>défaut</strong>, le bloc tranche. Ce ne sont pas deux
+        déclarations d'un même fait — une cellule qui contient une image a le premier et pas le
+        second, et une cellule qui contient deux paragraphes a un défaut et <strong>deux</strong>{' '}
+        alignements, qui peuvent différer. <code>justify</code> n'existe que sur le tuple du texte :
+        une <strong>colonne ne justifie rien</strong>, et l'apparence B le montre sur ses mentions.
+      </p>
+      <p>
+        Les deux clés de données réclamées à l'application intégratrice, côte à côte :{' '}
+        <code>{cheminsA.join(', ')}</code> contre <code>{cheminsB.join(', ')}</code> —{' '}
+        <strong>{cheminsIdentiques ? 'identiques' : 'DIFFÉRENTES, ce qui est un défaut'}</strong>.
+        C'est la moitié <strong>mécaniquement vérifiable</strong> du critère de recette : une
+        apparence ne change pas ce qu'un document lit. L'autre moitié — « visuellement très
+        différentes » — est une <strong>revue humaine</strong>, et aucune assertion ne peut en tenir
+        lieu ; cette page se contente de la rendre possible.
+      </p>
+      <p>
+        Ce que cette démonstration <strong>ne peut pas</strong> montrer, dit franchement : le
+        comportement d'une boîte au point de coupe (il n'y a qu'une page), la rencontre de deux
+        filets adjacents, la résolution d'un nom de police absent, et la place d'une image sans
+        dimension déclarée. Ce sont quatre des <strong>huit attentes envers le moteur</strong> que
+        l'ADR 0007 nomme, avec leur propriétaire — elles ne seront vérifiables qu'au lot E2.
       </p>
 
       <h2>Titre : concaténation, mise en chaîne explicite et majuscules</h2>
