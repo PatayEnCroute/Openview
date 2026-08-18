@@ -11,8 +11,14 @@ export type RenderFormat = 'pdf' | 'html' | 'png';
  * catalogue of available fields belongs to the caller. That is why the type is an
  * opaque bag of `unknown` rather than a schema, and why no `RenderDataSchema`
  * will ever live in core. A template reads whatever paths its author picked --
- * `collectDataPaths` tells the caller which ones -- and the caller alone decides
- * whether its dataset satisfies them.
+ * `collectTemplateDataPaths` tells the caller which ones -- and the caller alone
+ * decides whether its dataset satisfies them.
+ *
+ * `collectTemplateDataPaths` and NOT `collectDataPaths`, which takes a NODE: since
+ * lot C4 the repeated bands live outside `root`, so the node-level function reports
+ * the flow and misses every binding written in a header or a footer. The symptom is
+ * not an error but a BLANK -- the caller was never told about the key, so the band
+ * prints empty.
  *
  * There is no third field on purpose. No clock, no *system* locale, no ambient
  * context: "today" is a datum like any other, supplied under whatever name the

@@ -119,9 +119,13 @@ export const CURRENT_SCHEMA_VERSION = 5;
  * Note what a Template does NOT carry: any description of the data it expects.
  * The catalogue of available fields belongs to the integrating application (see
  * `EvaluationScope`, and `dataCatalogue` on the Designer's props). A template records
- * what it READS -- `collectDataPaths` recovers exactly that -- never what the
+ * what it READS -- `collectTemplateDataPaths` recovers exactly that -- never what the
  * caller must supply. Adding a data schema to the stored document would move the
  * ownership of the data from the host application to Openview.
+ *
+ * That function and not `collectDataPaths`: the latter takes a NODE, and since this
+ * schema gained `page` the repeated bands live outside `root`, so a node-level walk
+ * misses every binding a header or a footer carries.
  */
 export const TemplateSchema = z.object({
   schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),

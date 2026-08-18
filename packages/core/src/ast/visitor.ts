@@ -272,8 +272,14 @@ function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set
 }
 
 /**
- * Every data path a template reads from the **caller's** data, in traversal order
+ * Every data path this **node** reads from the caller's data, in traversal order
  * and de-duplicated.
+ *
+ * A NODE, and no longer a template: since lot C4 put the repeated bands outside
+ * `root`, `collectDataPaths(template.root)` reports the flow and misses every
+ * binding a header or a footer carries. For a whole document, call
+ * `collectTemplateDataPaths` from `template/paths.ts` -- it seeds itself from this
+ * function and then walks the bands.
  *
  * Exact rather than heuristic: because expressions are structured trees (ADR
  * 0001), the engine can tell a caller which keys a template needs before
