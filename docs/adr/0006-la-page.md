@@ -8,6 +8,12 @@
   `@openview/viewer` (V1 dessine une feuille sans attendre un moteur),
   `@openview/core` lot **C7** — le seul lot du contrat qui « **Dépend de :** C4 »
   (`core.md:223`)
+- **Complété par :** [ADR 0007](0007-l-apparence.md) — le lot C5 pose un `box` sur
+  `ContainerNode`, donc **une bande a l'apparence gratuitement** : `PageBand.content` **est** un
+  `ContainerNode`, et pas une ligne de `page/` n'a changé. Ce lot **décline** en revanche le fond
+  perdu et la gouttière que `page/__tests__/page.test.ts` lui attribuait, et il **corrige la
+  docstring** : la décision 13 ci-dessous les range dans « un silence que ce lot décide de ne pas
+  rompre », attribué à personne, et elle n'est **pas** révisée.
 - **Complète :** [ADR 0005](0005-le-tableau-de-lignes.md) — le contenu d'une bande est un
   `ContainerNode`, donc la coupure `BlockNode` du lot C3 s'y applique **sans une ligne de ce
   lot** ; et [ADR 0002](0002-data-binding-and-loop-scope.md), dont la promesse « le modèle dit ce

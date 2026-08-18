@@ -216,6 +216,41 @@ changer une seule donnée.
 
 **Poids :** L — **Dépend de :** C3
 
+> ✅ **Livré.** Les dix-huit décisions du lot — **deux** formes stockées et non un
+> objet `style` unique (`BoxStyle` : un fond, quatre arêtes optionnelles, un inset
+> de quatre arêtes requises ; `Typography` : une famille, une taille **en points**,
+> gras, italique, une couleur), **neuf** sites d'accrochage, le tuple
+> `TEXT_ALIGNMENTS` **dérivé par étalement** de celui des colonnes pour que
+> `justify` entre sur le texte **sans** entrer sur une colonne, la conversion
+> `mmFromPt` / `ptFromMm` écrite **une** fois, les deux résolutions à **deux**
+> termes, la forme canonique d'un style absent qui est **l'absence**, le **modèle de
+> boîte** écrit en quatre phrases (tableau et ligne compris), et l'estampille
+> `schemaVersion` **6** par **estampille seule** — vivent dans
+> [ADR 0007](../adr/0007-l-apparence.md), qui fait foi.
+>
+> Le critère est démontré dans la vitrine : **une seule fonction**,
+> `factureAvecApparence`, appelée avec deux apparences, rend deux factures très
+> différentes sur le **même** jeu de données, et `collectTemplateDataPaths` rend les
+> **mêmes huit chemins** pour les deux. Paramétrer le modèle plutôt que d'écrire deux
+> littéraux est ce qui rend cette égalité un **résultat** et non une coïncidence.
+>
+> Le lot livre **moins** que son nom ne le suggère, et il faut le dire : **zéro
+> invariant croisé** là où C4 en portait deux, parce qu'un contrat dont chaque champ
+> est facultatif n'a presque rien à refuser. Et il livre **plus** que le critère
+> n'exige : deux champs suffiraient à le satisfaire littéralement, donc c'est
+> l'énumération du *pourquoi* ci-dessus — dix attributs en six groupes — qui porte la
+> charge de justification des neuf déclarations de champ, jamais le « prêt quand ».
+>
+> Ce qu'il ne livre **pas** : aucun pixel. Les **huit attentes envers le moteur** que
+> le lot crée — le comportement d'une boîte au **point de coupe**, la résolution d'un
+> nom de police, les cinq valeurs typographiques absentes, l'espace colorimétrique,
+> la conversion pt → unité de rendu, la **rencontre de deux filets adjacents**, les
+> deux conventions de justification, et la place d'une image sans dimension — sont
+> nommées dans l'ADR **avec leur propriétaire**, et vérifiables au lot E2, pas avant.
+> Le *comment* vit dans
+> [docs/plans/c5-l-apparence.md](../plans/c5-l-apparence.md), périmé depuis la
+> livraison comme le dit son propre en-tête.
+
 ### C6. Langue, devise et formats
 
 **Pourquoi.** Décision structurante prise tôt : un même modèle doit produire une
