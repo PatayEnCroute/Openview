@@ -76,7 +76,7 @@ Openview et ne relève aucune anomalie de mise en page.
 
 ### E4. Langue et devise au rendu
 
-**Pourquoi.** Le contrat sait décrire un modèle bilingue (core C5) ; le moteur doit
+**Pourquoi.** Le contrat sait décrire un modèle bilingue (core C6) ; le moteur doit
 l'honorer : montants, dates, séparateurs, symbole monétaire, libellés fixes.
 
 **Prêt quand** le même modèle, appelé deux fois, produit une facture

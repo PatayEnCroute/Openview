@@ -5,7 +5,20 @@
 > `docs/roadmap/` — ni les *décisions* structurantes, qui se consignent dans `docs/adr/`. Il est
 > **périssable** : une fois le lot livré, il ne fait plus foi, et c'est l'ADR 0007 qui reste.
 >
-> **Statut : ✅ prêt à exécuter — SOUS RÉSERVE des neuf arbitrages du [§8], dont DEUX sont ⛔.**
+> **Statut : ⛔ PÉRIMÉ — le lot est livré, et c'est [l'ADR 0007](../adr/0007-l-apparence.md) qui fait
+> foi.** Ce document reste consultable comme trace de ce que le dépôt a cru avant l'exécution. **Les
+> neuf arbitrages sont tranchés** — l'ADR les relève tous, avec leurs branches non retenues et le
+> motif de chacune. Et **cinq énoncés de ce plan ont été corrigés par l'exécution** : la forme
+> canonique se refuse par un `.check` et non par un `.refine` (un `.refine` d'objet rendait DEUX
+> issues pour UNE faute, la seconde fausse), le message d'un filet négatif est celui du prédicat
+> strictement positif et non celui de l'autre schéma, estampiller sans l'entrée de migration fait
+> rougir douze tests et non un, quatre sondes de la définition de fini étaient inexécutables parce
+> qu'elles rougissaient sur leur propre justification, et l'ordre du barrel de `style/` est imposé par
+> Biome et non « fonctionnel ». Le détail est au § « Ce que l'exécution a corrigé du plan » de l'ADR.
+>
+> ---
+>
+> *Statut d'origine, conservé :* **✅ prêt à exécuter — SOUS RÉSERVE des neuf arbitrages du [§8], dont DEUX sont ⛔.**
 > **Révision 2, 2026-08-18** — la revue du plan a rendu **sept blocages**, tous vérifiés et tous
 > retenus. Quatre arbitrages qui étaient ⛔ sont **tranchés ici** plutôt que remontés (n° 1, 4, 5,
 > 8), parce qu'un lot ne se clôt pas sur un trou de contrat ; deux le restent (n° 2, 3), et ce sont

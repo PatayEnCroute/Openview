@@ -160,12 +160,55 @@ describe('parseTemplate', () => {
       [2, 3],
       [3, 4],
       [4, 5],
+      [5, 6],
     ]);
     expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
     // The literal expectation above is the ONLY mechanical net under the stamp of lots C1,
     // C2 and C3: nothing else -- no compiler, no lint, no coverage threshold -- demands the
     // increment. Lot C4 is the first with a second net, because `page` is required: see the
     // two contracts below, which redden if the migration forgets to write one.
+    //
+    // LOT C5 IS BACK TO A PURELY OPTIONAL WIDENING, so the compiler is silent, the coverage
+    // threshold is silent, and nothing about the SHAPE of its fields demands the increment.
+    // The nets are the ones that walk the chain: MEASURED, bumping CURRENT_SCHEMA_VERSION to 6
+    // without registering this entry reddens TWELVE tests in this file -- every one that starts
+    // below the current stamp -- on `No migration registered from schema version 5`. That is
+    // stronger than the single net C1 had, and it is still this literal that says the chain was
+    // not MERGED into a direct converter.
+  });
+
+  it('stamps a v5 document to 6 without transforming one value of it', () => {
+    // Contract of lot C5: the 5 -> 6 entry is a STAMP. Measured, delta exactly 0 values and 0
+    // levels -- so the second pass of the shape guard has nothing to catch here, unlike 4 -> 5.
+    //
+    // Compared by JSON round trip with the stamp put back, rather than field by field: that is
+    // what makes "transforms NOTHING" an assertion instead of a claim about the fields someone
+    // thought to check.
+    const stampedFive = { ...validTemplate, schemaVersion: 5 };
+
+    const parsed = parseTemplate(stampedFive);
+
+    expect(parsed.schemaVersion).toBe(6);
+    expect(JSON.parse(JSON.stringify({ ...parsed, schemaVersion: 5 }))).toStrictEqual(
+      JSON.parse(JSON.stringify(stampedFive)),
+    );
+  });
+
+  it('carries an appearance through the stamp on a document that already had one', () => {
+    // The reserve the four entries above state, transposed: the version guard reads the STAMP,
+    // not the content. A document stamped 5 that ALREADY carries a box -- hand-made, or written
+    // by an unstamped mid-lot build -- is not refused. It parses, and comes out stamped 6 with
+    // its box intact, because the current schema knows the field.
+    const withBox = {
+      ...validTemplate,
+      schemaVersion: 5,
+      root: { type: 'container', id: 'root', children: [], box: { background: '#1b3a6f' } },
+    };
+
+    const parsed = parseTemplate(withBox);
+
+    expect(parsed.schemaVersion).toBe(6);
+    expect(parsed.root.box).toStrictEqual({ background: '#1b3a6f' });
   });
 
   it('fills in a page on a v4 document that has none, and fills it COMPLETELY', () => {
@@ -517,6 +560,19 @@ describe('parseTemplate', () => {
         expect(error.message).toContain(`at most ${CURRENT_SCHEMA_VERSION}`);
         expect(error.message).toContain('upgrade before opening it');
         expect(error.fromVersion).toBe(CURRENT_SCHEMA_VERSION + 1);
+        // The message ENTIRE, character for character: it is what lot C8 will have to narrate,
+        // and three `toContain` let a reformulation between the fragments through. Grafted here
+        // rather than written as a second `it`: two sites for one contract is two sites to fix
+        // the day the wording moves, and nobody would know which one is authoritative.
+        //
+        // Written relative to the constant and never as a literal 7 -- a literal would become
+        // false at the next lot, and worse, it would then test "one above the current" on the day
+        // the current IS 7, which is to say nothing at all.
+        expect(error.message).toBe(
+          `Template uses schema version ${CURRENT_SCHEMA_VERSION + 1} but this build understands at most ${CURRENT_SCHEMA_VERSION}. It was written by a newer release of Openview; upgrade before opening it.`,
+        );
+        // Neither `code` nor `to` exists on this error, and asserting one would fail:
+        // `TemplateMigrationError` carries `fromVersion` and nothing else. Recorded in ADR 0007.
       }
     }
   });

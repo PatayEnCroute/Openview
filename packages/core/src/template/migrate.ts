@@ -213,6 +213,42 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
       schemaVersion: 5,
     }),
   },
+  {
+    from: 5,
+    to: 6,
+    /**
+     * Identity, except for the stamp -- and the stamp is the entire point, for the fourth time
+     * and for exactly the reason the 1 -> 2 entry states.
+     *
+     * A v5 document is STRUCTURALLY a v6 document: lot C5 adds nine OPTIONAL fields and widens
+     * no union, so there is nothing to transform, and the shape it yields is bounded because it
+     * changes neither depth nor value count -- MEASURED, delta exactly 0 on `RECIPE_TEMPLATE`.
+     *
+     * ## Why this one is a stamp and NOT a transformation, which was a real question
+     *
+     * Writing a baseline typography into every existing document is the alternative, and it is
+     * refused on two counts. It would oblige this file to TRAVERSE THE AST -- it has no traversal
+     * today, and the traversal would be the first code here that knows the shape of a node -- and
+     * MEASURED, it costs +324 values (+59.1 %) on the playground model against +8 for a single
+     * document-level baseline. And a baseline needs a PRODUCT MANDATE: the compatibility page of
+     * the entry above is "une décision produit, prise par le propriétaire du produit le
+     * 2026-08-18, not a deduction", and a compatibility FONT is a notch worse than A4. A4 is
+     * wrong for part of the world but it EXISTS everywhere; a family name designates a resource
+     * that may not exist on the rendering machine, and resolving it is reading the machine --
+     * refused and tooled.
+     *
+     * So no document written before this lot carries any appearance, and that is the honest
+     * outcome: the five typographic values of a run that declares none are decided by the
+     * engine, and ADR 0007 names them as a debt with their owners rather than letting each
+     * renderer invent them in silence.
+     *
+     * The reserve of the four entries above transposes word for word: the version guard reads
+     * the STAMP, not the content. A document stamped `5` but already carrying a `box` --
+     * hand-made, or written by an unstamped mid-lot build -- is not refused. It parses, and comes
+     * out `schemaVersion: 6`, keeping its box, because the current schema knows the field.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 6 }),
+  },
 ];
 
 const recordSchema = z.record(z.string(), z.unknown());

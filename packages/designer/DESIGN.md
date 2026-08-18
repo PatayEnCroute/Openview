@@ -142,8 +142,20 @@ Les champs manipulables dans l'éditeur sont ceux du **catalogue déclaré par l
 >   le contraire. Pour valider un sous-arbre destiné à un flux, c'est `parseBlockNode` ;
 >   `parseDocumentNode` accepte une ligne nue.
 >
-> Ce que le tableau **ne** porte **pas**, et qu'il ne faut donc pas chercher à éditer : ni filet,
-> ni fond, ni police, ni espacement (lot C5) ; ni format de nombre ni devise (C6) ; ni fusion de
+> **Le lot C5 est arrivé, et cette ligne a changé de camp : un tableau porte désormais un filet,
+> un fond et un espacement.** Le nœud `table` et le nœud `tableRow` portent chacun un `box`
+> (`background`, quatre arêtes optionnelles, un `padding` de quatre arêtes requises), et un
+> éditeur a donc un panneau à leur offrir. Deux précisions que la charte doit reprendre telles
+> quelles, parce qu'elles décident de la forme du panneau : le `padding` d'une **ligne** insète le
+> contenu de **chaque cellule** et ne déplace aucune frontière de colonne ; et un objet de style
+> **vide est refusé** — c'est à l'éditeur, côté producteur, de **retirer** un `box` qu'il vient de
+> vider, jamais de l'enregistrer.
+>
+> Ce que le tableau **ne** porte toujours **pas**, et qu'il ne faut donc pas chercher à éditer :
+> ni **police** sur le tableau ou la colonne — la typographie vit sur le nœud texte et sur ses
+> runs, jamais sur une colonne ; ni surcharge d'alignement **par cellule** — C5 l'a livrée sur le
+> **bloc dans la cellule** (`TextNode.align`), une cellule n'étant pas un nœud et n'ayant pas
+> d'`id` qu'une Command puisse adresser ; ni format de nombre ni devise (C6) ; ni fusion de
 > cellules, ni colonne conditionnelle, ni champ de total — le total d'une facture est une
 > **expression du modèle** posée dans une cellule de pied, et l'ADR 0005 explique pourquoi.
 

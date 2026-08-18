@@ -4,6 +4,7 @@ import {
   ExpressionSchema,
   PrintableExpressionSchema,
 } from '../expression/expression.js';
+import { BoxStyleSchema, TypographySchema } from '../style/style.js';
 import {
   type BlockNode,
   type DocumentNode,
@@ -13,18 +14,38 @@ import {
   TABLE_COLUMN_ALIGNMENTS,
   type TableCell,
   type TableNode,
+  TEXT_ALIGNMENTS,
 } from './types.js';
 
 const nodeIdSchema = z.string().min(1, 'A node id is required');
 
+/**
+ * The two style fields, spelt ONCE each and reused by every carrier below.
+ *
+ * EIGHT `z.object` LITERALS IN THIS FILE GAIN A STYLE FIELD, AND THERE IS NO `nodeBaseSchema` TO
+ * PUT IT ON. The eight repeat `id: nodeIdSchema` literally, so a field shared by five nodes is
+ * five edits, not one -- and MEASURED, forgetting one of them is SILENT: of the fifteen sites a
+ * style can attach to, the type gate saw nine of them not at all, and every test passed with four
+ * schemas diverging from their types. The eight `*_KEYS_IN_STEP` pairs written in
+ * `ast/__tests__/nodes.test.ts` before any of these fields existed are what turned that silence
+ * into a compile error.
+ *
+ * These two constants do not remove the repetition -- they make a forgotten site visible as an
+ * ABSENT NAME rather than as a subtly different expression.
+ */
+const boxField = BoxStyleSchema.optional();
+const typographyField = TypographySchema.optional();
+
 export const TextLiteralSegmentSchema = z.object({
   kind: z.literal('literal'),
   text: z.string(),
+  typography: typographyField,
 });
 
 export const TextBindingSegmentSchema = z.object({
   kind: z.literal('binding'),
   value: PrintableExpressionSchema,
+  typography: typographyField,
 });
 
 /**
@@ -39,6 +60,7 @@ export const TextBindingSegmentSchema = z.object({
 export const TextPageFieldSegmentSchema = z.object({
   kind: z.literal('pageField'),
   field: z.enum(PAGE_FIELDS),
+  typography: typographyField,
 });
 
 /**
@@ -59,6 +81,14 @@ export const TextNodeSchema = z.object({
   type: z.literal('text'),
   id: nodeIdSchema,
   content: z.array(TextSegmentSchema),
+  box: boxField,
+  typography: typographyField,
+  // The one node with runs, hence the one node with an alignment -- and its OWN tuple.
+  // `TEXT_ALIGNMENTS` is not `TABLE_COLUMN_ALIGNMENTS` under another name: a column states a
+  // DEFAULT for the text blocks of its cells, this states how ONE block distributes its runs,
+  // and a cell holding an image has the first and not the second. The fourth member, `justify`,
+  // is the one a column cannot declare. See both tuples' docstrings.
+  align: z.enum(TEXT_ALIGNMENTS).optional(),
 });
 
 export const ImageNodeSchema = z.object({
@@ -66,6 +96,7 @@ export const ImageNodeSchema = z.object({
   id: nodeIdSchema,
   src: z.string().min(1, 'An image src is required'),
   alt: z.string().optional(),
+  box: boxField,
 });
 
 /**
@@ -131,6 +162,7 @@ export const ContainerNodeSchema = z.object({
   type: z.literal('container'),
   id: nodeIdSchema,
   children: z.array(BlockNodeSchema),
+  box: boxField,
 });
 
 export const LoopNodeSchema = z.object({
@@ -173,6 +205,7 @@ export const TableRowNodeSchema = z.object({
   type: z.literal('tableRow'),
   id: nodeIdSchema,
   cells: z.array(TableCellSchema),
+  box: boxField,
 });
 
 export const TableRowGroupNodeSchema = z.object({
@@ -321,5 +354,6 @@ export const TableNodeSchema = z
     header: z.array(TableRowNodeSchema),
     body: z.array(TableBodyNodeSchema),
     footer: z.array(TableRowNodeSchema),
+    box: boxField,
   })
   .superRefine(checkTableWiring);
