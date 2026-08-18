@@ -23,6 +23,7 @@ export {
   TextBindingSegmentSchema,
   TextLiteralSegmentSchema,
   TextNodeSchema,
+  TextPageFieldSegmentSchema,
   TextSegmentSchema,
 } from './schemas.js';
 export type {
@@ -34,6 +35,7 @@ export type {
   DocumentNodeType,
   ImageNode,
   LoopNode,
+  PageField,
   TableBodyNode,
   TableCell,
   TableColumn,
@@ -44,6 +46,12 @@ export type {
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
+  TextPageFieldSegment,
   TextSegment,
 } from './types.js';
-export { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, TABLE_COLUMN_ALIGNMENTS } from './types.js';
+export {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  PAGE_FIELDS,
+  TABLE_COLUMN_ALIGNMENTS,
+} from './types.js';

@@ -51,7 +51,50 @@ export interface TextBindingSegment {
   readonly value: PrintableExpression;
 }
 
-export type TextSegment = TextLiteralSegment | TextBindingSegment;
+/** The two page facts a template can print. Exported as a tuple: a type cannot be iterated. */
+export const PAGE_FIELDS = ['number', 'count'] as const;
+
+export type PageField = (typeof PAGE_FIELDS)[number];
+
+/**
+ * A page fact only a paginator knows: which page this is, or how many there are.
+ *
+ * NOT an expression, and that distinction carries the whole decision. A segment is
+ * resolved by the render pipeline, never by `evaluateExpression`, so `core` gains no
+ * third evaluation input, no page-aware operand and no reserved key in the caller's
+ * data. `nodes.ts` already writes the underlying rule: "a segment is not a node -- it
+ * is the inline content of one".
+ *
+ * The consequence to accept: a page field is NOT readable by a predicate. "Only on the
+ * last page" stays a declared region rather than a derived condition -- and that is a
+ * property, not a limitation. A page number a predicate can read lets content depend on
+ * pagination, which depends on content: `if(eq(page, pages), mentions, nothing)` changes
+ * what fits on the last page, hence the total, hence the condition. There is no fixed
+ * point to converge to, and the symptom is a pagination that oscillates -- a
+ * non-deterministic render from an engine that reads neither clock nor randomness. E6 is
+ * one of the four things the roadmap never sacrifices.
+ *
+ * One kind carrying a closed field rather than two kinds, because that is this
+ * repository's idiom: a kind names a NATURE, a closed tuple names the instance --
+ * `arithmetic` carries `op`, `textCase` carries `op`, `round` carries `mode`.
+ *
+ * Legal ANYWHERE a text segment is legal, not only inside a page band. Restricting it
+ * would require knowing a segment's ANCESTORS, which no local Zod schema can do: it
+ * would take a template-wide walk at save time, and it would be the contract's first
+ * positional rule. Printing "page 3" inside the flow is legitimate; the engine
+ * substitutes the number of the page the segment lands on.
+ *
+ * What this contract does NOT carry, and who does: the VALUE (the paginator, lots E2 and
+ * E3), the display FORMAT of that value -- language, digits, "sur" against "of" (lot
+ * C6), the POSITION on the sheet (a page band already says where), and any starting
+ * number, reset or per-section numbering (there are no sections in this contract).
+ */
+export interface TextPageFieldSegment {
+  readonly kind: 'pageField';
+  readonly field: PageField;
+}
+
+export type TextSegment = TextLiteralSegment | TextBindingSegment | TextPageFieldSegment;
 
 export interface TextNode extends NodeBase {
   readonly type: 'text';
@@ -322,9 +365,10 @@ export type TableBodyNode = TableRowNode | TableRowGroupNode;
  *
  * No border, no shading, no font, no spacing, no per-cell alignment override (lot C5). No
  * page format, no margins (lot C4). No "repeat the header on every page", no widow or orphan
- * policy, no page numbering, no carry-forward (lots E2 and E3). No number format, no
- * currency, no display scale, no column type (lot C6). No rounding default and no
- * per-subtree rounding inheritance (ADR 0004 decision 8).
+ * policy, no page numbering VALUE and no carry-forward (lots E2 and E3 compute those; lot C4
+ * lets a template PLACE a page number, with a `pageField` segment inside a page band -- see
+ * page/). No number format, no currency, no display scale, no column type (lot C6). No
+ * rounding default and no per-subtree rounding inheritance (ADR 0004 decision 8).
  */
 export interface TableNode extends NodeBase {
   readonly type: 'table';

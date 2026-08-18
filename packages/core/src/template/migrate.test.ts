@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TemplateMigrationError, TemplateShapeError } from '../errors.js';
-import { DEFAULT_SHAPE_LIMITS } from './guard.js';
+import { assertBoundedShape, DEFAULT_SHAPE_LIMITS } from './guard.js';
 import {
   migrateToCurrent,
   parseTemplate,
@@ -9,11 +9,28 @@ import {
 } from './migrate.js';
 import { CURRENT_SCHEMA_VERSION } from './template.js';
 
+/**
+ * La page que ces littéraux portent, et pourquoi ils la portent tous.
+ *
+ * `parseTemplate` migre PUIS valide contre le schéma COURANT. Depuis que `page` est requis,
+ * tout littéral qui traverse cette porte doit en avoir une, quelle que soit son estampille :
+ * il n'existe aucun sous-ensemble épargné. Elle est délibérément différente de la page de
+ * compatibilité que la migration 4 -> 5 écrit — des marges de 12 mm, pas de 20 — pour que le
+ * test qui vérifie qu'un document v4 GARDE sa page ne puisse pas passer par coïncidence.
+ */
+const authoredPage = {
+  sheet: { width: 210, height: 297 },
+  margins: { top: 12, right: 12, bottom: 12, left: 12 },
+  header: [],
+  footer: [],
+};
+
 const validTemplate = {
   schemaVersion: CURRENT_SCHEMA_VERSION,
   id: 'tpl_123',
   name: 'Invoice',
   version: '1.0.0',
+  page: authoredPage,
   root: { type: 'container', id: 'root', children: [] },
 };
 
@@ -103,6 +120,7 @@ describe('parseTemplate', () => {
       id: 'tpl_legacy',
       name: 'Invoice',
       version: '1.0.0',
+      page: authoredPage,
       root: {
         type: 'container',
         id: 'root',
@@ -141,8 +159,129 @@ describe('parseTemplate', () => {
       [1, 2],
       [2, 3],
       [3, 4],
+      [4, 5],
     ]);
     expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
+    // The literal expectation above is the ONLY mechanical net under the stamp of lots C1,
+    // C2 and C3: nothing else -- no compiler, no lint, no coverage threshold -- demands the
+    // increment. Lot C4 is the first with a second net, because `page` is required: see the
+    // two contracts below, which redden if the migration forgets to write one.
+  });
+
+  it('fills in a page on a v4 document that has none, and fills it COMPLETELY', () => {
+    // Contract 2 of the lot: the first TRANSFORMING migration of this repository. Compared
+    // field by field rather than tested for presence -- a migration writing a PARTIAL page
+    // would pass an existence check and then be refused by the parse, with a message
+    // accusing the document while the fault is in the migration.
+    const { page: _none, ...beforeC4 } = { ...validTemplate, schemaVersion: 4 };
+
+    const parsed = parseTemplate(beforeC4);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.page).toStrictEqual({
+      sheet: { width: 210, height: 297 },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      header: [],
+      footer: [],
+    });
+  });
+
+  it('PRESERVES a page a v4 document already carries', () => {
+    // Contract 3, and the case is real rather than theoretical: the stamp only ever guards
+    // upward, so a hand-made document -- or one written by an unstamped mid-lot build -- can
+    // be stamped 4 and already carry a page.
+    //
+    // This is what the explicit test buys. Measured, the two spreads do OPPOSITE things:
+    // `{ ...input, page: DEFAULT }` overwrites the author's page, while
+    // `{ page: DEFAULT, ...input }` preserves it. The second is right BY KEY ORDER, which is
+    // worse than being wrong -- the next reader who tidies the object destroys layouts. This
+    // `it` is what makes that non-negotiable.
+    const authored = { ...validTemplate, schemaVersion: 4 };
+
+    const parsed = parseTemplate(authored);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.page).toStrictEqual(authoredPage);
+    expect(parsed.page.margins.top).toBe(12);
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ])('treats a `page` key holding %s as no page at all', (_label, empty) => {
+    // The branch tests the VALUE, not the KEY. Written `'page' in input`, both of these took
+    // the "the author already has a page" path and handed the empty value to the schema --
+    // MEASURED, a bare `ZodError`, "expected object, received null" on path `page`: the
+    // untyped refusal these entry points exist to remove, on exactly the documents this
+    // migration exists to rescue. Both spellings are reachable: a nullable column serialised
+    // straight out, and `{ ...template, page: undefined }` from an editor clearing the field.
+    const emptied = { ...validTemplate, schemaVersion: 4, page: empty };
+
+    const parsed = parseTemplate(emptied);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.page.margins.top).toBe(20);
+  });
+
+  it('gives every migrated document its OWN page, never one shared object', () => {
+    // The compatibility page was a module-level constant written in by REFERENCE, so
+    // `migrateToCurrent(a).page === migrateToCurrent(b).page` was true down to `sheet` and
+    // both band arrays. `migrateToCurrent` is public and returns a `Record<string, unknown>`,
+    // so `readonly` is erased at that boundary and nothing stopped a caller from normalising
+    // the record it was handed -- after which a LATER, unrelated `parseTemplate` returned the
+    // mutated sheet, and an impossible margin made it refuse a document whose author had
+    // written no page at all.
+    //
+    // `toStrictEqual` cannot see this, which is why the assertions below are on IDENTITY.
+    const { page: _none, ...pageless } = { ...validTemplate, schemaVersion: 4 };
+    const first = migrateToCurrent({ ...pageless });
+    const second = migrateToCurrent({ ...pageless });
+
+    expect(first.page).not.toBe(second.page);
+    expect(first.page).toStrictEqual(second.page);
+
+    // And the mutation that used to travel now goes nowhere.
+    const mutated = first.page as { sheet: { width: number }; header: unknown[] };
+    mutated.sheet.width = 999;
+    mutated.header.push({ on: 'every', content: { type: 'container', id: 'x', children: [] } });
+
+    expect(migrateToCurrent({ ...pageless }).page).toStrictEqual({
+      sheet: { width: 210, height: 297 },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      header: [],
+      footer: [],
+    });
+    expect(parseTemplate({ ...pageless }).page.sheet.width).toBe(210);
+  });
+
+  it('keeps the migrated shape BOUNDED, which is why the guard runs twice', () => {
+    // `migrate.ts` explains its second pass by "a future migration TRANSFORMS, so it can
+    // PRODUCE an out-of-bounds shape from a conforming input". Lot C4 is that migration, the
+    // first one, and this is the increment where the second pass finally earns its place.
+    //
+    // MEASURED by bisection on this exact document: 7 JSON levels and 16 values before, 7
+    // levels and 27 values after. The page adds eleven values and NO level, because
+    // `page.margins` sits exactly as deep as `root.children` -- so the rule this repository
+    // owes itself, "a migration never yields an out-of-bounds shape", holds for this entry.
+    const { page: _none, ...beforeC4 } = {
+      ...validTemplate,
+      schemaVersion: 4,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [{ type: 'text', id: 't', content: [{ kind: 'literal', text: 'a' }] }],
+      },
+    };
+
+    expect(() => parseTemplate(beforeC4)).not.toThrow();
+
+    // The counter-proof, and it is what proves the SECOND pass is the one that fires: under a
+    // ceiling of 20 the input (16) passes the guard outright, and only the migrated output
+    // (27) is refused. Without the second pass, Zod would meet the oversized shape instead.
+    expect(() => assertBoundedShape(beforeC4, { maxNodes: 20 })).not.toThrow();
+    expect(() => parseTemplate(beforeC4, undefined, { maxNodes: 20 })).toThrow(TemplateShapeError);
+    // And no level is added, so a depth ceiling that admits the input admits the output too.
+    expect(() => parseTemplate(beforeC4, undefined, { maxDepth: 7 })).not.toThrow();
   });
 
   it('brings a document written before C3 up to the current stamp, table or no table', () => {

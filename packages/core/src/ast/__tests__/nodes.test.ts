@@ -314,6 +314,61 @@ describe('DocumentNodeSchema', () => {
     ).toThrow();
   });
 
+  it('accepts a page marker anywhere a text segment is legal, `root` included', () => {
+    // Deliberately NOT confined to a page band. Restricting it would mean knowing a
+    // segment's ANCESTORS, which no local Zod schema can do -- it would take a
+    // template-wide walk at save time and would be this contract's first positional rule.
+    // Printing "page 3" inside the flow is legitimate; the engine substitutes the number of
+    // the page the segment lands on.
+    const parsed = TextNodeSchema.parse({
+      type: 'text',
+      id: 'ftr',
+      content: [
+        { kind: 'literal', text: 'Page ' },
+        { kind: 'pageField', field: 'number' },
+        { kind: 'literal', text: ' / ' },
+        { kind: 'pageField', field: 'count' },
+      ],
+    });
+
+    expect(parsed.content.map((segment) => segment.kind)).toStrictEqual([
+      'literal',
+      'pageField',
+      'literal',
+      'pageField',
+    ]);
+  });
+
+  it('rejects a page field the paginator could not answer', () => {
+    const unknownField = TextNodeSchema.safeParse({
+      type: 'text',
+      id: 't',
+      content: [{ kind: 'pageField', field: 'total' }],
+    });
+    // An ABSENT field yields the SAME message: `z.enum` treats `undefined` as an unknown
+    // option, so an author who forgot the key reads "expected one of ..." rather than
+    // "required". Exact, and misleading -- recorded for lot C8, not corrected here.
+    const absentField = TextNodeSchema.safeParse({
+      type: 'text',
+      id: 't',
+      content: [{ kind: 'pageField' }],
+    });
+
+    expect(unknownField.success).toBe(false);
+    if (!unknownField.success) {
+      expect(unknownField.error.issues[0]?.path).toStrictEqual(['content', 0, 'field']);
+      expect(unknownField.error.issues[0]?.message).toBe(
+        'Invalid option: expected one of "number"|"count"',
+      );
+    }
+    expect(absentField.success).toBe(false);
+    if (!absentField.success) {
+      expect(absentField.error.issues[0]?.message).toBe(
+        'Invalid option: expected one of "number"|"count"',
+      );
+    }
+  });
+
   it('rejects a binding carrying a malformed expression', () => {
     expect(() =>
       DocumentNodeSchema.parse({

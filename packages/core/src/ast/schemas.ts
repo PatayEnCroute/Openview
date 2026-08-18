@@ -9,6 +9,7 @@ import {
   type DocumentNode,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
+  PAGE_FIELDS,
   TABLE_COLUMN_ALIGNMENTS,
   type TableCell,
   type TableNode,
@@ -27,6 +28,20 @@ export const TextBindingSegmentSchema = z.object({
 });
 
 /**
+ * A page marker, and it carries NO expression: the paginator substitutes its value, so
+ * nothing here is evaluated and no key is demanded of the caller's data.
+ *
+ * A `field` absent from the object yields the SAME message as an unknown one -- `z.enum`
+ * treats `undefined` as an unknown option. Exact, and misleading; recorded for lot C8
+ * rather than corrected here, because correcting it means replacing the enum with a
+ * literal union and changing the unknown-value message too.
+ */
+export const TextPageFieldSegmentSchema = z.object({
+  kind: z.literal('pageField'),
+  field: z.enum(PAGE_FIELDS),
+});
+
+/**
  * No `z.ZodType<TextSegment>` annotation, and `DocumentNodeSchema`'s explicit
  * binding below does **not** police this union in its place: zod declares
  * `ZodType<out Output, ...>`, so it is covariant in its output and a schema that
@@ -37,6 +52,7 @@ export const TextBindingSegmentSchema = z.object({
 export const TextSegmentSchema = z.discriminatedUnion('kind', [
   TextLiteralSegmentSchema,
   TextBindingSegmentSchema,
+  TextPageFieldSegmentSchema,
 ]);
 
 export const TextNodeSchema = z.object({

@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { ExpressionSchema } from '../expression/expression.js';
+import { RECIPE_PAGE } from '../page/__tests__/fixtures.js';
+import { PageSetupSchema } from '../page/page.js';
 import {
   assertBoundedShape,
   DEFAULT_SHAPE_LIMITS,
   parseBlockNode,
   parseDocumentNode,
   parseExpression,
+  parsePageSetup,
   resolveShapeLimits,
 } from './guard.js';
+import { parseTemplate } from './migrate.js';
+import { CURRENT_SCHEMA_VERSION, type Template } from './template.js';
 
 /** A chain of `levels` nested objects, so the innermost value sits at that depth. */
 function nest(levels: number): unknown {
@@ -275,5 +280,131 @@ describe('the bounded entry points', () => {
 
     expect(parseDocumentNode(bareRow)).toStrictEqual(bareRow);
     expect(() => parseBlockNode(bareRow)).toThrow();
+  });
+
+  it('parses a standalone page, and refuses a malformed one', () => {
+    expect(parsePageSetup(RECIPE_PAGE)).toStrictEqual(RECIPE_PAGE);
+    expect(() => parsePageSetup({ ...RECIPE_PAGE, sheet: { width: 0, height: 297 } })).toThrow();
+  });
+
+  it('bounds a band the bare page schema does not, on the SAME input', () => {
+    // The fourth bounded door exists for exactly this: `PageBand.content` is a `ContainerNode`,
+    // so a band is a recursion site, and `PageSetupSchema.parse` bounds nothing. The two calls
+    // get the same payload -- the whole point -- and only one of the two errors is something
+    // lot C8 can narrate. `RangeError: Maximum call stack size exceeded` is not a message a
+    // template author corrects.
+    //
+    // The depth at which Zod's own recursion gives out is stack- and JIT-dependent, so the
+    // second leg asserts `toThrow()` rather than `toThrow(RangeError)` -- lot C3 had to make
+    // the same retraction in `table.test.ts` for the same reason. The BOUND, by contrast,
+    // depends on no engine: `maxDepth` is 64 and the refusal is typed.
+    const nestedContainers = (depth: number): unknown => {
+      let node: unknown = { type: 'text', id: 'leaf', content: [] };
+      for (let level = 0; level < depth; level += 1) {
+        node = { type: 'container', id: `c${level}`, children: [node] };
+      }
+      return node;
+    };
+    const deepBand = {
+      sheet: { width: 210, height: 297 },
+      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      header: [],
+      footer: [{ on: 'every', content: nestedContainers(5_000) }],
+    };
+
+    const bounded = shapeErrorOf(() => {
+      parsePageSetup(deepBand);
+    });
+
+    expect(bounded.code).toBe('too-deep');
+    expect(bounded.limit).toBe(DEFAULT_SHAPE_LIMITS.maxDepth);
+    expect(() => PageSetupSchema.parse(deepBand)).toThrow();
+  });
+
+  it('agrees with `parseTemplate` on where the depth ceiling falls', () => {
+    // The door charges the fragment for the level `page` occupies inside a `Template`, and
+    // this is the `it` that pins it. Measured before the fix: a band of 28 nested containers
+    // passed `parsePageSetup` and was then refused `too-deep` by `parseTemplate` carrying the
+    // very same page -- so the documented pre-storage check said yes and the store call said
+    // no, which is the divergence a bounded door exists to close rather than open.
+    //
+    // Written as a SEARCH for the boundary rather than against a hard-coded 28, because the
+    // figure moves with `maxDepth` and a literal would rot silently the day it changes.
+    const nestedContainers = (depth: number): unknown => {
+      let node: unknown = { type: 'text', id: 'leaf', content: [] };
+      for (let level = 0; level < depth; level += 1) {
+        node = { type: 'container', id: `c${level}`, children: [node] };
+      }
+      return node;
+    };
+    const pageOfDepth = (depth: number): unknown => ({
+      ...RECIPE_PAGE,
+      header: [],
+      footer: [{ on: 'every', content: nestedContainers(depth) }],
+    });
+    const accepts = (parse: () => unknown): boolean => {
+      try {
+        parse();
+        return true;
+      } catch (error) {
+        if (error instanceof TemplateShapeError) {
+          return false;
+        }
+        throw error;
+      }
+    };
+
+    for (let depth = 1; depth <= 40; depth += 1) {
+      const page = pageOfDepth(depth);
+      const viaFragment = accepts(() => parsePageSetup(page));
+      const viaTemplate = accepts(() =>
+        parseTemplate({
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          id: 'tpl_depth',
+          name: 'Profondeur',
+          version: '1.0.0',
+          page,
+          root: { type: 'container', id: 'racine', children: [] },
+        }),
+      );
+
+      expect({ depth, viaFragment }).toStrictEqual({ depth, viaFragment: viaTemplate });
+    }
+  });
+
+  it('returns a page that can be written straight back into a Template', () => {
+    // A COMPILE-time contract, asserted at runtime only so the file has something to run.
+    // `parsePageSetup` used to return the hand-written `PageSetup`, whose arrays are
+    // `readonly`, while `Template['page']` is inferred from zod with mutable ones -- so the
+    // pre-storage workflow the door's own docstring names was `TS2322`, and the two symbols
+    // this lot exports did not compose. Gate 3 covers this file, so the annotation below is
+    // the real assertion.
+    const stored: Template = parseTemplate({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'tpl_compose',
+      name: 'Composition',
+      version: '1.0.0',
+      page: RECIPE_PAGE,
+      root: { type: 'container', id: 'racine', children: [] },
+    });
+    const page: Template['page'] = parsePageSetup(RECIPE_PAGE);
+    const updated: Template = { ...stored, page };
+
+    expect(updated.page).toStrictEqual(stored.page);
+  });
+
+  it('strips an unknown key, so none of the four doors is a persistence boundary', () => {
+    // The same behaviour that gives the tests their net -- `z.object` drops what it does not
+    // know -- erases a FUTURE field for an integrator who parses a fragment and stores the
+    // result. True of `parseExpression`, `parseDocumentNode` and `parseBlockNode` since lots
+    // C1 and C3; this lot adds the fourth instance, not the first. Only the VERSIONED
+    // `Template` round-trips safely, because only it carries the stamp that turns a future
+    // field into a legible refusal instead of a deletion.
+    expect(Object.keys(parsePageSetup({ ...RECIPE_PAGE, bleed: 3 }))).toStrictEqual([
+      'sheet',
+      'margins',
+      'header',
+      'footer',
+    ]);
   });
 });

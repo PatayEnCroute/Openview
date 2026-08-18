@@ -23,6 +23,7 @@ import type {
   PrintableExpression,
   RoundExpression,
 } from '../../expression/expression.js';
+import { STANDARD_SHEETS_MM } from '../../page/page.js';
 import { CURRENT_SCHEMA_VERSION, type Template } from '../../template/template.js';
 import type { BlockNode, TableCell, TableNode, TextNode, TextSegment } from '../nodes.js';
 
@@ -158,6 +159,26 @@ export const RECIPE_TEMPLATE: Template = {
   id: 'facture-c3',
   name: 'Facture — tableau de lignes',
   version: '1.0.0',
+  // Le champ requis du lot C4, et DÉLIBÉRÉMENT la page la plus simple qui soit : ce modèle-ci
+  // démontre le tableau, pas la feuille. La page de recette de C4 — celle qui porte trois
+  // bandes et quatre marqueurs — vit dans `page/__tests__/fixtures.ts` et n'est pas recopiée
+  // ici. Ce que cette page apporte quand même : l'aller-retour JSON de `table.test.ts` couvre
+  // désormais un champ `page`, donc un champ que la fixture porterait et que le schéma
+  // supprimerait s'y verrait.
+  //
+  // `RECIPE_PAGE` ne peut PAS être écrite ici, et c'est mesuré plutôt que subi : `Template`
+  // est inféré de son schéma, où `z.array` rend un tableau MUTABLE, tandis que `PageSetup`
+  // déclare `readonly PageBand[]` — `TS2322` dans ce sens, et dans ce sens seulement.
+  //
+  // L'étalement de `STANDARD_SHEETS_MM.a4` est ce qui rend visible pourquoi ce tableau est
+  // `as const satisfies` : annoté `Readonly<Record<string, Sheet>>`, il rendrait
+  // `Sheet | undefined` sous `noUncheckedIndexedAccess` et cette ligne ne compilerait pas.
+  page: {
+    sheet: { ...STANDARD_SHEETS_MM.a4 },
+    margins: { top: 20, right: 20, bottom: 20, left: 20 },
+    header: [],
+    footer: [],
+  },
   root: {
     type: 'container',
     id: 'racine',
