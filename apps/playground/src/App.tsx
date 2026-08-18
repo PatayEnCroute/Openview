@@ -576,15 +576,38 @@ function requireTableNode(root: DocumentNode, id: string): TableNode {
   return node;
 }
 
-const nodeIds = [...walk(sampleTemplate.root)].map((node) => `${node.id} (${node.type})`);
+/**
+ * Les racines d'un modèle : `root`, puis le contenu de chaque bande.
+ *
+ * Écrit une fois parce que `walk(sampleTemplate.root)` seul MENTAIT sur cet écran — il
+ * omettait les sept nœuds des bandes (`bandeau`, `bandeau-titre`, `pied`, `pied-num`,
+ * `pied-dernier`, `pied-dernier-num`, `pied-mentions`) alors que la section « La page »
+ * plus bas affiche le texte résolu de ces mêmes nœuds. Le trou n'est pas propre au
+ * playground : `collectTemplateDataPaths` existe précisément parce que `collectDataPaths`
+ * le rencontre aussi, et `template/paths.ts` note qu'aucun `findNodeInTemplate` ne le
+ * ferme encore côté `core`.
+ */
+const racines: readonly DocumentNode[] = [
+  sampleTemplate.root,
+  ...sampleTemplate.page.header.map((bande) => bande.content),
+  ...sampleTemplate.page.footer.map((bande) => bande.content),
+];
+
+const nodeIds = racines.flatMap((racine) =>
+  [...walk(racine)].map((node) => `${node.id} (${node.type})`),
+);
 
 /**
  * `collectTemplateDataPaths` et NON `collectDataPaths(sampleTemplate.root)`.
  *
  * Depuis le lot C4 les bandes vivent hors de `root`, donc la seconde forme omettrait
- * `commande.numero` lu par l'en-tête — et cet écran dirait au visiteur « voici ce que ce
- * modèle lit » en mentant. Le symptôme ne serait pas une erreur mais un BLANC : l'appelant
- * ne fournirait pas la clé, et le bandeau s'imprimerait vide.
+ * `societe.mentionsLegales` — lu par le pied de dernière page et par lui seul. Et c'est
+ * bien cette clé-là : `commande.numero`, que l'en-tête lit aussi, est déjà portée par
+ * `titre` dans le flux, donc la forme sur `root` la rendrait de toute façon. Une
+ * justification qui nomme la mauvaise clé ne démontre rien.
+ *
+ * Le symptôme ne serait pas une erreur mais un BLANC : l'appelant ne fournirait pas la
+ * clé, et le pied s'imprimerait vide.
  */
 const dataPaths = collectTemplateDataPaths(sampleTemplate);
 
@@ -1319,8 +1342,11 @@ export default function App() {
         <code>collectDataPaths(root)</code> : les bandes de page vivent <em>hors</em> de{' '}
         <code>root</code>, donc la seconde forme omettrait <code>societe.mentionsLegales</code> — lu
         par le pied de dernière page et par lui seul. Le symptôme ne serait pas une erreur mais un{' '}
-        <strong>blanc</strong> : on aurait dit à l'appelant de fournir six clés, jamais la septième,
-        et le pied s'imprimerait vide.
+        <strong>blanc</strong> : on aurait dit à l'appelant de fournir les{' '}
+        <strong>{dataPaths.length - 1}</strong> premières clés de cette liste, jamais la{' '}
+        <strong>{dataPaths.length}</strong>
+        <sup>e</sup>, et le pied s'imprimerait vide. Les deux nombres sont <em>calculés</em> sur la
+        liste affichée juste dessous : une prose qui les écrit en dur finit par la contredire.
       </p>
       <ul>
         {dataPaths.map((dataPath) => (
