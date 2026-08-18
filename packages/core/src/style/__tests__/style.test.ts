@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
+import { TableColumnSchema, TextNodeSchema } from '../../ast/nodes.js';
 import { MAX_SHEET_MM } from '../../page/page.js';
+import { parseTemplate } from '../../template/migrate.js';
+import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import {
   type BorderEdge,
   BorderEdgeSchema,
@@ -150,6 +153,12 @@ describe('a style survives the parse field by field', () => {
       'right',
       'top',
     ]);
+  });
+
+  it('keeps the alignment of a text node -- the 17th', () => {
+    const node = { type: 'text', id: 't', content: [], align: 'end' };
+
+    expect(TextNodeSchema.parse(node)).toStrictEqual(node);
   });
 
   it('REFUSES an empty style object, because absence is the one spelling of "no style"', () => {
@@ -351,6 +360,42 @@ describe('what a style refuses, with the code and the path', () => {
     ]);
   });
 
+  it('ACCEPTS justify on a text node and REFUSES it on a column, the whole boundary', () => {
+    // The two halves of one decision, in one `it`, because separating them would let either half
+    // pass alone -- and either half alone is the bug. `justify` is what `ast/types.ts` used to
+    // promise this lot; the lot delivers it on the tuple that has runs, and NOT on the one that
+    // states a default for a whole column.
+    //
+    // The refusal message on the column is the THIRD form of incompatibility -- an older build
+    // meets `invalid_value` on a discriminant path, with no typed error and no version named --
+    // and it is exactly why this tuple is not the one that was widened.
+    expect(
+      TextNodeSchema.safeParse({ type: 'text', id: 't', content: [], align: 'justify' }).success,
+    ).toBe(true);
+
+    expect(issuesOf(TableColumnSchema, { id: 'c', width: 1, align: 'justify' })).toStrictEqual([
+      {
+        code: 'invalid_value',
+        path: ['align'],
+        message: 'Invalid option: expected one of "start"|"center"|"end"',
+      },
+    ]);
+  });
+
+  it('refuses an unknown alignment on a text node', () => {
+    // The non-inertia counter-check of the `it` above: `TEXT_ALIGNMENTS` accepting `justify` must
+    // not mean it accepts anything. Four members, and a fifth is refused.
+    expect(
+      issuesOf(TextNodeSchema, { type: 'text', id: 't', content: [], align: 'middle' }),
+    ).toStrictEqual([
+      {
+        code: 'invalid_value',
+        path: ['align'],
+        message: 'Invalid option: expected one of "start"|"center"|"end"|"justify"',
+      },
+    ]);
+  });
+
   it.each([
     [
       'N21 a negative inset',
@@ -375,6 +420,103 @@ describe('what a style refuses, with the code and the path', () => {
     ],
   ])('refuses %s', (_label, value, code, path, message) => {
     expect(issuesOf(BoxStyleSchema, value)).toStrictEqual([{ code, path, message }]);
+  });
+});
+
+describe('the ninth accrual site, which no type assertion can guard', () => {
+  it('carries a style at ALL NINE sites through a full parseTemplate round trip', () => {
+    // `Template` IS THE NINTH SITE AND IT IS STRUCTURALLY UNGUARDABLE. Its type is INFERRED from
+    // its schema, so a `TEMPLATE_KEYS_IN_STEP` pair would compare an annotation with itself --
+    // tautological. It is also one of the nine sites the mutation matrix measured at exit 0.
+    //
+    // The only net left is a JSON round trip on a literal that CARRIES the field, and the
+    // repository's two existing round trips (`table.test.ts`, `page.test.ts`) each see only the
+    // sites their own fixture happens to reach. This `it` is the one that reaches all nine: five
+    // `box` (text, image, container, table, tableRow), four `typography` (text, literal, binding,
+    // pageField) and the `align`, the last two INSIDE A PAGE BAND -- which is where the
+    // backward-compatibility measurement showed the loss running deepest.
+    const nineSites = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'facture-c5',
+      name: 'Facture — les neuf sites',
+      version: '1.0.0',
+      page: {
+        sheet: { width: 210, height: 297 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        header: [],
+        footer: [
+          {
+            on: 'every',
+            content: {
+              type: 'container',
+              id: 'ftr',
+              box: { border: { top: { width: 0.28, color: '#1b3a6f' } } },
+              children: [
+                {
+                  type: 'text',
+                  id: 'ftr-num',
+                  box: { padding: { top: 1, right: 0, bottom: 0, left: 0 } },
+                  typography: { sizePt: 8 },
+                  align: 'center',
+                  content: [
+                    { kind: 'literal', text: 'Page ', typography: { italic: true } },
+                    { kind: 'pageField', field: 'number', typography: { bold: true } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      root: {
+        type: 'container',
+        id: 'racine',
+        box: { background: '#F2F4F8' },
+        children: [
+          {
+            type: 'image',
+            id: 'logo',
+            src: 'logo.png',
+            box: { padding: { top: 0, right: 0, bottom: 2, left: 0 } },
+          },
+          {
+            type: 'text',
+            id: 'titre',
+            box: RECIPE_BOX_COMPLETE,
+            typography: RECIPE_TYPOGRAPHY_COMPLETE,
+            align: 'end',
+            content: [
+              {
+                kind: 'binding',
+                value: { kind: 'path', path: 'facture.numero' },
+                typography: { bold: false },
+              },
+            ],
+          },
+          {
+            type: 'table',
+            id: 'lignes',
+            box: { background: '#FFFFFF' },
+            columns: [{ id: 'c', width: 1, align: 'start' }],
+            header: [],
+            body: [
+              {
+                type: 'tableRow',
+                id: 'r',
+                box: { padding: { top: 0.5, right: 0.5, bottom: 0.5, left: 0.5 } },
+                cells: [{ columnId: 'c', children: [] }],
+              },
+            ],
+            footer: [],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseTemplate(nineSites);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(nineSites);
   });
 });
 

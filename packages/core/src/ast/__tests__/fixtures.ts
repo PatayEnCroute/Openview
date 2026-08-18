@@ -24,6 +24,7 @@ import type {
   RoundExpression,
 } from '../../expression/expression.js';
 import { STANDARD_SHEETS_MM } from '../../page/page.js';
+import type { Typography } from '../../style/style.js';
 import { CURRENT_SCHEMA_VERSION, type Template } from '../../template/template.js';
 import type { BlockNode, TableCell, TableNode, TextNode, TextSegment } from '../nodes.js';
 
@@ -36,6 +37,34 @@ export type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
 
 const lit = (text: string): TextSegment => ({ kind: 'literal', text });
 const bind = (value: PrintableExpression): TextSegment => ({ kind: 'binding', value });
+
+/**
+ * ## The nine style sites of lot C5, carried by this fixture on purpose
+ *
+ * The JSON round trip of `table.test.ts` is the ONLY net under `Template`, which is the ninth
+ * accrual site and the one that CANNOT have a `*_KEYS_IN_STEP` pair: `Template` is inferred from
+ * its schema, so the assertion would compare an annotation with itself. And that net only sees a
+ * field the literal it compares actually CARRIES. So this fixture carries one, at every site it
+ * has a node for.
+ *
+ * Deliberately MINIMAL values -- one field per site, not a complete style. The complete shapes
+ * live in `style/__tests__/fixtures.ts`, where the seventeen round trips need them; here the
+ * point is PRESENCE at each site, and a fuller literal would inflate this fixture's calibration
+ * baseline for nothing.
+ *
+ * It covers SIX of the nine carriers and not all nine: this model has no image node and no
+ * `pageField` segment. The two missing ones are covered by the nine-site round trip of
+ * `style/__tests__/style.test.ts`, which builds its own `Template`. Adding an image and a band
+ * here was discarded BY MEASUREMENT: `visitor.test.ts` pins `walk(root)` at 19 nodes, and one
+ * more node reddens it -- a cost with no counterpart, since the ninth site is already guarded
+ * elsewhere.
+ */
+const RULE = { width: 0.28, color: '#1b3a6f' } as const;
+const litStyled = (text: string, typography: Typography): TextSegment => ({
+  kind: 'literal',
+  text,
+  typography,
+});
 const p = (path: string): PathExpression => ({ kind: 'path', path });
 const txt = (id: string, content: readonly TextSegment[]): TextNode => ({
   type: 'text',
@@ -93,6 +122,12 @@ const totalDeclare = round(
 export const RECIPE_TABLE: TableNode = {
   type: 'table',
   id: 'lignes',
+  // Site 1. THIRD position on purpose: `Object.keys` yields insertion order, and
+  // `table.test.ts` pins the exact key list -- writing this field last would redden that
+  // assertion for a reason of tidiness, which is how a useful assertion gets "corrected".
+  // A table now DOES carry a border and a shading, which is why the docstring of `TableNode`
+  // saying it carries none had to be rewritten.
+  box: { border: { top: RULE, bottom: RULE } },
   columns: [
     { id: 'designation', width: 8, align: 'start' },
     { id: 'quantite', width: 2, align: 'end' },
@@ -104,6 +139,9 @@ export const RECIPE_TABLE: TableNode = {
     {
       type: 'tableRow',
       id: 'entete',
+      // Site 2. The heading band: a row IS a band, and this is the second differentiating
+      // device of an invoice.
+      box: { background: '#F2F4F8', padding: { top: 1, right: 1, bottom: 1, left: 1 } },
       cells: [
         cell('designation', txt('th-designation', [lit('Désignation')])),
         cell('quantite', txt('th-quantite', [lit('Quantité')])),
@@ -143,7 +181,17 @@ export const RECIPE_TABLE: TableNode = {
       id: 'ligne-total',
       cells: [
         cell('designation', txt('tf-libelle', [lit('Total')])),
-        cell('montant', txt('tf-montant', [bind(totalDeclare)])),
+        // Sites 3 to 6 in one node, because this is the node where all four fields have a
+        // subject: a rule above the total, an inset under it, a family and a size for the
+        // amount, an alignment for the runs, and a bold on the run itself.
+        cell('montant', {
+          type: 'text',
+          id: 'tf-montant',
+          box: { border: { top: RULE }, padding: { top: 1, right: 0, bottom: 0, left: 0 } },
+          typography: { family: 'EB Garamond', sizePt: 11 },
+          align: 'end',
+          content: [{ kind: 'binding', value: totalDeclare, typography: { bold: true } }],
+        }),
       ],
     },
   ],
@@ -182,6 +230,19 @@ export const RECIPE_TEMPLATE: Template = {
   root: {
     type: 'container',
     id: 'racine',
-    children: [txt('titre', [lit('Facture '), bind(p('facture.numero'))]), RECIPE_TABLE],
+    // Sites 7 to 9: a box on the root container, and two segment typographies in the title --
+    // one on a `literal`, one on a `binding`.
+    box: { padding: { top: 0, right: 0, bottom: 4, left: 0 } },
+    children: [
+      txt('titre', [
+        litStyled('Facture ', { sizePt: 18, bold: true }),
+        {
+          kind: 'binding',
+          value: p('facture.numero'),
+          typography: { sizePt: 18, color: '#1b3a6f' },
+        },
+      ]),
+      RECIPE_TABLE,
+    ],
   },
 };

@@ -8,6 +8,7 @@
  * `vitest` (this file is compiled into `dist/` and shipped in the tarball).
  */
 
+import type { TextAlignment } from '../../ast/nodes.js';
 import type { BoxStyle, Typography } from '../style.js';
 
 /** The ink of appearance A: a navy corporate invoice. */
@@ -56,8 +57,10 @@ export const RECIPE_TYPOGRAPHY_COMPLETE: Typography = {
 /**
  * Appearance A: navy, an outer frame, one horizontal rule per row, generous inset.
  *
- * Neither literal declares an empty style object: an empty one is REFUSED, and a fixture is the
- * first place a refused shape would slip back in.
+ * `legalAlign` is `'start'` here and `'justify'` in B, and that ONE key is what exercises the
+ * fourth member of `TEXT_ALIGNMENTS` -- the member a COLUMN cannot declare. Neither literal
+ * declares an empty style object: an empty one is REFUSED, and a fixture is the first place a
+ * refused shape would slip back in.
  */
 export const RECIPE_STYLE_A = {
   band: { background: '#F2F4F8', padding: { top: 2, right: 3, bottom: 2, left: 3 } },
@@ -65,11 +68,12 @@ export const RECIPE_STYLE_A = {
   body: { family: 'EB Garamond', sizePt: 10.5, color: '#22262b' },
   emphasis: { bold: true },
   rule: { width: 0.28, color: NAVY },
+  legalAlign: 'start',
 } as const satisfies Readonly<
-  Record<string, BoxStyle | Typography | { width: number; color: string }>
+  Record<string, BoxStyle | Typography | { width: number; color: string } | TextAlignment>
 >;
 
-/** Appearance B: rust, no frame, one rule under the heading, a sans face. */
+/** Appearance B: rust, no frame, one rule under the heading, a sans face, justified mentions. */
 export const RECIPE_STYLE_B = {
   band: {
     border: { bottom: { width: 1.2, color: RUST } },
@@ -79,8 +83,9 @@ export const RECIPE_STYLE_B = {
   body: { family: 'Inter', sizePt: 9, color: '#3A3A3A' },
   emphasis: { color: RUST },
   rule: { width: 1.2, color: RUST },
+  legalAlign: 'justify',
 } as const satisfies Readonly<
-  Record<string, BoxStyle | Typography | { width: number; color: string }>
+  Record<string, BoxStyle | Typography | { width: number; color: string } | TextAlignment>
 >;
 
 /**

@@ -85,8 +85,9 @@ export type Color = string;
  * ## An empty object is REFUSED, and the canonical spelling of "no typography" is the absent
  * field
  *
- * The schema refines every one of these three shapes on "declares at least one thing", and so
- * do {@link BoxStyle} and {@link BoxBorder}.
+ * The schema refuses it on every one of these three shapes -- this one, {@link BoxStyle} and
+ * {@link BoxBorder} -- and only once nothing else about the object has gone wrong, which is the
+ * cut-off rule `checkTableWiring` already states.
  *
  * An earlier draft accepted an empty object and declared it "equivalent to absence", on the
  * ground that `typography?.family` yields `undefined` either way. That is true OF A VALUE READ

@@ -1,4 +1,5 @@
 import type { Expression, PrintableExpression } from '../expression/expression.js';
+import type { BoxStyle, Typography } from '../style/style.js';
 
 /**
  * Composite pattern. Containers and leaves are manipulated uniformly through
@@ -31,6 +32,8 @@ interface NodeBase {
 export interface TextLiteralSegment {
   readonly kind: 'literal';
   readonly text: string;
+  /** The form of THIS run's characters. Overrides {@link TextNode.typography} field by field. */
+  readonly typography?: Typography | undefined;
 }
 
 export interface TextBindingSegment {
@@ -49,6 +52,8 @@ export interface TextBindingSegment {
    * *literal* was never covered by it.
    */
   readonly value: PrintableExpression;
+  /** The form of THIS run's characters. Overrides {@link TextNode.typography} field by field. */
+  readonly typography?: Typography | undefined;
 }
 
 /** The two page facts a template can print. Exported as a tuple: a type cannot be iterated. */
@@ -92,6 +97,13 @@ export type PageField = (typeof PAGE_FIELDS)[number];
 export interface TextPageFieldSegment {
   readonly kind: 'pageField';
   readonly field: PageField;
+  /**
+   * The form of the substituted number's characters. A page number has a font.
+   *
+   * Carrying a STYLE here is coherent; carrying an EXPRESSION would reopen the feedback loop
+   * this kind exists to close, and no style position of this contract accepts one.
+   */
+  readonly typography?: Typography | undefined;
 }
 
 export type TextSegment = TextLiteralSegment | TextBindingSegment | TextPageFieldSegment;
@@ -100,17 +112,80 @@ export interface TextNode extends NodeBase {
   readonly type: 'text';
   /** An empty run list is legal: a blank paragraph is a layout intent. */
   readonly content: readonly TextSegment[];
+  /** The box this block occupies: background, rules, inner inset. See {@link BoxStyle}. */
+  readonly box?: BoxStyle | undefined;
+  /**
+   * The form of the characters of every run that declares none of its own.
+   *
+   * The SECOND of the two terms `resolveTypography` merges, and the last: there is no third.
+   * "This invoice is in Helvetica 10" written here costs +60 values (+10.9 %) on the playground
+   * model, against +123 (+22.4 %) written on all 41 segments -- measured, and it is the whole
+   * argument for this field existing beside the segment one.
+   */
+  readonly typography?: Typography | undefined;
+  /**
+   * How this block's INLINE RUNS are distributed inside its own box, and THE ONLY NODE THAT
+   * CARRIES IT.
+   *
+   * Nowhere else, because nowhere else has runs: on an `image` it would be a cropping policy;
+   * on a `container` the cross-alignment of block children, a layout model; on a `table` there
+   * is nothing to align, since a table occupies its parent's content width; on a `tableRow` it
+   * would be EXACTLY {@link TableColumn.align} under a second name.
+   *
+   * ## This is NOT the same fact as {@link TableColumn.align}, and the type says so
+   *
+   * That field is the DEFAULT of this one for the text blocks of a column's cells. It does not
+   * move an image, a container or a box -- nothing in this lot declares a block width, so every
+   * block fills its cell's content width and there is nothing to move. `resolveTextAlign` is
+   * the one spelling of where the default comes from, and the column field is untouched: an
+   * override "s'ajoute, elle ne déplace pas le champ de colonne" (ADR 0005).
+   *
+   * ## Its own tuple, and `TABLE_COLUMN_ALIGNMENTS` is a STRICT SUBSET of it
+   *
+   * {@link TEXT_ALIGNMENTS} adds `justify`, which a COLUMN cannot declare and a text block can.
+   * The subset relation is structural -- the tuple is derived by spread -- so the contract
+   * cannot drift into two unrelated vocabularies, and resolving one against the other compiles
+   * with no widening and no assertion.
+   */
+  readonly align?: TextAlignment | undefined;
 }
 
 export interface ImageNode extends NodeBase {
   readonly type: 'image';
   readonly src: string;
   readonly alt?: string | undefined;
+  /**
+   * The box this block occupies: background, rules, inner inset. See {@link BoxStyle}.
+   *
+   * And NO dimension, here or anywhere: this lot STORES no width and no height on any node,
+   * which is what keeps `printableAreaOf` the only geometry of the contract. A width is not
+   * absent from the product, it is DERIVED -- an image occupies its parent's content width --
+   * so shaping a logo is a container and its `padding`, to the millimetre, with no field here.
+   *
+   * What that leaves to an engine is the HEIGHT, which follows the resource's intrinsic ratio;
+   * that ratio is a measurement OF THE RESOURCE, which is the whole reason a width alone
+   * cannot be stored. Named as an expectation in ADR 0007, not decided here.
+   */
+  readonly box?: BoxStyle | undefined;
 }
 
 export interface ContainerNode extends NodeBase {
   readonly type: 'container';
   readonly children: readonly BlockNode[];
+  /**
+   * The box this block occupies: background, rules, inner inset. See {@link BoxStyle}.
+   *
+   * This one field is what gives a PAGE BAND its appearance for free: `PageBand.content` IS a
+   * `ContainerNode`, so not one line of `page/` changes. It is also the workaround for the two
+   * spacings this lot refuses -- a container per amount of air, and a container around a loop
+   * or a condition, which is how "a background per iteration" and "a background around all the
+   * iterations" stay DISTINCTLY expressible with no field on those nodes.
+   *
+   * NO `typography` here, and it is the same refusal from the other side: a container holds no
+   * characters, so the only meaning a family could have on it is "it descends" -- a cascade,
+   * which this contract makes INEXPRESSIBLE rather than merely forbidding.
+   */
+  readonly box?: BoxStyle | undefined;
 }
 
 /** Repeats its children once per item yielded by {@link LoopNode.each}. */
@@ -162,6 +237,33 @@ export interface ConditionNode extends NodeBase {
 export const TABLE_COLUMN_ALIGNMENTS = ['start', 'center', 'end'] as const;
 
 export type TableColumnAlignment = (typeof TABLE_COLUMN_ALIGNMENTS)[number];
+
+/**
+ * How the inline runs of a {@link TextNode} are distributed inside its own box.
+ *
+ * DERIVED from {@link TABLE_COLUMN_ALIGNMENTS} rather than declared flat, and the spread is the
+ * point: it makes "a column alignment is always a legal text alignment" a fact THE COMPILER
+ * HOLDS, not a comment two files apart can drift from. `resolveTextAlign` returns the block's
+ * alignment else the column's, with no widening and no assertion, because of this one line.
+ *
+ * It lives HERE and not in `style/`, beside the tuple it is a superset of, and that is a
+ * mechanical choice rather than a tidy one: deriving it by spread needs the VALUE of the other
+ * tuple, and importing that value from `style/` would add a runtime edge `style/ -> ast/` to a
+ * graph where `ast/ -> style/` already exists -- exactly the ESM initialisation configuration
+ * this lot measured on the `page/` barrel. Declared in the same file, it derives with no edge.
+ *
+ * The fourth member is the one a column cannot have. Justifying distributes inter-word space,
+ * which is something a RUN does and a column merely defaults; and it costs this contract two
+ * conventions, taken rather than left open, in ADR 0007: the last line of a justified paragraph
+ * aligns to `start`, and the slack is distributed between WORDS, never between letters.
+ *
+ * Nothing here resolves `start` and `end` against a writing direction -- that question is
+ * inherited from lot C3, recorded in ADR 0005, and it is settled by no engine reading the
+ * machine it runs on (lot E6).
+ */
+export const TEXT_ALIGNMENTS = [...TABLE_COLUMN_ALIGNMENTS, 'justify'] as const;
+
+export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
 
 /**
  * The window a column weight lives in, and the bounds are load-bearing rather than
@@ -290,6 +392,33 @@ export interface TableCell {
 export interface TableRowNode extends NodeBase {
   readonly type: 'tableRow';
   readonly cells: readonly TableCell[];
+  /**
+   * The horizontal band this row occupies: background, rules, and a per-cell inset.
+   *
+   * The most debatable of the five carriers, so the argument is written. A row IS a band:
+   * `background` paints it, `border.top`/`border.bottom` draw rules across it,
+   * `border.left`/`border.right` close it at both ends. A table's heading band is the SECOND
+   * differentiating device of an invoice (measured: `background` is one of only two fields whose
+   * removal breaks the recipe criterion), and without a carrier here painting one would take a
+   * `ContainerNode` PER CELL -- five nodes for a five-column heading.
+   *
+   * ## What `padding` does here, and it is NOT what it does on the four other carriers
+   *
+   * It insets THE CONTENT OF EACH CELL of this row, identically, and MOVES NO COLUMN BOUNDARY.
+   *
+   * The other reading -- insetting the band as a whole -- is representable and is refused,
+   * because it would shift, for this row alone, the origin and the width the column weights
+   * resolve against: the heading columns would stop lining up with the body's. It would also
+   * insert into the published formula of {@link TableColumn.width} a per-row subtraction that
+   * formula does not have -- WHICH IS EXACTLY THE ARGUMENT THAT REMOVED A GAP FROM THIS CARRIER,
+   * and that argument does not care which name the field is given. Written as above, `padding`
+   * touches no boundary and leaves the formula intact.
+   *
+   * What was REMOVED so that every field of {@link BoxStyle} has a meaning here: a gap, which on
+   * a row means inter-cell spacing and has no reading that leaves the formula alone; and an
+   * alignment, which here would be {@link TableColumn.align} under a second name.
+   */
+  readonly box?: BoxStyle | undefined;
 }
 
 /**
@@ -384,6 +513,24 @@ export interface TableNode extends NodeBase {
   readonly body: readonly TableBodyNode[];
   /** The closing rows. `TableRowNode` only, on purpose -- see above. */
   readonly footer: readonly TableRowNode[];
+  /**
+   * The box the whole table occupies: background, rules, inner inset. See {@link BoxStyle}.
+   *
+   * ## Where the column weights resolve, which this field makes it necessary to state
+   *
+   * A table occupies its parent's CONTENT width, and its own `padding` is subtracted from that
+   * before {@link TableColumn.width} shares what remains. This COMPLETES the published formula
+   * rather than contradicting it: "of whatever width the table itself is given" -- what it is
+   * given is the parent's content width, what it shares is its own.
+   *
+   * That sentence is the reason lot C3 could leave the width undeclared and this lot cannot: a
+   * `padding` here that did not say what it subtracts from would be a stored value with no
+   * stated meaning. The whole chain is arithmetic on declared millimetres -- `printableAreaOf`,
+   * then one subtraction per ancestor box, then ONE correctly-rounded division on integer
+   * weights -- so no term of it is a measurement, and decision 7's "same number in the preview
+   * and in the PDF" is checkable rather than merely promised.
+   */
+  readonly box?: BoxStyle | undefined;
 }
 
 /**

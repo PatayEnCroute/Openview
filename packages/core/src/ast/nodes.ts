@@ -43,6 +43,7 @@ export type {
   TableNode,
   TableRowGroupNode,
   TableRowNode,
+  TextAlignment,
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
@@ -54,4 +55,5 @@ export {
   MIN_COLUMN_WIDTH,
   PAGE_FIELDS,
   TABLE_COLUMN_ALIGNMENTS,
+  TEXT_ALIGNMENTS,
 } from './types.js';

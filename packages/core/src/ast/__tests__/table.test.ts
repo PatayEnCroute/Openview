@@ -378,15 +378,23 @@ describe('the recipe criterion', () => {
 
     expect(total?.cells).toHaveLength(2);
     expect(RECIPE_TABLE.columns).toHaveLength(5);
-    // Le nœud tableau porte exactement ces six clés, et la ligne de total ne porte AUCUNE clé
+    // Le nœud tableau porte exactement ces SEPT clés, et la ligne de total ne porte AUCUNE clé
     // de plus qu'une ligne ordinaire. Ce que cette assertion attrape : un champ REQUIS ajouté
     // à `TableNode` ou à `TableColumn`. Ce qu'elle N'attrape PAS, et c'est le cas probable :
     // un `total?:` optionnel, qui n'apparaîtrait pas dans la fixture. Le refus de l'auto-somme
     // est structurel AU SENS DU TYPE pour le pied -- `readonly TableRowNode[]` n'a nulle part
     // où poser un agrégat -- et doctrinal, adossé à un grep, pour la colonne.
+    //
+    // `box` est la septième, et son arrivée a fait ROUGIR cette assertion — c'est le SECOND
+    // filet mécanique sous l'estampille du lot C5, à côté du littéral de chaîne de
+    // `migrate.test.ts`. Il attrape un champ OPTIONNEL, lui, mais seulement parce que la
+    // fixture le porte : c'est exactement ce que le lot C5 a ajouté à `RECIPE_TABLE` pour que
+    // l'aller-retour JSON ci-dessus couvre `Template`, le neuvième site d'accrochage et le seul
+    // qu'aucune paire `*_KEYS_IN_STEP` ne peut garder.
     expect(Object.keys(RECIPE_TABLE)).toStrictEqual([
       'type',
       'id',
+      'box',
       'columns',
       'header',
       'body',
