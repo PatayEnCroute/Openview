@@ -844,8 +844,18 @@ function runsDeSegments(
         // Le jeu de données appartient à l'intégrateur (AGENTS.md, « Ce qu'Openview n'est
         // pas ») : rien ne garantit qu'une liaison pointe vers un scalaire. `String({})` rend
         // silencieusement `'[object Object]'`, une valeur imprimée qui n'a jamais existé dans
-        // le document -- le JSON explicite dit au moins ce qui a été lu.
-        return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+        // le document. La liste positive ci-dessous est ce qui narrove `value` hors d'`unknown`
+        // pour de bon : un test négatif (`typeof value !== 'object'`) laisse `value` non
+        // rétréci aux yeux du compilateur, donc du même avis que Sonar sur ce `String(value)`.
+        if (
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean' ||
+          typeof value === 'bigint'
+        ) {
+          return String(value);
+        }
+        return JSON.stringify(value);
       },
       // Même raison qu'au-dessus : pas de paginateur, donc pas de valeur. `1` est un espace
       // réservé, et la page le dit en toutes lettres plutôt que de faire croire à un calcul.
