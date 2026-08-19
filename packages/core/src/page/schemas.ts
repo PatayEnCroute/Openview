@@ -159,7 +159,7 @@ export const MAX_BANDS_PER_SIDE = 2;
 export const PageBandsSchema = z
   .array(PageBandSchema)
   .max(MAX_BANDS_PER_SIDE, 'A side carries at most two bands.')
-  .superRefine(checkBandsCannotOverlap);
+  .check(z.superRefine(checkBandsCannotOverlap));
 
 /**
  * The page, with its two cross-field invariants.
@@ -225,24 +225,26 @@ export const PageSetupSchema = z
     header: PageBandsSchema,
     footer: PageBandsSchema,
   })
-  .superRefine((page, ctx) => {
-    const { width, height } = page.sheet;
-    const { top, right, bottom, left } = page.margins;
-    if (width >= MIN_SHEET_MM && left + right >= width) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['margins'],
-        message: 'Horizontal margins leave no printable width.',
-      });
-    }
-    if (height >= MIN_SHEET_MM && top + bottom >= height) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['margins'],
-        message: 'Vertical margins leave no printable height.',
-      });
-    }
-  });
+  .check(
+    z.superRefine((page, ctx) => {
+      const { width, height } = page.sheet;
+      const { top, right, bottom, left } = page.margins;
+      if (width >= MIN_SHEET_MM && left + right >= width) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['margins'],
+          message: 'Horizontal margins leave no printable width.',
+        });
+      }
+      if (height >= MIN_SHEET_MM && top + bottom >= height) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['margins'],
+          message: 'Vertical margins leave no printable height.',
+        });
+      }
+    }),
+  );
 
 /**
  * One direction only, and the other is unavailable: `z.array` infers a MUTABLE array

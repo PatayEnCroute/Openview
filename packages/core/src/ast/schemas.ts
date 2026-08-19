@@ -356,4 +356,4 @@ export const TableNodeSchema = z
     footer: z.array(TableRowNodeSchema),
     box: boxField,
   })
-  .superRefine(checkTableWiring);
+  .check(z.superRefine(checkTableWiring));

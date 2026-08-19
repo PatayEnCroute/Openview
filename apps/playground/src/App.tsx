@@ -838,7 +838,14 @@ function runsDeSegments(
         // Une donnée absente rend une cellule vide. L'ADR 0001 laisse la politique de la
         // valeur absente ouverte, et une cellule de tableau n'est pas l'endroit où la
         // trancher : `rawSegments` garde le `(absent)` explicite pour les sections de dump.
-        return value === undefined ? '' : String(value);
+        if (value === undefined) {
+          return '';
+        }
+        // Le jeu de données appartient à l'intégrateur (AGENTS.md, « Ce qu'Openview n'est
+        // pas ») : rien ne garantit qu'une liaison pointe vers un scalaire. `String({})` rend
+        // silencieusement `'[object Object]'`, une valeur imprimée qui n'a jamais existé dans
+        // le document -- le JSON explicite dit au moins ce qui a été lu.
+        return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
       },
       // Même raison qu'au-dessus : pas de paginateur, donc pas de valeur. `1` est un espace
       // réservé, et la page le dit en toutes lettres plutôt que de faire croire à un calcul.
@@ -900,6 +907,20 @@ function familleDePoliceCss(famille: string | undefined): string | undefined {
 const filetCss = (arete: BorderEdge | undefined): string | undefined =>
   arete === undefined ? undefined : `${arete.width * PX_PAR_MM}px solid ${arete.color}`;
 
+function graisseCss(gras: boolean | undefined): CSSProperties['fontWeight'] {
+  if (gras === undefined) {
+    return undefined;
+  }
+  return gras ? 700 : 400;
+}
+
+function inclinaisonCss(italique: boolean | undefined): CSSProperties['fontStyle'] {
+  if (italique === undefined) {
+    return undefined;
+  }
+  return italique ? 'italic' : 'normal';
+}
+
 /**
  * Le CSS d'un nœud, DÉRIVÉ de ce que le nœud déclare — jamais l'inverse.
  *
@@ -939,8 +960,8 @@ function styleCssDe(box: BoxStyle | undefined, typo: Typography | undefined): CS
     // Points -> millimètres par la conversion DU CONTRAT, puis millimètres -> pixels par
     // l'échelle déclarée. Deux étapes, une seule orthographe de la première.
     fontSize: typo?.sizePt === undefined ? undefined : mm(mmFromPt(typo.sizePt)),
-    fontWeight: typo?.bold === undefined ? undefined : typo.bold ? 700 : 400,
-    fontStyle: typo?.italic === undefined ? undefined : typo.italic ? 'italic' : 'normal',
+    fontWeight: graisseCss(typo?.bold),
+    fontStyle: inclinaisonCss(typo?.italic),
     color: typo?.color,
   };
 }
@@ -1773,7 +1794,7 @@ export default function App() {
         le groupe de lignes du tableau, par l'agrégat ou par le filtre — <strong>quatre</strong>{' '}
         sites d'alias depuis le lot C3, et le quatrième ne fuit pas plus que les trois autres. Les
         autres chemins sont les noms choisis par l'application intégratrice — c'est la liste que le
-        moteur <em>rend</em> à l'appelant, pas une liste qu'il lui <em>impose</em>. Remarquez qu'
+        moteur <em>rend</em> à l'appelant, pas une liste qu'il lui <em>impose</em>. Remarquez que{' '}
         <code>traitement.effectueLe</code> y figure comme n'importe quelle autre clé : « aujourd'hui
         » est une donnée, pas une horloge.
       </p>

@@ -47,7 +47,7 @@ import { ptFromMm } from './units.js';
  * taste. COMPOSITION is a rendering model, hence the layers of lot C11 / decision 10. A
  * refusal nobody wrote down is a refusal that reopens with the first client.
  */
-export type Color = string;
+export type Color = string; // NOSONAR -- documentation-only alias, see the docstring above.
 
 /**
  * The form of the characters. Five declarations, all optional, none of them content.
