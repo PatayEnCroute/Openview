@@ -13,6 +13,7 @@ import { evaluateExpression } from '../evaluate.js';
 const numeric = {
   total: 100,
   qty: 0,
+  minusZero: -0,
   line: {
     quantity: 3,
     unitPrice: 12.5,
@@ -60,6 +61,16 @@ describe('arithmetic', () => {
     expect(compute('div', literal(9), literal(3))).toBe(3);
   });
 
+  it('refuses an operator outside the closed set instead of dividing', () => {
+    // Smuggled past the compiler the way `round.test.ts` smuggles a mode: `ArithmeticOperator`
+    // and `z.enum(ARITHMETIC_OPERATORS)` both refuse this, so only an untyped caller of the
+    // public API can produce it. What the assertion pins is that the answer is a REFUSAL and
+    // not a plausible amount -- `div` used to be the `default`, so `mod` over 7 and 2 answered
+    // 3.5, and an operator added to the union later would have shipped that in silence.
+    const smuggled: ArithmeticOperator = JSON.parse('"mod"');
+    expect(() => compute(smuggled, literal(7), literal(2))).toThrow(TypeError);
+  });
+
   it('takes parentheses from the nesting', () => {
     // There is no precedence and no parser, so `(a + b) * c` is a mul whose left operand
     // is an add. Nothing about that can be misread in a formula bar either.
@@ -78,6 +89,16 @@ describe('arithmetic', () => {
     // through the `round` wrapper kind.
     expect(compute('div', literal(1), literal(3))).toBe(0.3333333333333333);
     expect(compute('add', literal(0.1), literal(0.2))).toBe(0.30000000000000004);
+  });
+
+  it('never yields a negative zero', () => {
+    // `toBe` is `Object.is`, so `expect(-0).toBe(0)` FAILS: that is what makes these three
+    // assertions a pin rather than a formality, and all three go red without the exit
+    // normalisation. A negative zero is not part of a document's vocabulary -- `round` refused
+    // to emit one from the start, and a multiplication had no reason to be the exception.
+    expect(compute('mul', literal(0), literal(-1))).toBe(0);
+    expect(compute('div', literal(0), literal(-5))).toBe(0);
+    expect(compute('sub', path('minusZero'), literal(0))).toBe(0);
   });
 
   it('propagates absence rather than substituting zero', () => {
@@ -136,6 +157,18 @@ describe('arithmetic', () => {
       at: ['right'],
       actualType: 'number',
     });
+    // A NEGATIVE zero is such a divisor: `-0 === 0`, so it earns that same refusal rather than
+    // the `not-finite` it would earn by dividing -- `1 / -0` is `-Infinity`. Two plausible
+    // codes for one fault, so the choice is pinned instead of left to the next reader. Taken
+    // from the DATA on purpose: `JSON.stringify(-0)` is `"0"`, so no stored template carries it.
+    expect(
+      expectEvaluationError(() => compute('div', literal(1), path('minusZero'))),
+    ).toStrictEqual({
+      code: 'division-by-zero',
+      site: 'arithmetic',
+      at: ['right'],
+      actualType: 'number',
+    });
     // The other case entirely: missing data propagates, it is not a wrong formula.
     expect(compute('div', literal(1), path('line.missing'))).toBeUndefined();
   });
@@ -173,6 +206,12 @@ describe('percentOf', () => {
   it('does not round either', () => {
     expect(percent(literal(10), literal(3))).toBe(0.3);
     expect(percent(literal(1), literal(1))).toBe(0.01);
+  });
+
+  it('never yields a negative zero either', () => {
+    // The same rule, from the same exit guard, and the same `Object.is` semantics of `toBe`.
+    expect(percent(literal(0), literal(-10))).toBe(0);
+    expect(percent(literal(-0), literal(10))).toBe(0);
   });
 
   it('propagates absence and refuses a wrong shape, at its own field names', () => {
