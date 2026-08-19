@@ -4,6 +4,15 @@ import { valueTypeOf } from '../../value-type.js';
 import { describe, fail } from '../context.js';
 import { isAbsent, isPrimitive } from '../guards.js';
 
+/**
+ * The four ordering operators, dispatched exhaustively.
+ *
+ * The `never` for the reason `apply` gives in `arithmetic.ts`, and the stake here is higher:
+ * `lte` used to be the `default`, so an operator outside the union answered `left <= right`,
+ * and a comparison decides which BRANCH of a document renders -- so the silent answer is a
+ * wrong document rather than a wrong number. The signature narrows eq/neq away, which is what
+ * lets the `never` close the other half.
+ */
 function order<TComparable extends number | string>(
   op: Exclude<ComparisonOperator, 'eq' | 'neq'>,
   left: TComparable,
@@ -16,8 +25,12 @@ function order<TComparable extends number | string>(
       return left >= right;
     case 'lt':
       return left < right;
-    default:
+    case 'lte':
       return left <= right;
+    default: {
+      const exhaustive: never = op;
+      throw new TypeError(`Unhandled comparison operator: ${String(exhaustive)}`);
+    }
   }
 }
 

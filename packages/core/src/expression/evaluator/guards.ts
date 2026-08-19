@@ -90,11 +90,29 @@ export function requireNumber(
 }
 
 /**
- * The same rule at the OTHER end, and the same code.
+ * The same rule at the OTHER end, and the same code -- plus the one normalisation an exit owes
+ * a document.
  *
  * An accumulation overflow -- 60 000 lines at 1e307 -- must not print `Infinity` into a
  * document. `not-finite` at the entry and at the exit, so the policy cannot re-fracture at
  * the first copy-paste.
+ *
+ * **`-0` collapses to `0` here,** and here rather than in each operator because this is the ONE
+ * door every number the algebra PRODUCES comes through: `mul(0, -1)`, `div(0, -5)` and
+ * `percentOf(0, -10)` all yield `-0` under binary64, and `roundDecimal` already refused to emit
+ * one for the reason it states -- a negative zero is not part of a document's vocabulary. It
+ * stays invisible only while nothing formats it: `String(-0)` is `"0"`, but a currency
+ * formatter keeps the sign, so lot C6 is where it would have surfaced -- on an invoice, and
+ * `Object.is` makes it visible in a test and in a `min`/`max` fold long before that.
+ *
+ * It is a sign on an exact zero, NOT a rounding. `div` and `percentOf` still round nothing, and
+ * the two tests that pin that -- `does NOT round a division` and `does not round either` --
+ * keep their assertions untouched, as ADR 0004 requires.
+ *
+ * What it deliberately does NOT do: rewrite a `-0` the caller's DATA carries. `min`/`max`
+ * return an element rather than a computed value, and a `path` returns the datum itself;
+ * normalising those would be `core` deciding on `DataBindingStep`'s behalf, which is the
+ * boundary ADR 0001 leaves to the integrator.
  */
 export function requireFiniteResult(
   value: number,
@@ -107,7 +125,8 @@ export function requireFiniteResult(
       'This calculation overflowed to a number that is not finite. A document must never print Infinity or NaN.',
     );
   }
-  return value;
+  // `value === 0` is true of both zeros, so this one comparison is the whole normalisation.
+  return value === 0 ? 0 : value;
 }
 
 /**
