@@ -845,6 +845,14 @@ Tout le reste du dépôt passe par `CURRENT_SCHEMA_VERSION` et reste **vert**.
 d'une estampille, jamais l'oubli **des deux à la fois** — qui est exactement la façon dont on se
 trompe. Le seul filet mécanique sur la marche neuve est la **liste littérale**.
 
+### ③ La vitrine montre les quatre combinaisons à la fois, plutôt que deux boutons
+
+Le plan prescrivait **deux boutons** à état. La page est bâtie **entièrement de constantes de
+module** — elle ne porte aucun `useState` — et un tableau 2×2 statique montre les **quatre**
+combinaisons **simultanément**, ce qui est strictement plus démonstratif qu'un basculement qui n'en
+montre qu'une. L'exigence de fond du plan est satisfaite et dépassée : les deux croisées sont
+visibles **côte à côte** avec les deux diagonales, étiquetées comme telles.
+
 ### ④ Une sonde de la définition de fini a un FAUX POSITIF, et il est nommé
 
 Le plan fait de « aucune chaîne formatée n'est figée » un critère **mécanique** :
@@ -875,15 +883,6 @@ d'autre.
 ```
 git grep -nE "(toBe|toStrictEqual|toContain)\(['\"][^'\"]*[0-9][ ,.  ][0-9]" -- packages/core/src/presentation/__tests__
 ```
-
-### ③ La vitrine montre les quatre combinaisons à la fois, plutôt que deux boutons
-
-Le plan prescrivait **deux boutons** à état. La page est bâtie **entièrement de constantes de
-module** — elle ne porte aucun `useState` — et un tableau 2×2 statique montre les **quatre**
-combinaisons **simultanément**, ce qui est strictement plus démonstratif qu'un basculement qui n'en
-montre qu'une. L'exigence de fond du plan est satisfaite et dépassée : les deux croisées sont
-visibles **côte à côte** avec les deux diagonales, étiquetées comme telles.
-
 ---
 
 ## Les conséquences
