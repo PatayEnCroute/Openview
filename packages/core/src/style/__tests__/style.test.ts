@@ -131,7 +131,7 @@ describe('the public surface of the package', () => {
     for (const symbol of added) {
       expect(values).toContain(symbol);
     }
-    expect(values).toHaveLength(117);
+    expect(values).toHaveLength(126);
   });
 });
 

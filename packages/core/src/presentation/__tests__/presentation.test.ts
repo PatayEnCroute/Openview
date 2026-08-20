@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
 import { MAX_ROUND_DECIMALS } from '../../expression/types.js';
+import * as core from '../../index.js';
 import { parseTemplate, TEMPLATE_MIGRATIONS } from '../../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import { formatDate, formatDecimal, formatMoney } from '../format.js';
@@ -683,5 +684,55 @@ describe('the stored shape, its stamp and its migration', () => {
     expect(() => parseTemplate(documentAt(CURRENT_SCHEMA_VERSION + 1))).toThrow(
       /schema version 8 but this build understands at most 7/,
     );
+  });
+});
+
+describe('the public surface of the writing contract', () => {
+  it('publishes nine values, and not a tenth', () => {
+    // The barrel is the one place in this package where an omission is completely silent: a symbol
+    // left unexported breaks nothing, it merely makes a feature unreachable for an integrator, and
+    // no gate sees it. So the count is measured and the names are listed.
+    const values = Object.keys(core);
+    for (const symbol of [
+      'DATE_STYLES',
+      'MAX_FRACTION_DIGITS',
+      'MIN_FRACTION_DIGITS',
+      'PresentationSchema',
+      'PresentationTableSchema',
+      'formatDate',
+      'formatDecimal',
+      'formatMoney',
+      'resolvePresentation',
+    ]) {
+      expect(values).toContain(symbol);
+    }
+    // Types do not appear in the keys of a JavaScript module, so the five this lot adds move no
+    // count. That is the limit this assertion inherits, and it is stated rather than forgotten.
+    expect(values).toHaveLength(126);
+  });
+
+  it('keeps both locale predicates out of the public surface', () => {
+    // No consumer outside this package names either, and splitting one predicate into two added
+    // nothing to the surface -- which is precisely the point of not exporting them.
+    const values = Object.keys(core);
+    expect(values).not.toContain('wellFormedLocale');
+    expect(values).not.toContain('honouredLocale');
+    // Pinned negatively so that folding the two gates back into one predicate goes red here too.
+    expect(values).not.toContain('declarableLocale');
+  });
+
+  it('publishes no referential, and no function that derives a scale from a value', () => {
+    // Openview holds no list of languages or currencies, and the writing is declared by its two
+    // bounds rather than inferred from a value's binary form.
+    const values = Object.keys(core);
+    for (const absent of [
+      'PRESENTATION_LOCALES',
+      'PRESENTATION_CURRENCIES',
+      'scaleOf',
+      'declaredScaleOf',
+      'parsePresentation',
+    ]) {
+      expect(values).not.toContain(absent);
+    }
   });
 });
