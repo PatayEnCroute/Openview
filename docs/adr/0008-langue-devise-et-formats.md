@@ -1,8 +1,10 @@
 # ADR 0008 — Langue, devise et formats
 
-- **Statut :** 🟡 **Proposé** (2026-08-20), implémenté dans `@openview/core` — ⛔ **trois
-  arbitrages restent ouverts et appartiennent au propriétaire du produit**, cf. [§ Ce qui reste
-  ouvert]. Le **code** est livré et mesuré ; c'est l'**acceptation doctrinale** qui attend.
+- **Statut :** 🟢 **Accepté** (2026-08-20), implémenté dans `@openview/core`. Les **trois
+  arbitrages** que ce lot ne pouvait pas trancher seul — `A-1`, `A-2`, `A-3` — ont été **tranchés
+  par le propriétaire du produit le 2026-08-20**, et leurs conséquences sont portées : l'ADR 0003
+  est **amendée**, le critère de recette de la roadmap est **scindé**, et la politique du refus au
+  rendu est **actée**.
 - **Date :** 2026-08-20
 - **Impact :** `@openview/core` (une forme stockée, `Presentation` ; **un** site d'accrochage,
   `Template.presentations` ; deux schémas ; deux prédicats de locale non exportés ; quatre
@@ -17,13 +19,13 @@
   Et [ADR 0003](0003-formules-agregations-et-dates-civiles.md), dont `civil-date.ts` fixe ce
   qu'**est** une date dans ce paquet et annonce que « *la transformer en `31/03/2026` appartient au
   lot C6* ». C'est ce lot, et il n'élargit pas le datum qu'on lui a remis.
-- **⛔ Contredit une position de doctrine publiée, et le dit ici plutôt qu'en silence.**
-  L'[ADR 0003](0003-formules-agregations-et-dates-civiles.md) écrit qu'une opération de l'algèbre
-  « *ne lit rien de l'environnement — ni horloge, ni fuseau, ni locale, ni ICU* ». Ce lot n'ajoute
-  **aucune** opération à l'algèbre — le critère `git grep -c "case 'round':" --
-  packages/core/src/expression` reste à **2** — mais `presentation/format.ts` **dépend d'ICU**.
-  L'amendement rédigé est au [§ Ce qui reste ouvert], et il appartient au propriétaire du produit :
-  **un lot n'amende pas lui-même une ADR acceptée.**
+- **⛔ Amende :** [ADR 0003](0003-formules-agregations-et-dates-civiles.md) — la condition 2 de son
+  critère d'admissibilité (« *elle ne lit rien de l'environnement — ni horloge, ni fuseau, ni
+  locale, ni ICU* ») et sa position sur `toLocaleUpperCase`. Ce lot n'ajoute **aucune** opération à
+  l'algèbre — le critère `git grep -c "case 'round':" -- packages/core/src/expression` reste à
+  **2** — mais `presentation/format.ts` **dépend d'ICU**. L'*Amendement C6* est écrit **dans**
+  l'ADR 0003, sous sa décision 5, et il a été **accepté par le propriétaire du produit** : un lot
+  n'amende pas lui-même une ADR acceptée, il **porte** l'amendement une fois celui-ci décidé.
 - **N'amende aucune règle de gouvernance.** `AGENTS.md` sort du lot **inchangé** en ce qui concerne
   ce lot, et le contrôle est négatif et rejouable. `packages/core/src/errors.ts` sort du lot **octet
   pour octet** : **zéro code d'erreur nouveau, zéro classe nouvelle, zéro site nouveau**.
@@ -730,88 +732,101 @@ close de locales ni de devises. Aucun catalogue de messages.
 
 ---
 
-## Ce qui reste ouvert — trois arbitrages, et ils appartiennent au propriétaire du produit
+## Les trois arbitrages, et ce qu'ils ont tranché
 
-**Le code est livré, mesuré et vert.** Ce qui suit ne bloque aucun commit : cela bloque le passage de
-cette ADR de 🟡 **Proposé** à 🟢 **Accepté**, parce qu'**une ADR ne s'écrit pas contre une question
-ouverte**.
+**Tranchés par le propriétaire du produit le 2026-08-20.** Le code était livré, mesuré et vert
+avant eux : ce qu'ils bloquaient n'était pas un commit, c'était le passage de cette ADR à
+**Accepté** — parce qu'**une ADR ne s'écrit pas contre une question ouverte**.
 
-### A-1 — Une locale inconnue de la machine qui OUVRE le document
+### A-1 — ✅ TRANCHÉ : un document reste OUVRABLE, avec une écriture non résolue
 
-**La question.** Un document déclarant `en-FR` s'ouvre sur un build d'ICU et pas sur un autre. Le lot
-tranche pour **ouvrable avec une écriture non résolue**, refusée au rendu.
+**La question.** Un document déclarant `en-FR` s'ouvre sur un build d'ICU et pas sur un autre. La
+locale inconnue de la machine qui **ouvre** le document rend-elle le document **inouvrable**, ou
+**ouvrable avec une écriture non résolue** ?
 
-**Ce que l'autre branche coûterait**, et c'est pourquoi elle n'a pas été prise : refuser à l'ouverture
-rendrait [D-06] irréversible de fait, et obligerait Openview à **publier une version d'ICU minimale**
-— donc à détenir un référentiel, ce que [D-06] et [D-08] refusent tous les deux.
+**La décision : ouvrable.** C'est ce que le code fait, et c'est désormais une **politique produit**
+et non un effet de bord de la coupure de [D-06] :
 
-**Ce qui reste à trancher :** la branche retenue est-elle acceptée comme **politique produit** ? Elle
-a une conséquence visible pour un utilisateur — un document qui s'ouvre et dont une écriture ne rend
-rien — et cette conséquence appartient au produit, pas au contrat.
+> Un document dont une écriture ne peut pas être résolue **s'ouvre**. Le refus est **local à
+> l'écriture concernée**, il porte sa **cause** (`'unhonoured-locale'`), et c'est l'appelant qui
+> décide s'il est fatal.
 
-### A-2 — ⛔ Le critère de recette appartient à E4, et le texte de la roadmap ne le dit pas
+**La conséquence visible, actée :** un utilisateur peut ouvrir un document dont une écriture ne rend
+rien. C'est le prix, et il est payé pour que le format soit **portable** : l'autre branche rendrait
+[D-06] irréversible de fait et obligerait Openview à **publier une version d'ICU minimale** — donc à
+détenir un référentiel, ce que [D-06] et [D-08] refusent tous les deux.
 
-**Le fait.** Le critère de recette de la brique est **mot pour mot** celui du lot moteur E4, et
-`core` **ne rend rien**. Aucun contrat de `core` ne peut donc satisfaire le critère **tel qu'il est
-écrit**.
+**Ce que la décision oblige en aval :** `E4-8` (« blanc ou échec », question 2 d'ADR 0001) devient le
+seul endroit où la politique d'affichage se tranche, et `D-06b` devient **obligatoire** plutôt que
+souhaitable — un Designer qui n'avertit pas laisse l'auteur découvrir le problème au rendu.
 
-**La recommandation :** `core` **déclare**, E4 **produit**. Ce qui suppose de réécrire le « prêt
-quand » de la roadmap en deux moitiés :
+### A-2 — ✅ TRANCHÉ : `core` déclare, E4 produit
+
+**Le fait.** Le critère de recette de la roadmap `core` était **mot pour mot** celui du lot moteur
+E4, et `core` **ne rend rien**. Aucun contrat de `core` ne pouvait donc satisfaire le critère **tel
+qu'il était écrit**.
+
+**La décision : le critère est SCINDÉ**, et les deux moitiés sont écrites dans les roadmaps :
 
 - **`core` C6 est prêt quand** un `Template` unique **déclare** deux écritures, qu'un appelant en
   sélectionne une **par un argument**, que les trois fonctions rendent deux chaînes différentes
-  portant les mêmes chiffres, et que `collectTemplateDataPaths` rende la **même liste** dans les deux
-  cas. **Tout cela est livré et démontré** — par des `it` et par la vitrine.
+  portant les **mêmes chiffres**, et que `collectTemplateDataPaths` rende la **même liste** dans les
+  deux cas. ✅ **Livré et démontré** — par des `it`, et par la vitrine.
 - **`engine` E4 est prêt quand** une facture bilingue **sort** en PDF, dans les deux écritures, avec
   les sites correctement choisis.
 
-⛔ **Sans cet arbitrage, le lot ne peut pas être déclaré fini** — non parce qu'il manque du code, mais
-parce que le texte contre lequel on le mesure décrit le travail d'un autre lot.
+L'énoncé précédent est **conservé** dans `docs/roadmap/core.md`, barré et daté, parce qu'il
+expliquait *pourquoi* la coupe était nécessaire.
 
-### A-3 — ⛔ Ce contrat dépend d'ICU, et une ADR acceptée dit qu'il ne le doit pas
+### A-3 — ✅ TRANCHÉ : l'ADR 0003 est amendée, et l'amendement dit ce qui reste vrai
 
-**La cible a été rectifiée**, et la rectification importe : l'[ADR 0003](0003-formules-agregations-et-dates-civiles.md)
-énonce ses deux conditions dans le **critère d'admissibilité de l'algèbre d'expressions**, et le sujet
-de la phrase est « *une opération de date* ». **Ce lot n'ajoute aucune opération à l'algèbre**, donc
-l'ADR 0003 **n'interdit pas ce contrat** au sens strict. Le conflit réel est avec l'**énoncé de
-déterminisme** que le lot moteur E6 hérite.
+**La cible avait été rectifiée**, et la rectification importe : l'ADR 0003 énonce ses deux conditions
+dans le **critère d'admissibilité de l'algèbre d'expressions**, et le sujet de la phrase est « *une
+opération de date* ». **Ce lot n'ajoute aucune opération à l'algèbre**, donc la condition 2 reste
+**intégralement vraie de l'algèbre**. Le conflit réel portait sur la **portée** de la phrase.
 
-**L'amendement rédigé, en trois phrases opposables** — il reste à accepter, et il n'est **pas** porté
-par ce lot :
+**L'amendement est écrit dans l'ADR 0003 elle-même**, sous sa décision 5, et il est reproduit ici
+pour que cette ADR soit lisible seule :
 
-> **Amendement C6.** Une fonction de `presentation/` peut appeler `Intl` **si et seulement si** la
-> locale lui est **déclarée par le modèle**, **structurellement valide au sens d'ECMA-402**
-> (`wellFormedLocale`, au parse) et **honorée telle quelle** par ce moteur (`honouredLocale`, au
-> rendu), et si `timeZone`, `calendar` et `numberingSystem` sont **épinglés en littéral en ligne**.
+> Une fonction de `presentation/` peut appeler `Intl` **si et seulement si** la locale lui est
+> **déclarée par le modèle**, **structurellement valide au sens d'ECMA-402** (`wellFormedLocale`, au
+> parse) et **honorée telle quelle** par ce moteur (`honouredLocale`, au rendu), et si `timeZone`,
+> `calendar` et `numberingSystem` sont **épinglés en littéral en ligne**.
 >
 > La garantie de déterminisme devient : *deux rendus du même document par le **même build**
 > produisent la **même chaîne** ; deux builds portant deux versions d'ICU peuvent produire deux
 > **caractères d'espace** différents.*
->
-> Le second point est la contrainte que **E6 hérite**, et il est **mesuré** : `1 234,50 €` en `fr-FR`
-> porte U+202F entre les chiffres et U+00A0 avant le symbole, et le U+202F est arrivé avec **CLDR 42
-> / ICU 72**. La CI tourne deux majeures de Node, donc deux jeux CLDR.
 
-**Ce qui reste vrai sans amendement, et il faut le dire d'abord :** aucune fonction d'expression ne
-lit ICU après ce lot, et le critère `git grep -c "case 'round':" -- packages/core/src/expression`
-reste à **2** — le lot n'écrit **aucun nouveau `switch`**.
+**Deux conséquences portées ailleurs, et il faut les nommer :**
 
-**Propriétaire : le propriétaire du produit.** Un lot ne s'amende pas lui-même une ADR acceptée ;
-l'incrément **porte** l'amendement, il ne le **décide** pas.
+1. **La position sur `toLocaleUpperCase` est amendée sur son MOTIF, pas sur sa conclusion.** Elle
+   reste **interdite** — mais « elle dépend d'ICU » n'est plus le critère, puisque
+   `presentation/format.ts` en dépend et est admis. Le critère est celui de l'amendement, et
+   `toLocaleUpperCase` échoue précisément dessus : elle lit la locale de **l'hôte**.
+2. **Le second membre de la garantie est la contrainte que E6 hérite** (`M-7`), et il est mesuré.
+   Elle est opposable sous la forme d'une règle de test : **aucun test d'or ne fige une chaîne
+   formatée.**
+
+**Ce que l'amendement ne concède pas :** `core` ne lit toujours **rien** de son environnement. Le
+seul appel qui interroge la machine demande « *ce build connaît-il **ce tag*** », jamais « *quelle
+est la langue de ce build* » — et sans lui, `Intl` retomberait **en silence** sur la locale de
+l'hôte, qui est le défaut exact que la condition 2 existe pour interdire.
+
+---
 
 ### Les mandats non bloquants, pour mémoire
 
 | # | Mandat | Statut |
 | :-- | :--- | :--- |
 | **M-4** | `numberingSystem` doit-il devenir déclarable ? | **non déclenché** — épinglé aujourd'hui, réversible pour une estampille |
-| **M-5** | Le poids annoncé du lot était sous-estimé | **constat**, pas une action : corriger l'ordonnancement rouvrirait la vague |
-| **M-7** | L'énoncé d'E6 face à **deux** versions d'ICU | **lié à A-3** — c'est ce lot qui introduit la dépendance à CLDR, donc l'amendement d'A-3 est ce qui le règle |
+| **M-5** | Le poids annoncé du lot était sous-estimé | ✅ **acté dans la roadmap** — « L annoncé, XL réel », écrit plutôt que corrigé : rectifier l'ordonnancement rouvrirait la vague |
+| **M-7** | L'énoncé d'E6 face à **deux** versions d'ICU | ✅ **réglé par A-3** — l'*Amendement C6* énonce la garantie en deux membres, et le second EST la contrainte d'E6 : deux builds portant deux ICU peuvent produire deux caractères d'espace différents |
 
 ---
 
 ## Ce que l'exécution a corrigé du plan
 
-Le plan d'implémentation est **périmé**, et cette ADR fait foi. Trois points où l'exécution a
+Le plan d'implémentation est **périmé**, et cette ADR fait foi. Quatre points où l'exécution a
 divergé, nommés plutôt que tus :
 
 ### ① Le plan prescrivait ses docstrings verbatim, et `AGENTS.md` §1.6 les a interdites

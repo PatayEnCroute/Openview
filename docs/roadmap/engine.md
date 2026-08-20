@@ -95,12 +95,14 @@ redécouvrir ici. Deux méritent d'être citées en tête :
   `RangeError` et un repli silencieux sur la langue de l'hôte — pour rendre
   l'obligation opposable.
 
-**Prêt quand** le même modèle, appelé deux fois, produit une facture
-français/euros et une facture anglais/dollars, toutes deux correctes.
+**Prêt quand** le même modèle, appelé deux fois, **produit** une facture
+français/euros et une facture anglais/dollars, toutes deux correctes — c'est-à-dire
+un PDF qui sort, avec les sites correctement choisis.
 
-⛔ **Cet énoncé est mot pour mot celui de `core` C6, et `core` ne rend rien** :
-l'arbitrage **A-2** de l'ADR 0008 propose de le scinder — `core` **déclare**, ce lot
-**produit** — et il attend le propriétaire du produit.
+✅ **Cet énoncé appartient désormais à ce lot SEUL.** Il était mot pour mot celui de
+`core` C6, alors que `core` ne rend rien ; l'arbitrage **A-2** de
+[ADR 0008](../adr/0008-langue-devise-et-formats.md) l'a **scindé** le 2026-08-20 —
+`core` **déclare**, ce lot **produit**. La moitié déclarative est livrée.
 
 **Poids :** M — **Dépend de :** E3
 
