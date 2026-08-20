@@ -3,6 +3,7 @@ import { type ExpressionErrorDetails, ExpressionEvaluationError } from '../../..
 import type {
   ArithmeticExpression,
   ArithmeticOperator,
+  ComparisonOperator,
   ConditionalExpression,
   Expression,
   LiteralExpression,
@@ -199,6 +200,14 @@ describe('comparison', () => {
     // whichever side it is.
     expect(compareIn('eq', discount, literal(0))).toBe(false);
     expect(compareIn('neq', literal(0), discount)).toBe(true);
+  });
+
+  it('refuses an ordering operator outside the closed set instead of answering <=', () => {
+    // The counterpart of `arithmetic.test.ts`'s smuggled operator, and the stake is not the
+    // same: an amount that is wrong gets noticed, a BRANCH that is wrong renders a plausible
+    // document. `lte` used to be the `default` of the ordering switch, so this answered `true`.
+    const smuggled: ComparisonOperator = JSON.parse('"between"');
+    expect(() => compare(smuggled, literal(1), literal(2))).toThrow(TypeError);
   });
 });
 
