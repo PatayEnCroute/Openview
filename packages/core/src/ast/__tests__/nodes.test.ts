@@ -489,6 +489,53 @@ describe('DocumentNodeSchema', () => {
     expect(parsed).toStrictEqual({ type: 'image', id: 'logo', src: 'logo.png' });
   });
 
+  describe('image src schemes', () => {
+    const accepted = [
+      'logo.png',
+      'assets/logo.png',
+      '/assets/logo.png',
+      'https://cdn.example.test/logo.png',
+      'http://cdn.example.test/logo.png',
+      'data:image/png;base64,iVBORw0KGgo=',
+      'data:image/svg+xml;base64,PHN2Zy8+',
+      'brand-kit:primary-logo',
+    ];
+
+    for (const src of accepted) {
+      it(`accepts ${src}`, () => {
+        expect(ImageNodeSchema.parse({ type: 'image', id: 'i', src }).src).toBe(src);
+      });
+    }
+
+    const refused = [
+      'javascript:fetch("https://attacker.test")',
+      'JaVaScRiPt:alert(1)',
+      'vbscript:msgbox(1)',
+      'file:///etc/passwd',
+      'file:///C:/Windows/win.ini',
+      'data:text/html,<script>alert(1)</script>',
+      'data:application/javascript,alert(1)',
+      '  javascript:alert(1)',
+      `java${String.fromCharCode(9)}script:alert(1)`,
+      `java${String.fromCharCode(10)}script:alert(1)`,
+    ];
+
+    for (const src of refused) {
+      it(`refuses ${JSON.stringify(src)}`, () => {
+        expect(() => ImageNodeSchema.parse({ type: 'image', id: 'i', src })).toThrow();
+      });
+    }
+
+    it('states no URL grammar beyond the scheme, so a long data URI stays valid', () => {
+      const src = `data:image/png;base64,${'A'.repeat(5000)}`;
+      expect(ImageNodeSchema.parse({ type: 'image', id: 'i', src }).src).toBe(src);
+    });
+
+    it('still refuses an empty src', () => {
+      expect(() => ImageNodeSchema.parse({ type: 'image', id: 'i', src: '' })).toThrow();
+    });
+  });
+
   it('rejects an unknown node type', () => {
     expect(() => DocumentNodeSchema.parse({ type: 'barcode', id: 'b1' })).toThrow();
   });
