@@ -2,196 +2,16 @@ import { z } from 'zod/v4';
 import { ContainerNodeSchema } from '../ast/nodes.js';
 import { PageSetupSchema } from '../page/page.js';
 
-/**
- * Format version of the template document, distinct from {@link Template.version}
- * which is the author-facing revision of a given template.
- *
- * ## What version 2 means
- *
- * Version 2 is **the complete C1 algebra**: the 18 expression kinds of ADR 0003 --
- * arithmetic and percentage, aggregation, count and filter, the in-formula conditional,
- * concatenation, explicit stringification, case folding, and the three civil-date
- * operations -- plus `TextBindingSegment.value` widened from `literal | path` to the whole
- * printable sub-algebra.
- *
- * It is stamped ONCE, after the last persisted shape of the lot, and not once per
- * increment. Four stamps and four identity migrations for one functional lot would make the
- * number designate a commit rather than a contract. The consequence was a rule of conduct
- * while the lot was in flight: no commit before this one was publishable, because a build
- * taken mid-lot reads a lower version and would answer `Invalid input` to a document written
- * by a later one -- exactly the defect the bump exists to fix.
- *
- * Bump this whenever the stored shape changes, and add the matching entry to
- * TEMPLATE_MIGRATIONS in ./migrate.ts in the same commit. A template saved by an
- * older release must stay renderable: this is the one decision that cannot be
- * revisited once a real user has saved a document.
- *
- * "Whenever" covers two incompatibilities, and NEITHER of them produces a legible
- * error without the bump. Both are measured, not supposed.
- *
- * SILENT LOSS -- adding a purely OPTIONAL field. Zod strips unknown keys, so a
- * document written by a newer release and opened by an older one loses the new
- * field with no error at all, and an editor then re-saves the loss.
- *
- * ILLEGIBLE REFUSAL -- WIDENING a union, which is what ADR 0003 did to the
- * expression algebra. An older build meets a kind it has no member for, and Zod
- * reports `"note": "No matching discriminator"`, `"message": "Invalid input"` on a
- * path like `root.children.0.content.1.value.kind`: not an OpenviewError, not a
- * TemplateMigrationError, no mention of a version, and no remedy for whoever reads
- * it. With the bump, the same document yields
- * `TemplateMigrationError: Template uses schema version 2 but this build
- * understands at most 1. It was written by a newer release of Openview; upgrade
- * before opening it.` -- which is the message lot C8 is being built to produce.
- *
- * A migration that only stamps the version is therefore NOT a phantom migration:
- * the stamp is the entire mechanism behind that second message.
- *
- * ## What version 3 means
- *
- * Version 3 is version 2 plus ONE stored shape: the `round` kind -- a printable wrapper
- * carrying a literal position in [-15, 15] and one of two tie-breaking modes. Nineteen
- * expression kinds. That widens `PrintableExpressionSchema`, hence
- * `TextBindingSegment.value`, hence every operand position of the algebra.
- *
- * It is the ILLEGIBLE REFUSAL case described above, unchanged: a version 2 build meeting
- * `{ kind: 'round', ... }` answers `"No matching discriminator"` / `"Invalid input"` on a
- * path like `root.children.0.content.1.value.kind`, with no version named and no remedy.
- * "Purely additive" is not an argument against the bump, it is the argument FOR it.
- *
- * Stamped ONCE, after the last persisted shape of the lot. No commit of C2 before that one
- * is publishable, for the reason version 2 already records.
- *
- * ## What version 4 means
- *
- * Version 4 is version 3 plus lot C3, the table of lines: THREE stored node types --
- * `table`, `tableRowGroup` and `tableRow` -- a declared column list carrying an id, a
- * whole-number width weight and an alignment, and cells keyed by column id. Eight document
- * node types. It also SPLITS the node union in two: the children of a container, of a loop,
- * of a condition and of a table cell are BLOCKS, so a bare row cannot stand in a document
- * flow.
- *
- * It is the ILLEGIBLE REFUSAL case described above, a third time and unchanged: a version 3
- * build meeting `{ type: 'table', ... }` answers `"No matching discriminator"` / `"Invalid
- * input"` on a path like `root.children.0.type`, with no version named and no remedy.
- * "Purely additive" is once more the argument FOR the bump, not against it.
- *
- * Stamped ONCE, after the last persisted shape of the lot. No commit of C3 before that one
- * is publishable, for the reason version 2 already records.
- *
- * ## What version 5 means
- *
- * Version 5 is version 4 plus TWO stored shapes, and they move in opposite directions.
- *
- * TOWARDS THE WIDE -- `TextSegment` gains `pageField`, a marker the paginator substitutes.
- * A version 4 build meeting one answers `"No matching discriminator"` / `"Invalid input"`
- * on a path like `root.children.0.content.1.kind`: no version named, no remedy, and a path
- * pointing at a `kind` that is spelt correctly.
- *
- * The path is in `root` and not under `page`, and the reason matters: a version 4 build does
- * not KNOW the `page` key, so it strips the whole field without validating anything inside
- * it. Measured -- a marker written under `page.footer` yields no issue at all. The marker is
- * legal wherever a `TextNode` lives, `root` included, so the widening is detectable exactly
- * where real templates write it.
- *
- * TOWARDS THE NARROW -- `Template.page` becomes REQUIRED. This is the SILENT case, and it
- * is the dangerous one: a version 4 build does not refuse the field, it STRIPS it, and an
- * editor that opens then saves erases the page with no error at all.
- *
- * One version, two directions, one number. And unlike versions 2, 3 and 4, this one comes
- * with a migration that TRANSFORMS rather than stamps: `page` being required, a v4
- * document with no page would otherwise be refused outright -- a real narrowing, and the
- * first that would not be vacuous.
- *
- * Stamped ONCE, after the last persisted shape of the lot. No commit of C4 before that one
- * is publishable -- and "not publishable" is STRICTER here than it was for C1, C2 and C3,
- * which were purely widening: a build taken between the `page` field and this stamp refuses
- * EVERY existing v4 document, not merely the documents of the build that follows.
- *
- * ## What version 6 means
- *
- * Version 6 is version 5 plus lot C5, the appearance: TWO stored shapes -- `BoxStyle` (a
- * background, four border edges, an inner inset) and `Typography` (a family, a size in points,
- * bold, italic, a colour) -- plus one isolated field, `TextNode.align`. NINE accrual sites: a
- * `box` on `text`, `image`, `container`, `table` and `tableRow`; a `typography` on `text` and on
- * the three segment kinds.
- *
- * It is the SILENT LOSS case described above, and NOT the illegible refusal -- every field of
- * this lot is OPTIONAL, so no union widens and no older build meets an unknown discriminant.
- * That makes it the dangerous class, and it is measured rather than argued. A document carrying
- * a complete style at all nine sites, stamped 5, read by the build that precedes this lot:
- *
- *     ACCEPTED WITH NO ERROR AT ALL
- *     in : 81 values   out : 37 values   ERASED: 44 of 81 (-54.3 %)
- *
- * `box` and `typography` -- gone, down to the `typography` of a `pageField` segment INSIDE A
- * PAGE BAND, and an `onSave` persists the whole loss. The figure belongs to THAT document and is
- * not quoted without it: a document carrying fewer style positions loses proportionally less.
- *
- * With the stamp, that same document yields
- * `TemplateMigrationError: Template uses schema version 6 but this build understands at most 5.
- * It was written by a newer release of Openview; upgrade before opening it.` -- and THE STAMP
- * ALONE IS WHAT PRODUCES IT, independently of the new shapes.
- *
- * UNLIKE VERSION 5, THERE IS NO `root`/`page` ASYMMETRY, and the v5 paragraph above must not be
- * read forward. A version 4 build did not KNOW the `page` key and stripped the whole field
- * without validating inside it; a version 5 build KNOWS it, descends into it and validates
- * there. So a style written in a header band is stripped just as visibly as one written in the
- * flow, and the detectability argument of the v5 entry does not need restating.
- *
- * Stamped ONCE, after the last persisted shape of the lot. No commit of C5 before that one is
- * publishable, for the reason version 2 already records -- and "not publishable" is as WEAK here
- * as it was for C1, C2 and C3 rather than as strict as for C4: this lot narrows nothing, so a
- * build taken mid-lot refuses no existing document, it merely loses the fields of the build that
- * follows.
- */
 export const CURRENT_SCHEMA_VERSION = 6;
 
 /**
- * **`.parse` on this schema bounds nothing**, and it is the shortest way around the shape
- * guard: `TemplateSchema.parse(raw)` is exactly `parseTemplate`'s body minus its guard, so a
- * deep enough document raises a bare `RangeError` from Zod instead of a typed
- * `TemplateShapeError`. Use `parseTemplate` unless you specifically need the schema as a
- * value -- for `z.infer`, for composition, or for the partial validation a Designer does.
- *
- * Note what a Template does NOT carry: any description of the data it expects.
- * The catalogue of available fields belongs to the integrating application (see
- * `EvaluationScope`, and `dataCatalogue` on the Designer's props). A template records
- * what it READS -- `collectTemplateDataPaths` recovers exactly that -- never what the
- * caller must supply. Adding a data schema to the stored document would move the
- * ownership of the data from the host application to Openview.
- *
- * That function and not `collectDataPaths`: the latter takes a NODE, and since this
- * schema gained `page` the repeated bands live outside `root`, so a node-level walk
- * misses every binding a header or a footer carries.
+ * Zod schema for validating a complete document template at CURRENT_SCHEMA_VERSION.
  */
 export const TemplateSchema = z.object({
   schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
   id: z.string().min(1, 'A template id is required'),
   name: z.string().min(1, 'A template name is required'),
-  /** Author-facing revision, free-form. Never drives migrations. */
   version: z.string().default('1.0.0'),
-  /**
-   * The sheet, its margins and its repeated bands.
-   *
-   * REQUIRED, with no schema default, for two reasons and NOT for a third that looks like
-   * one. The recipe criterion says a template IMPOSES its format, and an optional field
-   * imposes nothing -- it permits. And an absent page forces the engine to invent a sheet,
-   * which moves a layout decision into a render file, with nothing checking that the viewer
-   * invents the same one.
-   *
-   * NOT because required-ness prevents silent loss: it does not. An older build strips a key
-   * it does not know whether the newer schema calls it required or optional -- only the schema
-   * version protects against that, see {@link CURRENT_SCHEMA_VERSION}.
-   *
-   * A `z.default()` would be worse than optional, and that IS measured: a document with no
-   * page parses and comes out carrying a sheet Openview chose, at every parse, silently.
-   *
-   * The compatibility sheet exists all the same -- but it is written ONCE, by the 4 -> 5
-   * migration, where it is visible and dated.
-   *
-   * Written before `root` because the geometry precedes the content in a document's reading
-   * order, and because a field appended at the end blends into the optional timestamps.
-   */
   page: PageSetupSchema,
   root: ContainerNodeSchema,
   createdAt: z.iso.datetime().optional(),
@@ -200,5 +20,5 @@ export const TemplateSchema = z.object({
 
 export type Template = z.infer<typeof TemplateSchema>;
 
-/** Identifying fields only, for listing templates without loading their trees. */
+/** Identifying fields for template listings. */
 export type TemplateSummary = Pick<Template, 'id' | 'name' | 'version' | 'updatedAt'>;
