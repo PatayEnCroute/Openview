@@ -79,8 +79,28 @@ Openview et ne relève aucune anomalie de mise en page.
 **Pourquoi.** Le contrat sait décrire un modèle bilingue (core C6) ; le moteur doit
 l'honorer : montants, dates, séparateurs, symbole monétaire, libellés fixes.
 
+**Ce que C6 a livré, et ce qu'il a laissé.** Le contrat est en place — une table
+d'écritures sur le `Template`, une sélection par argument, trois fonctions de
+formatage. Ce lot hérite de **onze attentes nommées**, chacune avec son propriétaire
+et son point de vérification : elles sont énumérées dans
+[ADR 0008](../adr/0008-langue-devise-et-formats.md), et il ne faut **pas** les
+redécouvrir ici. Deux méritent d'être citées en tête :
+
+- **E4-1 — choisir les SITES.** Le contrat livre un verbe et jamais la liste des
+  sites : rien dans un document stocké ne distingue un numéro de commande d'un
+  total, et reconnaître un total exigerait de réserver un nom de champ. C'est
+  **ce lot** qui tranche, devant une vraie facture.
+- **E4-10 — ne jamais construire une écriture à la main.** Aucune porte ne le tient,
+  et l'ADR recopie les **cinq familles de fautes** atteignables autrement — quatre
+  `RangeError` et un repli silencieux sur la langue de l'hôte — pour rendre
+  l'obligation opposable.
+
 **Prêt quand** le même modèle, appelé deux fois, produit une facture
 français/euros et une facture anglais/dollars, toutes deux correctes.
+
+⛔ **Cet énoncé est mot pour mot celui de `core` C6, et `core` ne rend rien** :
+l'arbitrage **A-2** de l'ADR 0008 propose de le scinder — `core` **déclare**, ce lot
+**produit** — et il attend le propriétaire du produit.
 
 **Poids :** M — **Dépend de :** E3
 
