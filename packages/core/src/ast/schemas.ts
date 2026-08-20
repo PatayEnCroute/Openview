@@ -26,6 +26,36 @@ const keepTogetherField = z.literal(true).optional();
 const boxField = BoxStyleSchema.optional();
 const typographyField = TypographySchema.optional();
 
+/** Schemes an image source can never denote. */
+const DANGEROUS_URI_SCHEME = /^(?:javascript|vbscript|file|data(?!:image\/)):/i;
+
+/**
+ * Drops what an HTML or URL parser discards before it reads a scheme -- ASCII whitespace,
+ * C0 controls and DEL -- so a tab spliced into `javascript:` cannot slip past the check.
+ */
+function withoutIgnorableChars(value: string): string {
+  return [...value]
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 0x20 && code !== 0x7f;
+    })
+    .join('');
+}
+
+/**
+ * An image source. Refuses code-bearing and host-local schemes, and imposes no URL grammar
+ * otherwise: a src may be an asset key the host application resolves under its own naming.
+ * Outbound request policy -- private ranges, cloud metadata -- stays the renderer's, since no
+ * hostname pattern survives a DNS rebind.
+ */
+const imageSourceSchema = z
+  .string()
+  .min(1, 'An image src is required')
+  .refine(
+    (src) => !DANGEROUS_URI_SCHEME.test(withoutIgnorableChars(src)),
+    'An image src may not carry the javascript:, vbscript:, file: or a non-image data: scheme. Use an http(s) URL, a data:image/... URI, or a path the host application resolves.',
+  );
+
 export const TextLiteralSegmentSchema = z.object({
   kind: z.literal('literal'),
   text: z.string(),
@@ -64,7 +94,7 @@ export const ImageNodeSchema = z.object({
   type: z.literal('image'),
   id: nodeIdSchema,
   keepTogether: keepTogetherField,
-  src: z.string().min(1, 'An image src is required'),
+  src: imageSourceSchema,
   alt: z.string().optional(),
   box: boxField,
 });
