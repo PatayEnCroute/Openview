@@ -6,17 +6,30 @@ import { parseTemplate } from '../migrate.js';
 import { collectTemplateDataPaths } from '../paths.js';
 import { CURRENT_SCHEMA_VERSION, type Template } from '../template.js';
 
-/** A band whose single text block prints one path. */
-function readingBand(on: PageBand['on'], id: string, path: string): PageBand {
+/**
+ * A band whose single text block prints one path, optionally holding together.
+ *
+ * The mark is SPREAD rather than assigned, so the unmarked form omits the key instead of carrying
+ * it as `undefined` -- absence is the shape every document written before version 8 has.
+ */
+function readingBand(
+  on: PageBand['on'],
+  id: string,
+  path: string,
+  keepTogether?: true | undefined,
+): PageBand {
+  const mark = keepTogether === undefined ? {} : { keepTogether };
   return {
     on,
     content: {
       type: 'container',
       id,
+      ...mark,
       children: [
         {
           type: 'text',
           id: `${id}-txt`,
+          ...mark,
           content: [{ kind: 'binding', value: { kind: 'path', path } }],
         },
       ],
@@ -35,7 +48,12 @@ function readingBand(on: PageBand['on'], id: string, path: string): PageBand {
  * declares `readonly PageBand[]` over `readonly BlockNode[]`. Measured, `TS2322`, and in that
  * direction only -- which is why the type-level assertion on `PageSetup` is one-directional.
  */
-function templateWith(page: PageSetup, ...bodyPaths: readonly string[]): Template {
+function templateWith(
+  page: PageSetup,
+  bodyPaths: readonly string[] = [],
+  keepTogether?: true | undefined,
+): Template {
+  const mark = keepTogether === undefined ? {} : { keepTogether };
   return parseTemplate({
     schemaVersion: CURRENT_SCHEMA_VERSION,
     id: 'tpl_paths',
@@ -45,9 +63,11 @@ function templateWith(page: PageSetup, ...bodyPaths: readonly string[]): Templat
     root: {
       type: 'container',
       id: 'racine',
+      ...mark,
       children: bodyPaths.map((path, index) => ({
         type: 'text',
         id: `corps-${index}`,
+        ...mark,
         content: [{ kind: 'binding', value: { kind: 'path', path } }],
       })),
     },
@@ -69,7 +89,7 @@ describe('collectTemplateDataPaths', () => {
     // and the header prints blank.
     const template = templateWith(
       { ...emptyPage, header: [readingBand('every', 'hdr', 'client.nom')] },
-      'facture.total',
+      ['facture.total'],
     );
 
     expect(collectTemplateDataPaths(template)).toStrictEqual(['facture.total', 'client.nom']);
@@ -87,7 +107,7 @@ describe('collectTemplateDataPaths', () => {
         header: [readingBand('every', 'hdr', 'client.nom')],
         footer: [readingBand('every', 'ftr', 'societe.siret')],
       },
-      'facture.total',
+      ['facture.total'],
     );
 
     expect(collectTemplateDataPaths(template)).toStrictEqual([
@@ -104,7 +124,7 @@ describe('collectTemplateDataPaths', () => {
         header: [readingBand('every', 'hdr', 'facture.numero')],
         footer: [readingBand('every', 'ftr', 'facture.numero')],
       },
-      'facture.numero',
+      ['facture.numero'],
     );
 
     expect(collectTemplateDataPaths(template)).toStrictEqual(['facture.numero']);
@@ -185,5 +205,33 @@ describe('collectTemplateDataPaths', () => {
 
   it('reports nothing for a template whose bands are empty', () => {
     expect(collectTemplateDataPaths(templateWith(emptyPage))).toStrictEqual([]);
+  });
+});
+
+describe('a fragmentation mark', () => {
+  /** The same template twice, with the mark on every container and text it has, or on none. */
+  const templateMarked = (keepTogether: true | undefined): Template =>
+    templateWith(
+      {
+        ...emptyPage,
+        header: [readingBand('every', 'hdr', 'client.nom', keepTogether)],
+        footer: [readingBand('every', 'ftr', 'societe.siret', keepTogether)],
+      },
+      ['facture.total'],
+      keepTogether,
+    );
+
+  it('changes not one collected path, in the flow or in a band', () => {
+    // The template-level counterpart of the node-level invariance: a page policy is not a key the
+    // integrator has to supply, and a band is where that would have been easiest to miss, since
+    // this function is the only one that walks one.
+    expect(collectTemplateDataPaths(templateMarked(true))).toStrictEqual(
+      collectTemplateDataPaths(templateMarked(undefined)),
+    );
+    expect(collectTemplateDataPaths(templateMarked(true))).toStrictEqual([
+      'facture.total',
+      'client.nom',
+      'societe.siret',
+    ]);
   });
 });

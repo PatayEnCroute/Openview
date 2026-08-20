@@ -12,11 +12,11 @@ import { PresentationTableSchema } from '../presentation/presentation.js';
  * document either strips the unknown field with no error at all, or refuses it with a message
  * naming no version and offering no remedy.
  *
- * Version 7 adds one optional field, `presentations`, and widens no union.
+ * Version 8 adds one optional field, `keepTogether`, to every node, and widens no union.
  *
- * @see docs/adr/0008-langue-devise-et-formats.md
+ * @see docs/adr/0009-les-blocs-insecables.md
  */
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /**
  * Zod schema for validating a complete document template at CURRENT_SCHEMA_VERSION.

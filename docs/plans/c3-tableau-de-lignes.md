@@ -1174,7 +1174,7 @@ elle a été remontée telle quelle puis **tranchée** [§8, arbitrage n°2, le 
 > de **modèle** rattachée à C6 ; une entrée du `RenderRequest` ; rien du tout, et un défaut de
 > moteur — et **sans recommandation**, sur le patron exact de la question d'échelle d'affichage
 > léguée par l'ADR 0004. *(2)* L'interdit qui, lui, tient déjà y est écrit à côté : **aucun moteur ne
-> dérive cette direction de la machine.** C'est E6 (`engine.md:107-110`, « le moteur ne lit ni
+> dérive cette direction de la machine.** C'est E6 (`engine.md:163-166`, « le moteur ne lit ni
 > l'horloge, ni le fuseau, ni la locale de la machine »), et c'est outillé par Biome dans `core` et
 > `engine` — `toLocale*`, `Intl.$f()` sans argument, `Intl.DateTimeFormat` sans `timeZone` littéral
 > (`biome.jsonc:198-199` et `:272-290`, `tools/biome/no-environment-read.grit:59-72`). La direction

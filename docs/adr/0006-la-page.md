@@ -8,6 +8,18 @@
   `@openview/viewer` (V1 dessine une feuille sans attendre un moteur),
   `@openview/core` lot **C7** — le seul lot du contrat qui « **Dépend de :** C4 »
   (`core.md:223`)
+- **Complété par :** [ADR 0009](0009-les-blocs-insecables.md) — la place que la **décision 8**
+  laissait vide est remplie : `keepTogether?: true` sur la base commune des huit nœuds. Trois
+  positions de cette ADR en sortent **inchangées**, et c'est ce qui la complète plutôt que de
+  l'amender. Le contrat ne déclare toujours **aucune hauteur de bande** : la marque ne mesure rien.
+  Une bande **reste atomique** — `PageBand.content` étant un `ContainerNode`, elle peut porter la
+  marque **structurellement**, et cette marque est satisfaite tant que la bande tient ; elle ne
+  change ni sa mesure, ni son mode d'échec, et le **refus propre** exigé ici pour une bande trop
+  grande s'applique inchangé. Et la marque **n'est pas** un saut de page : sa troisième branche de
+  repli laisse le paginateur progresser au lieu de reporter éternellement le même bloc. L'écarté (c)
+  de la décision 8 — « *`avoidBreak: boolean` sur une bande* » — est réglé comme il l'annonçait :
+  **pour un bloc du flux, c'est C7**, et le booléen y est refusé au profit du littéral `true`, qui
+  n'a qu'**une** écriture persistée.
 - **Complété par :** [ADR 0007](0007-l-apparence.md) — le lot C5 pose un `box` sur
   `ContainerNode`, donc **une bande a l'apparence gratuitement** : `PageBand.content` **est** un
   `ContainerNode`, et pas une ligne de `page/` n'a changé. Ce lot **décline** en revanche le fond
@@ -1064,6 +1076,13 @@ raison pour laquelle C4 passe avant lui, alors que la roadmap ne déclare pas ce
 n'empêcherait mécaniquement de les inverser, et l'inversion coûterait une reprise de C5. **C6**
 reçoit un marqueur à formater et jamais une chaîne déjà formatée, et il se branche sur
 `TextNode.content` sans position de contenu nouvelle. **C7** trouve sa place vide, délibérément.
+
+> ✅ **C7 a trouvé cette place vide et l'a remplie le 2026-08-20**
+> ([ADR 0009](0009-les-blocs-insecables.md)), **sans importer un seul type de `page/`** : la marque
+> est une préférence **locale** sur un nœud, et c'est le moteur qui la confrontera à `Template.page`
+> et à la hauteur mesurée. Ce que ce lot avait prévu se vérifie donc à la livraison — pas une ligne
+> de `page/` n'a changé, et le seul ajout au dossier est un test prouvant qu'une bande **accepte et
+> conserve** la marque sans recevoir de politique de fragmentation propre.
 
 ---
 

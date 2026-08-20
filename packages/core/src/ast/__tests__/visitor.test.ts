@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Expression } from '../../expression/expression.js';
-import type { DocumentNode, TextSegment } from '../nodes.js';
+import { type DocumentNode, DocumentNodeSchema, type TextSegment } from '../nodes.js';
 import {
   childrenOf,
   collectDataPaths,
@@ -460,5 +460,179 @@ describe('collectDataPaths', () => {
 
     expect(collectDataPaths(numbered)).toStrictEqual([]);
     expect(nodeReads(numbered)).toStrictEqual({ reads: [], binds: undefined });
+  });
+});
+
+/**
+ * One tree, written once, produced with and without the mark on EVERY node.
+ *
+ * A factory rather than two literals: "the same tree, marked" has to be a fact of the code and not
+ * a claim, or the invariance below would be asserted against a shape that quietly diverged. It
+ * carries all eight kinds, so no kind is invariant only by absence.
+ */
+const hasDiscount: Expression = {
+  kind: 'compare',
+  op: 'gt',
+  left: { kind: 'path', path: 'invoice.discount' },
+  right: { kind: 'literal', value: 0 },
+};
+
+/**
+ * The mark as a spreadable object: nothing at all when unmarked.
+ *
+ * Spread rather than assigned, because Zod keeps an own `keepTogether: undefined` key while a
+ * document written before version 8 has no key at all -- and absence is the shape to traverse.
+ */
+const markOf = (keepTogether: true | undefined): { readonly keepTogether?: true } =>
+  keepTogether === undefined ? {} : { keepTogether };
+
+const treeWith = (keepTogether: true | undefined): unknown => ({
+  type: 'container',
+  id: 'root',
+  ...markOf(keepTogether),
+  children: [
+    {
+      type: 'text',
+      id: 'title',
+      ...markOf(keepTogether),
+      content: [{ kind: 'literal', text: 'Invoice' }],
+    },
+    { type: 'image', id: 'logo', ...markOf(keepTogether), src: 'logo.png' },
+    {
+      type: 'condition',
+      id: 'discounted',
+      ...markOf(keepTogether),
+      when: hasDiscount,
+      children: [
+        {
+          type: 'loop',
+          id: 'lines',
+          ...markOf(keepTogether),
+          each: { kind: 'path', path: 'invoice.lines' },
+          as: 'line',
+          children: [
+            {
+              type: 'text',
+              id: 'label',
+              ...markOf(keepTogether),
+              content: [{ kind: 'binding', value: { kind: 'path', path: 'line.discount' } }],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'table',
+      id: 'rows',
+      ...markOf(keepTogether),
+      columns: [{ id: 'amount', width: 1, align: 'end' }],
+      header: [
+        {
+          type: 'tableRow',
+          id: 'head',
+          ...markOf(keepTogether),
+          cells: [
+            {
+              columnId: 'amount',
+              children: [
+                {
+                  type: 'text',
+                  id: 'th',
+                  ...markOf(keepTogether),
+                  content: [{ kind: 'literal', text: 'A' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      body: [
+        {
+          type: 'tableRowGroup',
+          id: 'group',
+          ...markOf(keepTogether),
+          each: { kind: 'path', path: 'invoice.rows' },
+          as: 'row',
+          rows: [
+            {
+              type: 'tableRow',
+              id: 'detail',
+              ...markOf(keepTogether),
+              cells: [
+                {
+                  columnId: 'amount',
+                  children: [
+                    {
+                      type: 'text',
+                      id: 'td',
+                      ...markOf(keepTogether),
+                      content: [{ kind: 'binding', value: { kind: 'path', path: 'row.amount' } }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      footer: [],
+    },
+  ],
+});
+
+/**
+ * Parsed inside each test, never in a `describe` body.
+ *
+ * A parse at collection time turns a fixture or schema drift into a file-level collection error,
+ * which reports every other test in this file as not-run rather than failing the one at fault.
+ */
+const parsedTree = (keepTogether: true | undefined): DocumentNode =>
+  DocumentNodeSchema.parse(treeWith(keepTogether));
+
+describe('keepTogether', () => {
+  it('adds no child, so the traversal is the same tree in the same order', () => {
+    // The boundary this protects: a page policy must not become a NODE. Were the mark ever
+    // reified as a child, `walk` would yield it and every consumer counting nodes would drift.
+    const bare = parsedTree(undefined);
+    const marked = parsedTree(true);
+
+    expect([...walk(marked)].map((node) => node.id)).toStrictEqual(
+      [...walk(bare)].map((node) => node.id),
+    );
+    expect([...walk(marked)].map((node) => node.type)).toStrictEqual(
+      [...walk(bare)].map((node) => node.type),
+    );
+    expect([...walk(marked)].every((node) => node.keepTogether === true)).toBe(true);
+    expect([...walk(bare)].every((node) => node.keepTogether === undefined)).toBe(true);
+  });
+
+  it('changes neither the children of a node nor the id lookup', () => {
+    const bare = parsedTree(undefined);
+    const marked = parsedTree(true);
+
+    for (const node of walk(bare)) {
+      expect(childrenOf(node).map((child) => child.id)).toStrictEqual(
+        childrenOf(findNodeById(marked, node.id) ?? node).map((child) => child.id),
+      );
+      expect(findNodeById(marked, node.id)?.type).toBe(node.type);
+    }
+    expect(findNodeById(marked, 'nope')).toBeUndefined();
+  });
+
+  it('reads no data, so it demands nothing of the integrator', () => {
+    // The other boundary: a page policy must not become a KEY the caller has to supply. The mark
+    // carries no expression, so `nodeReads` gains nothing and the collected paths are unchanged.
+    const bare = parsedTree(undefined);
+    const marked = parsedTree(true);
+
+    expect(collectDataPaths(marked)).toStrictEqual(collectDataPaths(bare));
+    expect(collectDataPaths(marked)).toStrictEqual([
+      'invoice.discount',
+      'invoice.lines',
+      'invoice.rows',
+    ]);
+    for (const node of walk(bare)) {
+      expect(nodeReads(findNodeById(marked, node.id) ?? node)).toStrictEqual(nodeReads(node));
+    }
   });
 });

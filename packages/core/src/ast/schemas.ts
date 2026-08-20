@@ -18,6 +18,11 @@ import {
 } from './types.js';
 
 const nodeIdSchema = z.string().min(1, 'A node id is required');
+/**
+ * Accepts `true`, and `undefined` whether written or omitted -- a written `undefined` is kept in
+ * memory but drops at serialisation, so `true` and the absent key are the only persisted spellings.
+ */
+const keepTogetherField = z.literal(true).optional();
 const boxField = BoxStyleSchema.optional();
 const typographyField = TypographySchema.optional();
 
@@ -48,6 +53,7 @@ export const TextSegmentSchema = z.discriminatedUnion('kind', [
 export const TextNodeSchema = z.object({
   type: z.literal('text'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   content: z.array(TextSegmentSchema),
   box: boxField,
   typography: typographyField,
@@ -57,6 +63,7 @@ export const TextNodeSchema = z.object({
 export const ImageNodeSchema = z.object({
   type: z.literal('image'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   src: z.string().min(1, 'An image src is required'),
   alt: z.string().optional(),
   box: boxField,
@@ -90,6 +97,7 @@ export const DocumentNodeSchema: z.ZodType<DocumentNode> = z.lazy(() =>
 export const ContainerNodeSchema = z.object({
   type: z.literal('container'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   children: z.array(BlockNodeSchema),
   box: boxField,
 });
@@ -97,6 +105,7 @@ export const ContainerNodeSchema = z.object({
 export const LoopNodeSchema = z.object({
   type: z.literal('loop'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   each: ExpressionSchema,
   as: aliasSchema,
   children: z.array(BlockNodeSchema),
@@ -105,6 +114,7 @@ export const LoopNodeSchema = z.object({
 export const ConditionNodeSchema = z.object({
   type: z.literal('condition'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   when: ExpressionSchema,
   children: z.array(BlockNodeSchema),
 });
@@ -127,6 +137,7 @@ export const TableCellSchema = z.object({
 export const TableRowNodeSchema = z.object({
   type: z.literal('tableRow'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   cells: z.array(TableCellSchema),
   box: boxField,
 });
@@ -134,6 +145,7 @@ export const TableRowNodeSchema = z.object({
 export const TableRowGroupNodeSchema = z.object({
   type: z.literal('tableRowGroup'),
   id: nodeIdSchema,
+  keepTogether: keepTogetherField,
   each: ExpressionSchema,
   as: aliasSchema,
   rows: z.array(TableRowNodeSchema).min(1, 'A table row group needs at least one row'),
@@ -215,6 +227,7 @@ export const TableNodeSchema = z
   .object({
     type: z.literal('table'),
     id: nodeIdSchema,
+    keepTogether: keepTogetherField,
     columns: z.array(TableColumnSchema).min(1, 'A table needs at least one column'),
     header: z.array(TableRowNodeSchema),
     body: z.array(TableBodyNodeSchema),

@@ -73,6 +73,12 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      */
     migrate: (input) => ({ ...input, schemaVersion: 7 }),
   },
+  {
+    from: 7,
+    to: 8,
+    // Stamp only. A v7 document declares no fragmentation policy, which is what it already said.
+    migrate: (input) => ({ ...input, schemaVersion: 8 }),
+  },
 ];
 
 const recordSchema = z.record(z.string(), z.unknown());

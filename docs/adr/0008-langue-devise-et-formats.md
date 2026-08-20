@@ -13,6 +13,11 @@
   d'une obligation neuve : une locale n'est plus refusée à la frappe, elle doit être **avertie
   depuis le résolveur**), `@openview/viewer` (la promesse d'aperçu identique au PDF devient une
   contrainte de **version d'ICU**, pas seulement de mise en page).
+- **Complétée par :** [ADR 0009](0009-les-blocs-insecables.md) — le lot **C7** prend l'estampille
+  **8** ; la « seconde estampille à la charge d'E4 » que ce lot actait devient donc **`8 → 9`**, son
+  chiffrage inchangé. C7 ne touche **aucune source** de `presentation/**` : seul son fichier de test
+  bouge, dont l'estampille 8 rougit quatre assertions — voir l'ADR 0009, « Ce que l'exécution a
+  corrigé du plan », point 1. Le compte du barrel reste à **126** valeurs.
 - **Complète :** [ADR 0004](0004-les-arrondis-declares-par-le-modele.md), dont la décision 16 — les
   arrondis sont déclarés par le modèle — est ce qui **oblige** les deux bornes de fraction à être
   requises : sans elles, une table CLDR que personne n'a déclarée déciderait de l'arithmétique.
@@ -309,9 +314,15 @@ après quoi un `onSave` persiste la perte et chaque montant retombe à la mise e
 Avec l'estampille, le même document rend :
 
 ```
-TemplateMigrationError: Template uses schema version 8 but this build understands at most 7.
+TemplateMigrationError: Template uses schema version 7 but this build understands at most 6.
 It was written by a newer release of Openview; upgrade before opening it.
 ```
+
+> Les deux nombres sont ceux du **couple** (document lu, build qui lit), et jamais une réservation :
+> la version qu'un lot ultérieur posera est la prochaine disponible au jour de sa livraison. Une
+> première rédaction écrivait ici `8` et `7` — les nombres du test de ce lot, qui lit un document
+> *un cran au-dessus du courant* — alors que la phrase juste au-dessus décrit un build v6 devant un
+> document v7. Corrigé, parce que **la version 8 est celle du lot C7** ([ADR 0009](0009-les-blocs-insecables.md)).
 
 **L'asymétrie est mesurée dans les deux sens**, et c'est ce qui fait de l'estampille la seule
 décision irréversible du lot :
@@ -683,6 +694,12 @@ refus n'ont pas le même coût :
 invariant croisé du lot** — donc sa propre campagne de vérification, sur un lot déjà lourd. La
 conséquence assumée : **E4 câble les sites à la main**, et `20260014` peut s'imprimer `20 260 014` si
 personne n'y prend garde.
+
+> **« Une seconde estampille » est un coût, pas un numéro.** Le plan de ce lot chiffrait cette
+> seconde estampille en écrivant `7 → 8`. Elle prend en réalité la **prochaine version disponible
+> au jour de sa livraison** : la roadmap plaçant C7 avant E4, **C7 a pris `7 → 8`** et le coût
+> d'E4 est **`8 → 9`**. Le chiffrage est inchangé — **une** estampille, **une** migration
+> d'identité —, seul le numéro se décale.
 
 ### La cardinalité, moins grave et plus visible
 

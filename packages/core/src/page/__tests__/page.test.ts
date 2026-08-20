@@ -762,3 +762,78 @@ describe('printableAreaOf', () => {
     expect(Object.keys(printableAreaOf(RECIPE_PAGE))).toStrictEqual(['width', 'height']);
   });
 });
+
+describe('a band whose container holds together', () => {
+  /**
+   * A minimal page carrying one band, with the mark on the band's container or without it, plus a
+   * slot for writing something on the BAND. The unmarked form OMITS the key rather than spelling
+   * it `undefined`, because absence is the shape every document written before version 8 has.
+   */
+  const pageWith = (keepTogether: true | undefined, band: object = {}): unknown => ({
+    sheet: { width: 210, height: 297 },
+    margins: { top: 20, right: 15, bottom: 25, left: 15 },
+    header: [],
+    footer: [
+      {
+        on: 'every',
+        ...band,
+        content: {
+          type: 'container',
+          id: 'ftr',
+          ...(keepTogether === undefined ? {} : { keepTogether }),
+          children: [
+            { type: 'text', id: 'ftr-note', content: [{ kind: 'literal', text: 'Mentions' }] },
+          ],
+        },
+      },
+    ],
+  });
+
+  it('is accepted and kept, because a band content IS a container node', () => {
+    // Structural reuse, and nothing more: `PageBand.content` is a `ContainerNode`, so the mark
+    // reaches a band with no line of `page/` changing. What this pins is that the page schema
+    // neither refuses it nor strips it.
+    const parsed = PageSetupSchema.parse(pageWith(true));
+
+    expect(parsed.footer[0]?.content.keepTogether).toBe(true);
+    expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(pageWith(true));
+  });
+
+  it('gives a band NO fragmentation policy of its own', () => {
+    // A band is already atomic between two pages, so the mark on its container changes neither its
+    // measure nor its failure mode. What the contract must refuse is a policy on the BAND: written
+    // at band level the key is unknown to `PageBandSchema`, so it is stripped. The band's own key
+    // set is therefore spelled out rather than compared with itself -- comparing a marked page to a
+    // bare one cannot fail, since the mark sits three levels below every quantity it would move.
+    const marked = PageSetupSchema.parse(pageWith(true));
+    const bare = PageSetupSchema.parse(pageWith(undefined));
+    const onTheBand = PageSetupSchema.parse(pageWith(undefined, { keepTogether: true }));
+
+    expect(Object.keys(marked.footer[0] ?? {})).toStrictEqual(['on', 'content']);
+    expect(Object.keys(onTheBand.footer[0] ?? {})).toStrictEqual(['on', 'content']);
+    expect(bare.footer[0]?.content.keepTogether).toBeUndefined();
+    expect(Object.hasOwn(bare.footer[0]?.content ?? {}, 'keepTogether')).toBe(false);
+  });
+
+  it('travels through a stored template, in a band as in the flow', () => {
+    const document = (keepTogether: true | undefined): unknown => ({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'facture-c7',
+      name: 'Facture — bande insécable',
+      version: '1.0.0',
+      page: pageWith(keepTogether),
+      root: {
+        type: 'container',
+        id: 'racine',
+        ...(keepTogether === undefined ? {} : { keepTogether }),
+        children: [],
+      },
+    });
+
+    const parsed = parseTemplate(document(true));
+
+    expect(parsed.root.keepTogether).toBe(true);
+    expect(parsed.page.footer[0]?.content.keepTogether).toBe(true);
+    expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(document(true));
+  });
+});

@@ -7,6 +7,15 @@
   tableau imbriqué ; E5 rapportera quelle ligne est tombée sur quelle page),
   `@openview/designer` (D6 éditera colonnes et cellules, D7 la barre de formule d'une cellule),
   `@openview/core` lot C5 (« **Dépend de :** C3 », `core.md:184`)
+- **Complétée par :** [ADR 0009](0009-les-blocs-insecables.md) — l'`id` que cette ADR donne aux
+  lignes et aux groupes de lignes est ce qui rend la marque `keepTogether` **plaçable** là où une
+  facture en a besoin, sans table externe d'identifiants : le lot C7 la pose sur la **base commune**
+  des huit nœuds, donc sur `TableRowNode` et `TableRowGroupNode` sans une ligne de `table` nouvelle.
+  Deux réserves de cette ADR y sont **honorées telles quelles** : l'exécution des politiques de
+  coupe reste au **moteur** (E2/E3), et l'unicité des `id` n'est **pas** élargie au-delà d'un
+  tableau — ce qui est précisément pourquoi C7 refuse une table externe. Une déclaration persistée
+  de **voisinage** (« l'en-tête ne se sépare pas de la première ligne ») reste hors contrat : elle
+  exigerait un lot `core` nouveau **et une version**.
 - **Complétée par :** [ADR 0006](0006-la-page.md) — le contenu d'une bande de page est un
   `ContainerNode`, donc la coupure `BlockNode` de cette ADR s'y applique sans une ligne du lot C4 ;
   la docstring de `TableNode` est **précisée** sur la numérotation (la valeur reste à E2/E3,
@@ -807,7 +816,7 @@ Une ADR est un **journal**, et un lot ne réécrit pas les documents d'un autre.
 
 | Contradiction | Où | Ce qu'il faut en savoir |
 | :--- | :--- | :--- |
-| Le modèle bilingue attribué à « core C5 » | `docs/roadmap/engine.md:79` | C'est **C6** : `core.md:186-196` énumère montants, dates, séparateurs, symbole monétaire et libellés fixes. **C5 est l'apparence.** |
+| Le modèle bilingue attribué à « core C5 » | `docs/roadmap/engine.md:113` | C'est **C6** : `core.md:186-196` énumère montants, dates, séparateurs, symbole monétaire et libellés fixes. **C5 est l'apparence.** |
 | « C4 et C3 ne débloquent aucun lot en aval » | `docs/plans/c2-…md:186-187` | **Faux pour C3** : `core.md:184` écrit « C5 — **Dépend de :** C3 ». Phrase à ne pas recopier ; le plan C2 est périmé et le reste. |
 | « Colonnes », homonyme non désambiguïsé | `core.md` (C3, vague 1) et décision produit 8 (lot C11, vague 2) | Colonnes **de tableau** contre colonnes **de mise en page**. L'éditeur de tableau de D6 dépend justement des deux. |
 

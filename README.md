@@ -113,8 +113,9 @@ openview/
 Le document de référence est **la facture** — le niveau d'exigence à atteindre, pas
 le périmètre du produit. Elle est choisie parce qu'elle concentre les contraintes
 les plus dures d'une édition : multi-pages comptable, totaux reportés de page en
-page, blocs qui ne se coupent jamais, deux langues et deux devises. Ce qui rend une
-facture possible rend possibles les autres éditions — rapports, relevés, bons de
+page, blocs **insécables** non coupés dès qu'ils peuvent tenir sur une page et
+repli documenté au-delà, deux langues et deux devises. Ce qui rend une facture
+possible rend possibles les autres éditions — rapports, relevés, bons de
 livraison, contrats, courriers, bordereaux. Les jalons ci-dessous parlent donc de
 factures, et pour cette raison seule.
 

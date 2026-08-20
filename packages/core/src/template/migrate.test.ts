@@ -162,6 +162,7 @@ describe('parseTemplate', () => {
       [4, 5],
       [5, 6],
       [6, 7],
+      [7, 8],
     ]);
     expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
     // The literal expectation above is the ONLY mechanical net under the stamp of lots C1,
@@ -178,18 +179,20 @@ describe('parseTemplate', () => {
     // not MERGED into a direct converter.
   });
 
-  it('stamps a v5 document to 6 without transforming one value of it', () => {
-    // Contract of lot C5: the 5 -> 6 entry is a STAMP. Measured, delta exactly 0 values and 0
-    // levels -- so the second pass of the shape guard has nothing to catch here, unlike 4 -> 5.
+  it('stamps a v5 document to the current version without transforming one value of it', () => {
+    // The 5 -> 6 entry is a STAMP, and so is every entry registered above it since. Measured,
+    // delta exactly 0 values and 0 levels -- so the second pass of the shape guard has nothing to
+    // catch here, unlike 4 -> 5.
     //
     // Compared by JSON round trip with the stamp put back, rather than field by field: that is
     // what makes "transforms NOTHING" an assertion instead of a claim about the fields someone
-    // thought to check.
+    // thought to check. Written against the constant, so the day another stamp is registered this
+    // assertion covers it too instead of having to be edited.
     const stampedFive = { ...validTemplate, schemaVersion: 5 };
 
     const parsed = parseTemplate(stampedFive);
 
-    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(JSON.parse(JSON.stringify({ ...parsed, schemaVersion: 5 }))).toStrictEqual(
       JSON.parse(JSON.stringify(stampedFive)),
     );
@@ -198,8 +201,8 @@ describe('parseTemplate', () => {
   it('carries an appearance through the stamp on a document that already had one', () => {
     // The reserve the four entries above state, transposed: the version guard reads the STAMP,
     // not the content. A document stamped 5 that ALREADY carries a box -- hand-made, or written
-    // by an unstamped mid-lot build -- is not refused. It parses, and comes out stamped 6 with
-    // its box intact, because the current schema knows the field.
+    // by an unstamped mid-lot build -- is not refused. It parses, and comes out at the current
+    // stamp with its box intact, because the current schema knows the field.
     const withBox = {
       ...validTemplate,
       schemaVersion: 5,
@@ -208,8 +211,123 @@ describe('parseTemplate', () => {
 
     const parsed = parseTemplate(withBox);
 
-    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(parsed.root.box).toStrictEqual({ background: '#1b3a6f' });
+  });
+
+  it('stamps a v7 document to the current version and invents no fragmentation policy', () => {
+    // The 7 -> 8 entry. It does not walk the AST, so a document that declared nothing goes on
+    // declaring nothing: the ABSENCE of the key is what every document written before version 8
+    // says. The input stamp stays a literal 7 -- it names the entry under test -- while the
+    // expectation is written against the constant, like every other stamp assertion here.
+    const stampedSeven = {
+      ...validTemplate,
+      schemaVersion: 7,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [{ type: 'text', id: 'corps', content: [{ kind: 'literal', text: 'Total' }] }],
+      },
+    };
+
+    const parsed = parseTemplate(stampedSeven);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    // On the own property, not only on the value and not only on a round trip: `JSON.stringify`
+    // drops an undefined-valued key from both sides, so a step that wrote `keepTogether: undefined`
+    // onto every node would leave the two assertions below green -- while the key survived the
+    // parse, travelled into an `onSave` and cost one value of the `maxNodes` budget per node.
+    expect(Object.hasOwn(parsed.root, 'keepTogether')).toBe(false);
+    expect(parsed.root.keepTogether).toBeUndefined();
+    expect(JSON.parse(JSON.stringify({ ...parsed, schemaVersion: 7 }))).toStrictEqual(
+      JSON.parse(JSON.stringify(stampedSeven)),
+    );
+  });
+
+  it('carries a mark through the stamp on an UNDER-stamped document that already had one', () => {
+    // Why the stamp is mandatory even though the field is optional, from the other side: a build
+    // that did not know the field would STRIP it with no error and an `onSave` would persist the
+    // loss. A document stamped 7 that already carries one -- hand-made, or written by an
+    // unstamped mid-lot build -- is not refused either, because the guard bites upward only.
+    const marked = {
+      ...validTemplate,
+      schemaVersion: 7,
+      root: {
+        type: 'container',
+        id: 'root',
+        keepTogether: true,
+        children: [
+          {
+            type: 'container',
+            id: 'totaux',
+            keepTogether: true,
+            children: [{ type: 'text', id: 'tf', content: [{ kind: 'literal', text: 'Total' }] }],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseTemplate(marked);
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.root.keepTogether).toBe(true);
+    expect(parsed.root.children[0]?.keepTogether).toBe(true);
+  });
+
+  it('accepts a marked document already at the current stamp, with no migration at all', () => {
+    const marked = {
+      ...validTemplate,
+      root: { type: 'container', id: 'root', keepTogether: true, children: [] },
+    };
+
+    expect(migrateToCurrent(marked)).toStrictEqual(marked);
+    expect(parseTemplate(marked).root.keepTogether).toBe(true);
+  });
+
+  it('walks a MARKED v1 document up the whole chain without losing the mark', () => {
+    // The promise of lot C9 on the field this lot adds: seven steps, and the value the author
+    // wrote is still there at the other end.
+    const beforeC1 = {
+      ...validTemplate,
+      schemaVersion: 1,
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'table',
+            id: 'lignes',
+            keepTogether: true,
+            columns: [{ id: 'montant', width: 1, align: 'end' }],
+            header: [],
+            body: [
+              {
+                type: 'tableRow',
+                id: 'ligne-total',
+                keepTogether: true,
+                cells: [
+                  {
+                    columnId: 'montant',
+                    children: [{ type: 'text', id: 'tf', content: [] }],
+                  },
+                ],
+              },
+            ],
+            footer: [],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseTemplate(beforeC1);
+    const table = parsed.root.children[0];
+
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    if (table?.type !== 'table') {
+      throw new Error('the fixture should carry a table');
+    }
+    expect(table.keepTogether).toBe(true);
+    expect(table.body[0]?.keepTogether).toBe(true);
   });
 
   it('fills in a page on a v4 document that has none, and fills it COMPLETELY', () => {

@@ -607,6 +607,9 @@ describe('the stored shape, its stamp and its migration', () => {
     footer: [],
   };
 
+  /** The version from which a build understands `presentations`; it never moves again. */
+  const PRESENTATIONS_SCHEMA_VERSION = 7;
+
   const documentAt = (schemaVersion: number, extra: Record<string, unknown> = {}) => ({
     schemaVersion,
     id: 'tpl_c6',
@@ -617,30 +620,28 @@ describe('the stored shape, its stamp and its migration', () => {
     ...extra,
   });
 
-  it('stamps the current version at 7, and registers exactly one new step', () => {
-    // The literal list is the only mechanical net under a new step:
-    // `toHaveLength(CURRENT_SCHEMA_VERSION - 1)` stays green through the bump because both sides
-    // move together, so it catches a forgotten entry or a forgotten stamp but never both at once.
-    expect(CURRENT_SCHEMA_VERSION).toBe(7);
-    expect(TEMPLATE_MIGRATIONS.map((step) => [step.from, step.to])).toStrictEqual([
-      [1, 2],
-      [2, 3],
-      [3, 4],
-      [4, 5],
-      [5, 6],
-      [6, 7],
+  it('registers the step that stamped this field, and the chain still passes through it', () => {
+    // The stamp of this field is 7, and it stays 7 for ever: it is the version from which a build
+    // understands `presentations`. The CURRENT version is not this file's business -- the literal
+    // chain lives in `template/migrate.test.ts`, which owns it -- so this assertion names the step
+    // and not the end of the chain, and dropping the 6 -> 7 entry is still what reddens it.
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(PRESENTATIONS_SCHEMA_VERSION);
+    expect(TEMPLATE_MIGRATIONS.map((step) => [step.from, step.to])).toContainEqual([
+      PRESENTATIONS_SCHEMA_VERSION - 1,
+      PRESENTATIONS_SCHEMA_VERSION,
     ]);
   });
 
-  it('brings a v6 document to 7 without transforming one value of it', () => {
+  it('brings a v6 document to the current stamp without transforming one value of it', () => {
     // The identity is asserted on the whole document with the stamp put back, which is stronger
     // than checking the fields someone thought to name. A pre-existing document declares no
-    // writing, so the migration has nothing to invent.
+    // writing, so the migration has nothing to invent -- and since every entry registered since is
+    // a stamp too, the round trip now covers all of them at once.
     const stampedSix = documentAt(6);
 
     const parsed = parseTemplate(stampedSix);
 
-    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(parsed.presentations).toBeUndefined();
     expect(JSON.parse(JSON.stringify({ ...parsed, schemaVersion: 6 }))).toStrictEqual(
       JSON.parse(JSON.stringify(stampedSix)),
@@ -654,7 +655,7 @@ describe('the stored shape, its stamp and its migration', () => {
 
     const parsed = parseTemplate(withTable);
 
-    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(parsed.presentations).toStrictEqual({ 'montant-fr': FR });
     expect(resolvePresentation(parsed.presentations, 'montant-fr')).toStrictEqual({
       ok: true,
@@ -682,7 +683,7 @@ describe('the stored shape, its stamp and its migration', () => {
     // build is accepted with no error and stripped of its table, after which a save persists the
     // loss. The message names the version and the remedy.
     expect(() => parseTemplate(documentAt(CURRENT_SCHEMA_VERSION + 1))).toThrow(
-      /schema version 8 but this build understands at most 7/,
+      `schema version ${CURRENT_SCHEMA_VERSION + 1} but this build understands at most ${CURRENT_SCHEMA_VERSION}`,
     );
   });
 });

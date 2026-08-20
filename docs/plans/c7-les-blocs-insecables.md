@@ -1,18 +1,19 @@
 # Plan d'implémentation — `@openview/core` lot C7 : les blocs insécables
 
-> **Document d'implémentation.** Il décrit le contrat, le découpage, les fichiers, les tests et
-> l'ordre de livraison du lot. Il n'implémente rien. Une fois C7 livré, l'ADR 0009 fera foi et ce
-> plan deviendra périmé.
+> ⛔ **PÉRIMÉ — le lot est livré (2026-08-20).** Ce document ne fait plus foi : c'est
+> [ADR 0009](../adr/0009-les-blocs-insecables.md) qui porte les décisions, les mesures et les
+> attentes envers l'aval, et elle **corrige** ce plan sur trois points nommés dans sa section
+> « Ce que l'exécution a corrigé du plan ».
 >
-> **Statut : 🟡 CONTRAT C7 PRÊT ; EXÉCUTION BLOQUÉE JUSQU'À LA CLÔTURE DE C6 ET À LA
-> RÉCONCILIATION DU NUMÉRO DE VERSION.** Aucune décision propre au contrat C7 ne reste ouverte.
+> Le plus utile des trois, pour un lecteur qui reviendrait ici : **la liste de fichiers du §3.2 est
+> incomplète d'un fichier de test.** `presentation/__tests__/presentation.test.ts` épinglait la
+> version courante et la chaîne complète des migrations ; l'estampille 8 en rougit quatre, et ce
+> plan ne les nommait pas.
 >
-> **Précondition :** C6 doit être livré avec `CURRENT_SCHEMA_VERSION = 7` et
-> `docs/adr/0008-langue-devise-et-formats.md`. Le plan C6 et l'ADR 0008 ne doivent plus réserver
-> littéralement la version 8 à E4 : cette évolution différée prend la prochaine version disponible
-> au moment de sa livraison. Tant que C6 ou son ADR promettent encore `7 -> 8` à E4, l'exécution de
-> C7 s'arrête avant toute modification. Si une autre évolution prend entre-temps la version 8 ou
-> l'ADR 0009, l'exécution s'arrête également afin de réattribuer sans collision les deux numéros.
+> **Les six contrôles de périmètre du §8 ont tous été passés avant l'exécution.** Un seul avait
+> échoué au premier passage — le n° 3, le plan C6 réservant encore littéralement `7 → 8` à E4 —, et
+> il a été réglé comme le §D8 le prescrivait : C7 prend `7 → 8`, E4 prendra `8 → 9`, acté dans
+> l'ADR 0008 et dans le plan C6 **avant** toute modification de code.
 >
 > **Date :** 2026-08-20 · **Brique :** `@openview/core`, vague 1 · **Jalon visé :** J1
 
