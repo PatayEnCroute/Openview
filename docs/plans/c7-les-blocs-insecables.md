@@ -4,12 +4,15 @@
 > l'ordre de livraison du lot. Il n'implémente rien. Une fois C7 livré, l'ADR 0009 fera foi et ce
 > plan deviendra périmé.
 >
-> **Statut : ✅ PRÊT À EXÉCUTER APRÈS C6.** Aucune décision de contrat ne reste ouverte.
+> **Statut : 🟡 CONTRAT C7 PRÊT ; EXÉCUTION BLOQUÉE JUSQU'À LA CLÔTURE DE C6 ET À LA
+> RÉCONCILIATION DU NUMÉRO DE VERSION.** Aucune décision propre au contrat C7 ne reste ouverte.
 >
 > **Précondition :** C6 doit être livré avec `CURRENT_SCHEMA_VERSION = 7` et
-> `docs/adr/0008-langue-devise-et-formats.md`. Si cette précondition change, l'exécution s'arrête
-> avant toute modification afin de réattribuer sans collision le numéro de version et celui de
-> l'ADR.
+> `docs/adr/0008-langue-devise-et-formats.md`. Le plan C6 et l'ADR 0008 ne doivent plus réserver
+> littéralement la version 8 à E4 : cette évolution différée prend la prochaine version disponible
+> au moment de sa livraison. Tant que C6 ou son ADR promettent encore `7 -> 8` à E4, l'exécution de
+> C7 s'arrête avant toute modification. Si une autre évolution prend entre-temps la version 8 ou
+> l'ADR 0009, l'exécution s'arrête également afin de réattribuer sans collision les deux numéros.
 >
 > **Date :** 2026-08-20 · **Brique :** `@openview/core`, vague 1 · **Jalon visé :** J1
 
@@ -244,8 +247,13 @@ L'estampille est obligatoire malgré l'optionalité : un build v7 qui ouvrirait 
 `keepTogether` supprimerait la clé inconnue et pourrait persister la perte. Avec la version 8, ce
 même build refuse le document comme écrit par une version plus récente.
 
-Le coût futur attribué par le plan C6 à E4 reste une incrémentation de la version courante. Après
-C7, il se lira donc **8 -> 9**, sans réécrire le plan C6 devenu périmé.
+Le plan C6 attribue encore littéralement `7 -> 8` à E4. Cette écriture décrit le coût d'une
+évolution future ; elle ne peut pas réserver un numéro indépendamment de l'ordre réel de livraison.
+Avant C7, le plan C6 et l'ADR 0008 doivent donc exprimer ce coût comme **version courante -> version
+suivante**, ou acter explicitement que C7 prend la version 8 et qu'E4 prendra la version 9. Puisque
+la roadmap place C7 avant E4, l'ordre attendu est **C7 : 7 -> 8**, puis **E4 : 8 -> 9**. Si E4 ou
+une autre évolution persistée est livrée avant C7, le contrôle du §8 arrête ce plan et réattribue la
+version au lieu de créer une lacune ou deux migrations concurrentes.
 
 ### D9 — Aucun nouveau symbole public ni parcours
 
@@ -313,7 +321,7 @@ et ne doit pas gonfler `RECIPE_TEMPLATE`, dont les parcours et comptes servent d
 | Fichier | Modification prévue |
 | :--- | :--- |
 | `docs/adr/0009-les-blocs-insecables.md` | Consigner D1 à D10, les alternatives rejetées et les obligations E3/E5. |
-| [`docs/roadmap/core.md`](../roadmap/core.md) | Marquer C7 livré, relier l'ADR et qualifier le critère de recette par le repli du bloc trop grand. |
+| [`docs/roadmap/core.md`](../roadmap/core.md) | Marquer C7 livré, relier l'ADR, remplacer « un autre comme sécable » par « un autre laissé sans contrainte de fragmentation », puis qualifier le critère de recette par le repli du bloc trop grand. |
 | [`docs/roadmap/engine.md`](../roadmap/engine.md) | Relier E3 à l'ordre de traitement, au repli par kind et au maintien du refus propre d'une bande impossible. |
 | [`README.md`](../../README.md) et [`docs/roadmap/README.md`](../roadmap/README.md) | Qualifier la promesse absolue « jamais coupés » par la capacité à tenir et par le repli documenté des contenus impossibles. |
 | ADR 0005, 0006 et 0007 | Ajouter les liens de complément/amendement vers l'ADR 0009 ; préciser que l'exécution des politiques de coupe reste au moteur, tandis qu'une future déclaration persistée de voisinage exigerait un nouveau lot `core` et une version. |
@@ -333,13 +341,15 @@ et ne doit pas gonfler `RECIPE_TEMPLATE`, dont les parcours et comptes servent d
   il ne rend ni n'édite encore ;
 - `package.json`, `pnpm-workspace.yaml`, les `tsconfig`, Biome, Turbo, Sonar et les workflows : zéro
   dépendance et zéro modification d'outillage ;
-- les fichiers C6 en cours de travail : aucune reprise, aucun renommage, aucune suppression.
+- les fichiers d'implémentation C6 : aucune reprise, aucun renommage, aucune suppression ; la
+  réconciliation documentaire du numéro futur d'E4 est une précondition déjà satisfaite avant C7,
+  pas une modification mêlée à son implémentation.
 
 ---
 
-## 4. Découpage en trois incréments
+## 4. Découpage en deux incréments
 
-### INC-0 — Contrat AST · non publiable seul
+### INC-0 — Contrat AST et pérennité · état atomique publiable
 
 **Contenu :**
 
@@ -349,18 +359,7 @@ et ne doit pas gonfler `RECIPE_TEMPLATE`, dont les parcours et comptes servent d
 - preuve de conservation dans le conteneur d'une bande, sans politique `PageBand` nouvelle ;
 - invariance des parcours, recherches et lectures de données ;
 - refus des valeurs non canoniques ;
-- mise en conformité anglaise et concise des commentaires directement touchés.
-
-**Critère de sortie :** les tests AST, page et chemins passent ; une mutation retirant le champ de
-`NodeBase`, ou d'un seul des huit schémas, est détectée.
-
-Cet état n'est pas publiable : il sait écrire une forme que sa version de schéma ne protège pas
-encore contre la perte silencieuse dans un ancien build.
-
-### INC-1 — Pérennité · premier état publiable du code
-
-**Contenu :**
-
+- mise en conformité anglaise et concise des commentaires directement touchés ;
 - `CURRENT_SCHEMA_VERSION` 7→8 ;
 - entrée de migration 7→8 ;
 - mise à jour des attentes de chaîne ;
@@ -368,15 +367,19 @@ encore contre la perte silencieuse dans un ancien build.
 - conservation d'un `keepTogether: true` déjà présent sur un document sous-estampillé ;
 - migration complète v1→v8.
 
-**Critère de sortie :** aucun commit publiable ne sépare la forme persistée de sa version et de sa
-migration.
+**Critère de sortie :** les tests AST, page, chemins et migrations passent ; une mutation retirant
+le champ de `NodeBase`, élargissant son type à `boolean`, ou retirant le champ d'un seul des huit
+schémas est détectée. La forme persistée, la version 8 et la migration 7→8 appartiennent au **même
+commit** : INC-0 ne crée aucun état intermédiaire enregistré, publiable ou bisectable, qui sache
+écrire la nouvelle forme sous l'ancienne estampille.
 
-### INC-2 — ADR, roadmaps et clôture · lot complet
+### INC-1 — ADR, roadmaps et clôture · lot complet
 
 **Contenu :**
 
 - ADR 0009 ;
 - qualification des promesses « jamais coupés » par le repli du kind et le cas distinct des bandes ;
+- remplacement du faux marquage « comme sécable » par l'absence de contrainte de fragmentation ;
 - liens depuis les ADR antérieures et les roadmaps ;
 - C7 marqué livré ;
 - présent plan marqué périmé.
@@ -404,6 +407,20 @@ Conserver ou étendre les huit assertions de clés dans `nodes.test.ts` :
 Chaque assertion compare `keyof z.infer<typeof Schema>` avec `keyof Interface`. Ajouter le champ à
 un seul côté doit faire échouer `type-check` ; aucune assertion reposant sur un `expect(true)`
 tautologique n'est admise.
+
+Ajouter en plus une preuve dédiée au **type de la valeur**, que la comparaison des clés ne voit pas :
+
+```ts
+export const KEEP_TOGETHER_TYPE_IN_STEP: MutuallyAssignable<
+  z.infer<typeof TextNodeSchema>['keepTogether'],
+  TextNode['keepTogether']
+> = true;
+```
+
+Cette assertion interdit notamment d'élargir silencieusement le contrat TypeScript à `boolean`
+alors que Zod continue de n'accepter que `true`. Une seule paire suffit : les huit interfaces
+héritent de `NodeBase` et les huit schémas réutilisent `keepTogetherField`. Les assertions de clés
+restent nécessaires pour prouver que chacun des huit schémas inscrit effectivement le champ.
 
 ### 5.2 Acceptation et aller-retour des huit kinds
 
@@ -541,6 +558,8 @@ C7 est livré lorsque toutes les affirmations suivantes sont vraies :
 - l'ADR mesure une valeur brute supplémentaire par marque présente et aucune limite de forme ne
   change sans nécessité ;
 - les promesses documentaires absolues sont qualifiées par le cas du bloc trop grand ;
+- la roadmap ne prétend plus qu'un second bloc est « marqué comme sécable » : elle décrit
+  explicitement un bloc laissé sans contrainte de fragmentation ;
 - les quatre portes passent dans l'ordre imposé.
 
 ---
@@ -548,6 +567,8 @@ C7 est livré lorsque toutes les affirmations suivantes sont vraies :
 ## 7. Hypothèses et limites
 
 - C6 est livré avant C7 avec la version 7 et l'ADR 0008.
+- La décision différée d'E4 est exprimée comme une incrémentation de la version disponible, sans
+  réservation concurrente de la version 8.
 - C7 ne garantit aucun pixel et ne peut pas démontrer le comportement moteur avant E3.
 - Une ressource atomique, comme une image, satisfait la marque sans traitement particulier tant
   qu'elle tient ; son surdimensionnement reste une politique E1/E2 indépendante de C7.
@@ -568,10 +589,12 @@ Avant d'ouvrir INC-0 :
 1. vérifier que C6 est effectivement livré et que la branche de travail est propre hors changements
    explicitement attribués à C7 ;
 2. vérifier `CURRENT_SCHEMA_VERSION === 7` et l'existence de l'ADR 0008 ;
-3. vérifier que `keepTogether`, `keepWithNext` et une politique équivalente n'ont pas été ajoutés
+3. vérifier que le plan C6 et l'ADR 0008 ne réservent plus littéralement `7 -> 8` à E4, mais lui
+   attribuent la prochaine version disponible ;
+4. vérifier que `keepTogether`, `keepWithNext` et une politique équivalente n'ont pas été ajoutés
    entre-temps ;
-4. conserver tous les changements utilisateur sans rapport et ne jamais réinitialiser la branche ;
-5. arrêter l'exécution si le numéro 8 ou l'ADR 0009 ont déjà été attribués.
+5. conserver tous les changements utilisateur sans rapport et ne jamais réinitialiser la branche ;
+6. arrêter l'exécution si le numéro 8 ou l'ADR 0009 ont déjà été attribués.
 
 Ce contrôle ne change aucune décision : il empêche seulement d'appliquer un plan exact sur une base
 qui ne l'est plus.
