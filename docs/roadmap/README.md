@@ -27,8 +27,9 @@ ensuite, parce que rien dans les briques ne la connaît.
 Le **document de référence** retenu est **la facture** : c'est le niveau d'exigence
 à atteindre, pas le périmètre. Elle est choisie parce qu'elle concentre les
 contraintes les plus dures — multi-pages comptable, totaux reportés de page en
-page, blocs qui ne se coupent jamais, deux langues et deux devises. Ce qui rend une
-facture possible rend possibles les rapports, les relevés, les bons de livraison,
+page, blocs **insécables** non coupés dès qu'ils peuvent tenir sur une page et
+repli documenté au-delà, deux langues et deux devises. Ce qui rend une facture
+possible rend possibles les rapports, les relevés, les bons de livraison,
 les contrats, les courriers et les bordereaux : ces éditions attendent la même
 barre, pas un lot de plus. **L'étiquette fait exception**, et pour une raison
 étrangère à cette barre : elle réclame une sortie image, écartée du v1 par la
@@ -46,7 +47,7 @@ réordonner le backlog.
 
 | # | Sujet | Décision | Ce que ça protège, ce que ça coûte |
 | :-- | :--- | :--- | :--- |
-| 1 | Document n°1 | La **facture**, niveau **multi-pages comptable** : totaux reportés de page en page, blocs qui ne se coupent jamais, mentions légales sur la dernière page | Protège la crédibilité : une facture presque juste est inutilisable. **C'est le niveau d'exigence, pas le périmètre** : la facture concentre les contraintes les plus dures, et une brique qui les tient rend toutes les autres éditions accessibles. Coûte le plus cher des trois niveaux envisagés |
+| 1 | Document n°1 | La **facture**, niveau **multi-pages comptable** : totaux reportés de page en page, blocs **insécables** non coupés dès qu'ils peuvent tenir sur une page, avec repli documenté au-delà ([ADR 0009](../adr/0009-les-blocs-insecables.md)), mentions légales sur la dernière page | Protège la crédibilité : une facture presque juste est inutilisable. **C'est le niveau d'exigence, pas le périmètre** : la facture concentre les contraintes les plus dures, et une brique qui les tient rend toutes les autres éditions accessibles. Coûte le plus cher des trois niveaux envisagés |
 | 2 | Premier succès visible | **Publication open-source des cinq briques d'un bloc**. Rien de public avant | Protège le message produit. Coûte : aucun retour extérieur pendant tout le parcours |
 | 3 | Capacité | **Solo, temps partiel** | Impose un seul chantier ouvert à la fois et des lots courts |
 | 4 | Ordre | **Brique par brique** : core → engine → viewer → service → designer | Protège la solidité de chaque brique. Coûte : le premier document sort tard |

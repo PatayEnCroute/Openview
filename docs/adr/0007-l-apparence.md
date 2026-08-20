@@ -9,6 +9,12 @@
   police), `@openview/viewer` (V1 peut peindre sans moteur ; V3 a enfin une chaîne de largeurs à
   vérifier), `@openview/designer` (D2 doit un panneau de style, et un **normalisateur côté
   producteur**), `@openview/core` lot **C6** — qui « Dépend de : C2, C5 » (`core.md:229`)
+- **Complétée par :** [ADR 0009](0009-les-blocs-insecables.md) — le lot C7 livre le `keepTogether`
+  que la **condition 3** du critère d'appartenance de cette ADR range hors de l'apparence, et il le
+  livre **exactement là où cette ADR le prévoyait** : sur le nœud, jamais dans `BoxStyle`, jamais
+  comme un style CSS stocké. Le dossier `style/` sort du lot C7 **inchangé**. L'exécution des
+  politiques de coupe reste au **moteur** ; une déclaration persistée de **voisinage** exigerait un
+  lot `core` nouveau **et une version**.
 - **Complète :** [ADR 0006](0006-la-page.md) — une bande a l'apparence **gratuitement**, parce que
   `PageBand.content` **est** un `ContainerNode`, donc pas une ligne de `page/` ne change ; et
   [ADR 0005](0005-le-tableau-de-lignes.md), dont le critère d'appartenance à la colonne est
@@ -1397,7 +1403,7 @@ publiés** que C5 périme ou honore autrement que promis.
 **Pourquoi le lot le fait, alors que les précédents s'en sont abstenus.** *(Raisonné, avec un précédent
 d'exécution.)* La doctrine est écrite : « *Une ADR est un journal, et un lot ne réécrit pas les
 documents d'un autre* » (ADR 0005). Mais **C5 est le lot dont le nom est mal employé** :
-`docs/roadmap/engine.md:79` attribuait le modèle bilingue à « core C5 » alors que c'est **C6**, dont
+`docs/roadmap/engine.md:113` attribuait le modèle bilingue à « core C5 » alors que c'est **C6**, dont
 `core.md:229` écrit lui-même « Dépend de : C2, C5 ». C'était le **troisième relevé** — ADR 0005, plan
 C3, et la campagne de mesure — et **personne ne l'avait corrigé**. C5 a le plus d'intérêt à ce que
 l'énoncé soit juste, et le moins de titre à réécrire le document d'un autre. **Le précédent d'exécution
@@ -1415,7 +1421,7 @@ C4 a périmées ».
 | 5 | `ast/types.ts` — ce que `TableNode` ne porte pas | « *No border, no shading, no font, no spacing, no per-cell alignment override (lot C5).* » | **PARTIELLEMENT PÉRIMÉ.** `TableNode` porte désormais `box`, donc « no border, no shading, no spacing » **devient faux**. La phrase est réécrite ; « no font » reste vrai, et la largeur **n'est plus manquante** : elle est dérivée |
 | 6 | `ast/__tests__/nodes.test.ts` | « *`TableCell` is first because it is the likeliest site: **a per-cell alignment override is lot C5's declared future***.* » | **REDIRIGÉ.** Le test écrivait « declared future » là où l'ADR 0005 écrit « ***s'il** la décide* » : une réservation conditionnelle durcie en promesse. La paire `TABLE_CELL_KEYS_IN_STEP` **reste** — elle est l'une des six qui ont réellement rougi — et sa justification est réécrite |
 | 7 | `page/__tests__/page.test.ts` | « *lot C5 has a **bleed** and a **gutter** in its declared future, and both are optional by nature.* » | **DÉCLINÉ** (arbitrage n° 7). L'ADR 0006 décision 13 range la marge de reliure et le fond perdu dans « un **silence** que ce lot décide de ne pas rompre », attribué à **personne**, et le besoin est déjà couvert **sans champ** : `page/types.ts`, « *Zero is legal -- a **full-bleed** label, or a template that manages its own **gutter*** ». C'était la **seule** source de cette attribution |
-| 8 | `docs/roadmap/engine.md:79` | « *Le contrat sait décrire un modèle bilingue (**core C5**) …* » | **CORRIGÉ en C6.** Troisième relevé, jamais corrigé |
+| 8 | `docs/roadmap/engine.md:113` | « *Le contrat sait décrire un modèle bilingue (**core C5**) …* » | **CORRIGÉ en C6.** Troisième relevé, jamais corrigé |
 
 **Et deux corrections de test, qui ne sont pas des promesses mais des filets.**
 
@@ -1497,7 +1503,7 @@ possède**, ou la mention explicite qu'il n'a **aucun propriétaire**. Soit 6 + 
 | :--- | :--- | :--- |
 | le **fond de page**, le **filigrane**, le **cachet**, la **couleur du papier** | ADR 0006 : ce sont des **calques**, « une bande **occupe** de la place, un filigrane est **derrière** le flux ». ⚠️ **L'ADR 0006 se contredit ici** : elle attribue « la couleur du papier » à **C5** à un endroit et à C11/D10 à un autre ; C5 retient la seconde, et le fait est dans une **décision** (signalement L) | **C11 / D10** |
 | le **positionnement libre au millimètre** | hors périmètre v1, `docs/roadmap/README.md` | hors v1 |
-| l'**insécabilité**, la **veuve**, l'**orpheline**, le **report**, la **répétition effective**, le **point de coupe** | condition 3 : ce sont des politiques. **C4 s'est retenu de préempter C7, C5 fait de même** | **C7**, **E2**, **E3** |
+| l'**insécabilité**, la **veuve**, l'**orpheline**, le **report**, la **répétition effective**, le **point de coupe** | condition 3 : ce sont des politiques. **C4 s'est retenu de préempter C7, C5 fait de même** | **C7** ✅ *livré, [ADR 0009](0009-les-blocs-insecables.md)* ; les cinq autres restent à **E2**, **E3** |
 
 **Famille 6 — ce que le dépôt attribue à C5 et que C5 refuse quand même : deux refus.**
 

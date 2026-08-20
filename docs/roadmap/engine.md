@@ -57,7 +57,8 @@ aucune ne commence par une ligne orpheline ou un tableau sans en-tête.
 outil utilisable en gestion :
 
 - le **total reporté** de page en page (« report : 12 480,00 € ») ;
-- les **blocs insécables** jamais coupés (cadre de totaux, mentions, adresse) ;
+- les **blocs insécables** non coupés **dès qu'ils peuvent tenir sur une page**
+  (cadre de totaux, mentions, adresse) ;
 - les **mentions légales** et le cadre de paiement **sur la dernière page uniquement**.
 
 > **Le report est le seul calcul que le moteur décide lui-même** : il dépend de
@@ -65,6 +66,39 @@ outil utilisable en gestion :
 > autres montants sont calculés par les **formules du modèle**, et leur exactitude
 > appartient à l'auteur du modèle — voir la
 > [règle d'arbitrage](core.md#règle-darbitrage--la-capacité-est-à-nous-la-responsabilité-est-à-lintégrateur).
+
+> **L'insécabilité est DÉCLARÉE par le modèle et HONORÉE ici** — le contrat porte
+> `keepTogether?: true` sur les huit nœuds depuis le lot
+> [C7](core.md#c7-les-blocs-insécables) ([ADR 0009](../adr/0009-les-blocs-insecables.md)).
+> Ce lot en est le seul propriétaire, et l'ordre de traitement lui est imposé, par
+> occurrence marquée et **après** mesure :
+>
+> 1. **page courante** — si l'occurrence tient dans l'espace restant, elle y reste
+>    entière ;
+> 2. **page neuve admissible** — sinon, si elle tient dans l'aire disponible d'une
+>    prochaine page compatible avec les bandes déclarées, elle y est reportée
+>    entière ;
+> 3. **repli ordinaire du kind** — si aucune page neuve ne peut la contenir, la
+>    préférence **cesse de bloquer le placement** : un contenu fragmentable est coupé
+>    de façon **déterministe**, une ressource atomique garde le comportement de
+>    placement ou de refus d'**E1/E2**. Cette branche est ce qui **garantit la
+>    terminaison** : sans elle, le paginateur reporte éternellement le même bloc.
+>
+> Trois précisions qui coûtent cher si elles sont découvertes tard. **Une marque
+> descendante survit au repli de son parent** : un tableau trop grand se coupe entre
+> ses lignes, et la ligne de total marquée reste entière si elle tient sur une page
+> neuve. **La sémantique est par occurrence matérialisée** : une boucle ou un groupe de
+> lignes marqué garde **chaque** itération entière, jamais toutes ensemble. **Une bande
+> de page n'entre pas dans cet ordre** — elle n'est jamais reportée comme un bloc du
+> flux, et si son contenu mesuré dépasse la zone imprimable, le
+> [refus propre exigé par l'ADR 0006](../adr/0006-la-page.md) s'applique inchangé,
+> qu'une marque soit portée par son conteneur ou non.
+>
+> ⛔ **Ce que C7 n'a PAS livré et qui vous revient :** l'**identité d'occurrence**
+> capable de distinguer deux itérations sous des boucles imbriquées — `(id, rang
+> local)` ne suffit pas et les `id` ne sont pas globalement uniques. C'est **E5** qui
+> la choisit, et c'est aussi E5 qui rendra le repli **observable** dans son résultat de
+> pagination : `core` n'ajoute aucun diagnostic.
 
 **Prêt quand** un utilisateur métier lit une facture de trois pages produite par
 Openview et ne relève aucune anomalie de mise en page.

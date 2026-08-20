@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
+import { parseTemplate } from '../../template/migrate.js';
+import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import {
   BlockNodeSchema,
   type ConditionNode,
-  type ConditionNodeSchema,
+  ConditionNodeSchema,
   type ContainerNode,
-  type ContainerNodeSchema,
+  ContainerNodeSchema,
   type DocumentNode,
   DocumentNodeSchema,
+  type DocumentNodeType,
   type ImageNode,
-  type ImageNodeSchema,
+  ImageNodeSchema,
   type LoopNode,
-  type LoopNodeSchema,
+  LoopNodeSchema,
   type TableBodyNode,
   type TableBodyNodeSchema,
   type TableCell,
@@ -19,11 +22,11 @@ import {
   type TableColumn,
   type TableColumnSchema,
   type TableNode,
-  type TableNodeSchema,
+  TableNodeSchema,
   type TableRowGroupNode,
-  type TableRowGroupNodeSchema,
+  TableRowGroupNodeSchema,
   type TableRowNode,
-  type TableRowNodeSchema,
+  TableRowNodeSchema,
   type TextBindingSegment,
   type TextBindingSegmentSchema,
   type TextLiteralSegment,
@@ -224,6 +227,20 @@ export const LOOP_NODE_KEYS_IN_STEP: MutuallyAssignable<
 export const CONDITION_NODE_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof ConditionNodeSchema>,
   keyof ConditionNode
+> = true;
+
+/**
+ * The TYPE of the fragmentation mark, which the eight key-set pairs above cannot see.
+ *
+ * They compare key SETS, so widening the interface to `boolean` while the schema still accepts
+ * only `true` leaves all eight green -- and a `false` an editor writes would then be stripped at
+ * the next parse. One pair suffices: the eight interfaces inherit the field from `NodeBase` and
+ * the eight schemas share one `keepTogetherField`. The key-set pairs stay necessary to prove each
+ * of the eight schemas actually spells the field out.
+ */
+export const KEEP_TOGETHER_TYPE_IN_STEP: MutuallyAssignable<
+  z.infer<typeof TextNodeSchema>['keepTogether'],
+  TextNode['keepTogether']
 > = true;
 
 describe('DocumentNodeSchema', () => {
@@ -555,5 +572,216 @@ describe('DocumentNodeSchema', () => {
         ],
       }),
     ).toThrow();
+  });
+});
+
+/**
+ * The smallest valid raw node of each kind, carrying the mark.
+ *
+ * A `Record` over `DocumentNodeType` rather than an array, so a ninth kind added to the union does
+ * not compile until it is listed here -- `TS2741`, the idiom `page/__tests__/page.test.ts` uses for
+ * band occurrences. Raw and untyped on purpose: these go through a parse.
+ */
+const MARKED_NODES: Readonly<Record<DocumentNodeType, unknown>> = {
+  text: { type: 'text', id: 'n', keepTogether: true, content: [] },
+  image: { type: 'image', id: 'n', keepTogether: true, src: 'logo.png' },
+  container: { type: 'container', id: 'n', keepTogether: true, children: [] },
+  loop: {
+    type: 'loop',
+    id: 'n',
+    keepTogether: true,
+    each: { kind: 'path', path: 'facture.lignes' },
+    as: 'ligne',
+    children: [],
+  },
+  condition: {
+    type: 'condition',
+    id: 'n',
+    keepTogether: true,
+    when: { kind: 'isEmpty', operand: { kind: 'path', path: 'facture.mentions' } },
+    children: [],
+  },
+  table: {
+    type: 'table',
+    id: 'n',
+    keepTogether: true,
+    columns: [{ id: 'montant', width: 1, align: 'end' }],
+    header: [],
+    body: [],
+    footer: [],
+  },
+  tableRow: { type: 'tableRow', id: 'n', keepTogether: true, cells: [] },
+  tableRowGroup: {
+    type: 'tableRowGroup',
+    id: 'n',
+    keepTogether: true,
+    each: { kind: 'path', path: 'facture.lignes' },
+    as: 'ligne',
+    rows: [{ type: 'tableRow', id: 'r', cells: [] }],
+  },
+};
+
+/**
+ * Each kind through its OWN public schema, which the union cannot stand in for.
+ *
+ * `DocumentNodeSchema` would still accept a node whose own exported schema had lost the field: it
+ * discriminates on `type`, and the other seven members keep theirs. Same `Record` guarantee as
+ * above; parse functions rather than schemas, so no variance question arises.
+ */
+const PARSE_BY_KIND: Readonly<Record<DocumentNodeType, (raw: unknown) => DocumentNode>> = {
+  text: (raw) => TextNodeSchema.parse(raw),
+  image: (raw) => ImageNodeSchema.parse(raw),
+  container: (raw) => ContainerNodeSchema.parse(raw),
+  loop: (raw) => LoopNodeSchema.parse(raw),
+  condition: (raw) => ConditionNodeSchema.parse(raw),
+  table: (raw) => TableNodeSchema.parse(raw),
+  tableRow: (raw) => TableRowNodeSchema.parse(raw),
+  tableRowGroup: (raw) => TableRowGroupNodeSchema.parse(raw),
+};
+
+const markedTable = MARKED_NODES.table as Record<string, unknown>;
+
+describe('keepTogether', () => {
+  it.each(Object.entries(MARKED_NODES))('is accepted and KEPT on a %s node', (kind, raw) => {
+    // Kept, not merely accepted: `z.object` STRIPS a key it does not know, with no error, so
+    // acceptance alone would also be the symptom of a schema that ignores the field.
+    const throughItsOwnSchema = PARSE_BY_KIND[kind as DocumentNodeType](raw);
+    const throughTheUnion = DocumentNodeSchema.parse(raw);
+
+    expect(throughItsOwnSchema.keepTogether).toBe(true);
+    expect(throughTheUnion.keepTogether).toBe(true);
+    expect(JSON.parse(JSON.stringify(throughItsOwnSchema))).toStrictEqual(raw);
+    expect(JSON.parse(JSON.stringify(throughTheUnion))).toStrictEqual(raw);
+  });
+
+  it('leaves the two row kinds out of the block flow, marked or not', () => {
+    // The mark changes no membership: a row stays reachable only through its table.
+    expect(BlockNodeSchema.safeParse(MARKED_NODES.tableRow).success).toBe(false);
+    expect(BlockNodeSchema.safeParse(MARKED_NODES.tableRowGroup).success).toBe(false);
+    expect(BlockNodeSchema.safeParse(MARKED_NODES.table).success).toBe(true);
+  });
+
+  it('stays valid under the table wiring check, and does not soften it', () => {
+    // The table schema is the only one wrapped in a `.check()`, so it is the only place a new
+    // field could interfere with a refinement rather than with the object.
+    const row = (columnId: string): unknown => ({
+      type: 'tableRow',
+      id: 'l',
+      keepTogether: true,
+      cells: [{ columnId, children: [] }],
+    });
+
+    expect(TableNodeSchema.safeParse({ ...markedTable, body: [row('montant')] }).success).toBe(
+      true,
+    );
+    expect(TableNodeSchema.safeParse({ ...markedTable, body: [row('absente')] }).success).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ['false', false],
+    ['null', null],
+    ['the string "true"', 'true'],
+    ['1', 1],
+    ['an object', { value: true }],
+  ])('refuses %s, on the path `keepTogether`', (_label, value) => {
+    // `false` is the one that matters: a plain boolean would give one meaning TWO persisted
+    // spellings -- key absent, and `false` -- and no reader could say which an author wrote.
+    // Both schema families are covered, the plain object and the `.check()`-wrapped one.
+    for (const refused of [
+      TextNodeSchema.safeParse({ type: 'text', id: 't', content: [], keepTogether: value }),
+      TableNodeSchema.safeParse({ ...markedTable, keepTogether: value }),
+    ]) {
+      expect(refused.success).toBe(false);
+      if (!refused.success) {
+        expect(refused.error.issues.map((issue) => issue.path)).toStrictEqual([['keepTogether']]);
+      }
+    }
+
+    // And every kind, not only those two: a runtime-only relaxation on ONE schema -- a
+    // `.catch(undefined)` -- keeps the inferred type, so neither the pairs above nor the union
+    // annotation sees it, and the refused value would be silently rewritten to the absence.
+    for (const [kind, raw] of Object.entries(MARKED_NODES)) {
+      expect(() =>
+        PARSE_BY_KIND[kind as DocumentNodeType]({ ...(raw as object), keepTogether: value }),
+      ).toThrow(/keepTogether/);
+    }
+  });
+
+  it('persists ABSENCE as absence, which is what every older document says', () => {
+    const bare = { type: 'text', id: 't', content: [] };
+
+    const parsed = TextNodeSchema.parse(bare);
+
+    // On the parsed object, not on a round trip: `JSON.stringify` drops an undefined-valued key
+    // whatever the schema did, so only the in-memory own key tells absence from presence.
+    expect(parsed.keepTogether).toBeUndefined();
+    expect(Object.hasOwn(parsed, 'keepTogether')).toBe(false);
+  });
+
+  it('persists an explicit `undefined` exactly like an absent key', () => {
+    // The strict type admits `keepTogether: undefined`, and Zod KEEPS that key in memory -- but
+    // `JSON.stringify` drops it, so the canonical persisted form stays the absence.
+    const explicit = TextNodeSchema.parse({
+      type: 'text',
+      id: 't',
+      content: [],
+      keepTogether: undefined,
+    });
+    const absent = TextNodeSchema.parse({ type: 'text', id: 't', content: [] });
+
+    // The in-memory shapes DIFFER, and asserting that is what gives the equality below its
+    // meaning: the two spellings stay distinguishable until serialisation, and only the absence
+    // costs nothing to `assertBoundedShape` and to an `onSave`.
+    expect(Object.hasOwn(explicit, 'keepTogether')).toBe(true);
+    expect(Object.hasOwn(absent, 'keepTogether')).toBe(false);
+    expect(JSON.parse(JSON.stringify(explicit))).toStrictEqual(JSON.parse(JSON.stringify(absent)));
+  });
+
+  it('lets a stored model say which of two sibling blocks holds together', () => {
+    // The recipe criterion of the lot. A consumer reads `true` on one and the absence on the
+    // other, with no helper, no id registry, and no knowledge of what either block contains.
+    const stored = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: 'facture-c7',
+      name: 'Facture — les blocs insécables',
+      version: '1.0.0',
+      page: {
+        sheet: { width: 210, height: 297 },
+        margins: { top: 20, right: 20, bottom: 20, left: 20 },
+        header: [],
+        footer: [],
+      },
+      root: {
+        type: 'container',
+        id: 'racine',
+        children: [
+          {
+            type: 'container',
+            id: 'details',
+            children: [
+              { type: 'text', id: 'ligne', content: [{ kind: 'literal', text: 'Ligne' }] },
+            ],
+          },
+          {
+            type: 'container',
+            id: 'totaux',
+            keepTogether: true,
+            children: [
+              { type: 'text', id: 'total', content: [{ kind: 'literal', text: 'Total' }] },
+            ],
+          },
+        ],
+      },
+    };
+
+    const parsed = parseTemplate(stored);
+    const [details, totaux] = parsed.root.children;
+
+    expect(details?.keepTogether).toBeUndefined();
+    expect(totaux?.keepTogether).toBe(true);
+    // Stored, not merely constructed: the round trip is what proves the mark survives a save.
+    expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(stored);
   });
 });

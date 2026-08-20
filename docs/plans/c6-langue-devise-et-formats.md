@@ -10,6 +10,20 @@
 > numéro de lot, pas de hachage de commit, pas d'historique de brouillon, pas de dépôt de métriques,
 > pas de majuscules de plaidoirie dans le code. Le **contrat** de ce plan a été livré tel quel ; sa
 > **prose** ne l'a pas été, et ne doit pas l'être.
+>
+> ⛔ **Le numéro de version promis à E4 est réattribué, et c'est la seule correction de fond
+> apportée après la livraison.** Ce plan écrit `7 → 8` en une douzaine d'endroits — `A-4`, `A-5`,
+> `R-17`, le tableau de coût du §2.0, celui du §6.1 — et l'estampille du champ `format?` de segment
+> y est chiffrée comme *le numéro 8*. **Un plan ne peut pas réserver un numéro : il chiffre un
+> coût.** Ce coût est **une estampille**, et l'estampille prend la **prochaine version disponible
+> au jour de la livraison**, pas celle qui était libre au jour de l'écriture.
+>
+> **L'ordre réel, acté :** la roadmap place [C7](../roadmap/core.md#c7-les-blocs-insécables) avant
+> [E4](../roadmap/engine.md#e4-langue-et-devise-au-rendu), donc **C7 prend `7 → 8`** et le coût
+> d'E4 devient **`8 → 9`**. Partout ci-dessous, lisez « une estampille, `version courante →
+> version suivante` » — jamais « la version 8 ». Le chiffrage, lui, ne bouge pas d'un pouce :
+> c'est toujours **une** estampille et **une** migration d'identité, la modification la moins
+> chère de ce dépôt.
 
 
 > **Document d'implémentation.** Il dit *comment* livrer un lot : découpage, fichiers touchés,

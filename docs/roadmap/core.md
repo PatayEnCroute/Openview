@@ -312,13 +312,49 @@ rectifier rouvrirait l'ordonnancement de la vague. — **Dépend de :** C2, C5
 ### C7. Les blocs insécables
 
 **Pourquoi.** Exigence comptable : un bloc de mentions légales, un cadre de
-totaux, une adresse ne se coupent jamais en deux entre deux pages. Le contrat doit
-permettre de le dire ; le moteur devra l'honorer.
+totaux, une adresse ne se coupent pas en deux entre deux pages **dès lors qu'ils
+peuvent tenir sur une page**. Le contrat doit permettre de le dire ; le moteur
+devra l'honorer.
 
-**Prêt quand** un modèle marque un bloc comme insécable et un autre comme
-sécable, et que la distinction est lisible par le moteur.
+**Prêt quand** un modèle marque un bloc comme insécable et **laisse un autre sans
+contrainte de fragmentation**, et que la distinction est lisible par le moteur
+**sans heuristique**.
+
+⛔ **L'énoncé précédent disait « et un autre comme sécable », et il demandait une
+forme que ce lot refuse.** Aucun marquage « sécable » n'existe, et il n'en existera
+pas : il faudrait un booléen, donc **deux écritures persistées pour le même sens**
+— clé absente, et `false` — qu'aucun lecteur ne pourrait départager. L'absence de
+la clé *permet* la coupe, elle ne la *commande* jamais.
 
 **Poids :** S — **Dépend de :** C4
+
+> ✅ **Livré le 2026-08-20.** Un champ optionnel, `keepTogether?: true`, sur la
+> **base commune** des huit nœuds — donc huit sites, **zéro type nouveau, zéro
+> export nouveau, zéro `switch`, zéro code d'erreur**. **Estampille 8**, migration
+> d'estampille seule. Le barrel public reste à **126** valeurs.
+> [ADR 0009](../adr/0009-les-blocs-insecables.md) fait foi.
+>
+> **Ce que le lot ne promet PAS, et c'est la moitié de la décision :** un bloc plus
+> grand que toute page neuve **n'est pas** gardé entier. Le moteur essaie la page
+> courante, puis une page neuve admissible, puis **applique le repli ordinaire de son
+> kind** — un contenu fragmentable est coupé de façon déterministe, une ressource
+> atomique garde la politique d'E1/E2. Sans cette troisième branche, `keepTogether`
+> ajouterait un mode d'échec nouveau, ou un paginateur reportant éternellement le
+> même bloc.
+>
+> **La sémantique est par occurrence matérialisée** : une boucle marquée ne rassemble
+> pas ses soixante itérations en un bloc géant, elle en garde **chacune** entière.
+> « Toute la séquence » reste exprimable en plaçant la boucle dans un conteneur
+> marqué — d'où l'absence de second champ. Et une marque **imbriquée** survit au repli
+> de son parent : un tableau trop grand se coupe entre ses lignes, mais la ligne de
+> total marquée reste entière.
+>
+> **Ce que le lot laisse à l'aval, nommé plutôt qu'enterré :** l'**identité
+> d'occurrence** n'est pas figée — `(id, rang local)` ne suffit pas sous des boucles
+> imbriquées et les `id` ne sont pas globalement uniques, c'est à **E5** de la
+> choisir. Le voisinage (`keepWithNext`), les veuves, les orphelines et le saut de
+> page sont **refusés par écrit** : un champ de relation coûtera un lot `core` et une
+> version.
 
 ### C8. Un refus compréhensible
 
