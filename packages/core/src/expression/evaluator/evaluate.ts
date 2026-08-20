@@ -29,11 +29,7 @@ function evalWithin(
 }
 
 /**
- * Evaluates an expression to a raw value.
- *
- * Every node of the tree passes through here exactly once, which is why the two work
- * counters sit at the head: one step per node evaluated, and a depth that rises on the way
- * in and falls on the way out.
+ * Evaluates an algebraic expression against an evaluation scope and budget.
  */
 export function evaluateExpression(
   expression: Expression,
@@ -54,15 +50,6 @@ export function evaluateExpression(
     );
   }
   if (!budget.enter()) {
-    // With the DEFAULT shape limit this bound does not fire on a tree that came through
-    // `parseTemplate` -- the guard refuses first, by ONE node, and the exact margin is
-    // worked out on `EvaluationLimits.maxDepth`. It is reachable as soon as a caller
-    // raises that limit, because `parseTemplate(raw, undefined, { maxDepth: 256 })` is a
-    // supported call: the two bounds share a default and have to be moved together.
-    // It also exists because `evaluateExpression` is public and takes an `Expression`
-    // from wherever: a tree built in a loop by an integrator overflows the stack around
-    // 20 000 levels and raises a bare `RangeError`. Refusing that unwrapped error at
-    // parse time and accepting it at render time would be incoherent.
     return fail(
       {
         code: 'depth-limit-exceeded',
@@ -151,9 +138,6 @@ export function evaluateExpression(
         return evaluateIsEmpty(evalWithin(expression.operand, ['operand'], scope, budget));
       default: {
         const exhaustive: never = expression;
-        // `kindOf` rather than `JSON.stringify`: stringifying overflows the stack around
-        // 8 000 levels, so the exhaustiveness guard would crash while describing the
-        // payload that reached it.
         throw new TypeError(`Unhandled expression: ${kindOf(exhaustive, 'kind')}`);
       }
     }
@@ -163,11 +147,7 @@ export function evaluateExpression(
 }
 
 /**
- * Evaluates a condition.
- *
- * See `requireBoolean` for the truthiness policy this enforces. `caller` names
- * the position for the error payload, and defaults to `'condition'`: a top-level
- * predicate call is a `ConditionNode.when`.
+ * Evaluates a predicate expression, ensuring the result is boolean.
  */
 export function evaluatePredicate(
   expression: Expression,
@@ -181,20 +161,6 @@ export function evaluatePredicate(
   );
 }
 
-/**
- * How a message names the operator that asked for a list.
- *
- * `evaluateSequence` is not reusable "as is", and this table is why: its message was
- * hard-coded to `A loop needs a list to iterate over`. Wired to the list-reducing
- * expression kinds ADR 0003 adds, it would say **loop** to whoever wrote a sum -- a
- * direct C8 miss, in the lot C8 depends on. The article belongs to each entry because
- * `A loop` and `An aggregation` do not share one.
- *
- * Deliberately partial, and it grows with the algebra: each kind adds its own wording
- * in the increment that adds the kind, because a wording for a kind that does not exist
- * yet does not type-check. Anything unlisted gets a neutral subject rather than a wrong
- * one.
- */
 const LIST_CALLER_SUBJECTS: Readonly<Partial<Record<ExpressionErrorSite, string>>> = {
   loop: 'A loop',
   tableRowGroup: 'A table body',
@@ -204,22 +170,13 @@ const LIST_CALLER_SUBJECTS: Readonly<Partial<Record<ExpressionErrorSite, string>
 };
 
 /**
- * Evaluates a list source, for a loop node or for one of the three expression kinds
- * that reduce a list.
- *
- * Missing data yields no iterations rather than throwing: a loop over a section
- * the caller did not supply should render nothing, not abort the document. A
- * value that is present but not a list is a genuine template/data mismatch and
- * does throw.
+ * Evaluates a sequence expression for loops and list aggregations.
  */
 export function evaluateSequence(
   expression: Expression,
   scope: EvaluationScope,
   options?: AttributedEvaluationOptions | undefined,
 ): readonly unknown[] {
-  // Resolved here rather than left to `evaluateExpression`: the element count below needs
-  // the same budget the descent spent from, and a budget created deeper down would be
-  // invisible to it.
   const budget = options?.budget ?? createBudget();
   const value = evaluateExpression(expression, scope, { budget });
   if (isAbsent(value)) {
@@ -233,11 +190,6 @@ export function evaluateSequence(
     );
   }
 
-  // The one place elements are counted, rather than one site per list-reducing operator:
-  // every list in a document -- a loop's and an aggregation's alike -- comes through here,
-  // so the cumulated count is what detects the O(n^k) blow-up. A nested aggregation calls
-  // this once per element of the enclosing one, which is exactly the multiplication the
-  // bound is looking for.
   if (!budget.visit(value.length)) {
     return fail(
       {

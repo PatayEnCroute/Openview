@@ -2,6 +2,7 @@ import { civilDateOf, endOfMonthOf, shiftDay } from '../../civil-date.js';
 import { fail } from '../context.js';
 import { requireDate, requireDays } from '../guards.js';
 
+/** Evaluates date addition (`date + days`). */
 export function evaluateDateAdd(dateRaw: unknown, daysRaw: unknown): string | undefined {
   const from = requireDate(dateRaw, 'dateAdd', ['date']);
   const days = requireDays(daysRaw, 'dateAdd', ['days']);
@@ -18,12 +19,14 @@ export function evaluateDateAdd(dateRaw: unknown, daysRaw: unknown): string | un
   return civilDateOf(shifted);
 }
 
+/** Evaluates date difference in days (`to - from`). */
 export function evaluateDateDiff(fromRaw: unknown, toRaw: unknown): number | undefined {
   const from = requireDate(fromRaw, 'dateDiff', ['from']);
   const to = requireDate(toRaw, 'dateDiff', ['to']);
   return from === undefined || to === undefined ? undefined : to - from;
 }
 
+/** Evaluates the last day of the month for an ISO civil date. */
 export function evaluateEndOfMonth(dateRaw: unknown): string | undefined {
   const date = requireDate(dateRaw, 'endOfMonth', ['date']);
   return date === undefined ? undefined : civilDateOf(endOfMonthOf(date));
