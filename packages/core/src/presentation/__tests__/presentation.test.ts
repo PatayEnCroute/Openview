@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
 import { MAX_ROUND_DECIMALS } from '../../expression/types.js';
+import { parseTemplate, TEMPLATE_MIGRATIONS } from '../../template/migrate.js';
+import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import { formatDate, formatDecimal, formatMoney } from '../format.js';
 import { honouredLocale, wellFormedLocale } from '../locale.js';
 import { resolvePresentation } from '../resolve.js';
@@ -588,5 +590,98 @@ describe('a date is written in the calendar the contract pins, not the one the l
     // The proof that `Date.UTC` was not used: it maps years 0 to 99 onto 1900 to 1999, so it would
     // print these two dates identically.
     expect(formatDate('0042-01-01', FR)).not.toBe(formatDate('1942-01-01', FR));
+  });
+});
+
+describe('the stored shape, its stamp and its migration', () => {
+  /**
+   * A page every literal here carries, because `parseTemplate` migrates and THEN validates against
+   * the current schema, where `page` is required. Its margins differ from the compatibility page
+   * the 4 -> 5 migration writes, so no assertion can pass by coincidence.
+   */
+  const authoredPage = {
+    sheet: { width: 210, height: 297 },
+    margins: { top: 12, right: 12, bottom: 12, left: 12 },
+    header: [],
+    footer: [],
+  };
+
+  const documentAt = (schemaVersion: number, extra: Record<string, unknown> = {}) => ({
+    schemaVersion,
+    id: 'tpl_c6',
+    name: 'Facture',
+    version: '1.0.0',
+    page: authoredPage,
+    root: { type: 'container', id: 'root', children: [] },
+    ...extra,
+  });
+
+  it('stamps the current version at 7, and registers exactly one new step', () => {
+    // The literal list is the only mechanical net under a new step:
+    // `toHaveLength(CURRENT_SCHEMA_VERSION - 1)` stays green through the bump because both sides
+    // move together, so it catches a forgotten entry or a forgotten stamp but never both at once.
+    expect(CURRENT_SCHEMA_VERSION).toBe(7);
+    expect(TEMPLATE_MIGRATIONS.map((step) => [step.from, step.to])).toStrictEqual([
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [5, 6],
+      [6, 7],
+    ]);
+  });
+
+  it('brings a v6 document to 7 without transforming one value of it', () => {
+    // The identity is asserted on the whole document with the stamp put back, which is stronger
+    // than checking the fields someone thought to name. A pre-existing document declares no
+    // writing, so the migration has nothing to invent.
+    const stampedSix = documentAt(6);
+
+    const parsed = parseTemplate(stampedSix);
+
+    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.presentations).toBeUndefined();
+    expect(JSON.parse(JSON.stringify({ ...parsed, schemaVersion: 6 }))).toStrictEqual(
+      JSON.parse(JSON.stringify(stampedSix)),
+    );
+  });
+
+  it('carries a table through the stamp on a document that already had one', () => {
+    // The version guard reads the stamp and not the content, so a document stamped 6 that already
+    // carries a table -- hand-made, or written by an unstamped mid-lot build -- is not refused.
+    const withTable = documentAt(6, { presentations: { 'montant-fr': FR } });
+
+    const parsed = parseTemplate(withTable);
+
+    expect(parsed.schemaVersion).toBe(7);
+    expect(parsed.presentations).toStrictEqual({ 'montant-fr': FR });
+    expect(resolvePresentation(parsed.presentations, 'montant-fr')).toStrictEqual({
+      ok: true,
+      writing: FR,
+    });
+  });
+
+  it('accepts an empty table and an absent one, as two different statements', () => {
+    // Absent says the author never opened the question; empty says the author opened it and
+    // declared nothing yet. A template under construction is a legitimate template.
+    expect(parseTemplate(documentAt(7, { presentations: {} })).presentations).toStrictEqual({});
+    expect(parseTemplate(documentAt(7)).presentations).toBeUndefined();
+  });
+
+  it('refuses a stored table whose writing would not parse, after the migration and not before', () => {
+    // Validation runs on the migrated document, so an unsound table is refused even when it rode in
+    // on an older stamp.
+    expect(() =>
+      parseTemplate(documentAt(6, { presentations: { x: { ...FR, currency: 'eur' } } })),
+    ).toThrow();
+  });
+
+  it('refuses a document stamped beyond this build, with a legible message', () => {
+    // The whole mechanism of the stamp, in one assertion: without it, a v7 document opened by a v6
+    // build is accepted with no error and stripped of its table, after which a save persists the
+    // loss. The message names the version and the remedy.
+    expect(() => parseTemplate(documentAt(CURRENT_SCHEMA_VERSION + 1))).toThrow(
+      /schema version 8 but this build understands at most 7/,
+    );
   });
 });
