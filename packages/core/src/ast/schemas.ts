@@ -18,21 +18,6 @@ import {
 } from './types.js';
 
 const nodeIdSchema = z.string().min(1, 'A node id is required');
-
-/**
- * The two style fields, spelt ONCE each and reused by every carrier below.
- *
- * EIGHT `z.object` LITERALS IN THIS FILE GAIN A STYLE FIELD, AND THERE IS NO `nodeBaseSchema` TO
- * PUT IT ON. The eight repeat `id: nodeIdSchema` literally, so a field shared by five nodes is
- * five edits, not one -- and MEASURED, forgetting one of them is SILENT: of the fifteen sites a
- * style can attach to, the type gate saw nine of them not at all, and every test passed with four
- * schemas diverging from their types. The eight `*_KEYS_IN_STEP` pairs written in
- * `ast/__tests__/nodes.test.ts` before any of these fields existed are what turned that silence
- * into a compile error.
- *
- * These two constants do not remove the repetition -- they make a forgotten site visible as an
- * ABSENT NAME rather than as a subtly different expression.
- */
 const boxField = BoxStyleSchema.optional();
 const typographyField = TypographySchema.optional();
 
@@ -48,29 +33,12 @@ export const TextBindingSegmentSchema = z.object({
   typography: typographyField,
 });
 
-/**
- * A page marker, and it carries NO expression: the paginator substitutes its value, so
- * nothing here is evaluated and no key is demanded of the caller's data.
- *
- * A `field` absent from the object yields the SAME message as an unknown one -- `z.enum`
- * treats `undefined` as an unknown option. Exact, and misleading; recorded for lot C8
- * rather than corrected here, because correcting it means replacing the enum with a
- * literal union and changing the unknown-value message too.
- */
 export const TextPageFieldSegmentSchema = z.object({
   kind: z.literal('pageField'),
   field: z.enum(PAGE_FIELDS),
   typography: typographyField,
 });
 
-/**
- * No `z.ZodType<TextSegment>` annotation, and `DocumentNodeSchema`'s explicit
- * binding below does **not** police this union in its place: zod declares
- * `ZodType<out Output, ...>`, so it is covariant in its output and a schema that
- * produces *less* than `TextSegment` stays assignable and still compiles. The
- * real guard is the mutual-assignability assertion in nodes.test.ts, which fails
- * in both directions.
- */
 export const TextSegmentSchema = z.discriminatedUnion('kind', [
   TextLiteralSegmentSchema,
   TextBindingSegmentSchema,
@@ -83,11 +51,6 @@ export const TextNodeSchema = z.object({
   content: z.array(TextSegmentSchema),
   box: boxField,
   typography: typographyField,
-  // The one node with runs, hence the one node with an alignment -- and its OWN tuple.
-  // `TEXT_ALIGNMENTS` is not `TABLE_COLUMN_ALIGNMENTS` under another name: a column states a
-  // DEFAULT for the text blocks of its cells, this states how ONE block distributes its runs,
-  // and a cell holding an image has the first and not the second. The fourth member, `justify`,
-  // is the one a column cannot declare. See both tuples' docstrings.
   align: z.enum(TEXT_ALIGNMENTS).optional(),
 });
 
@@ -99,17 +62,6 @@ export const ImageNodeSchema = z.object({
   box: boxField,
 });
 
-/**
- * The members of each family, as functions for the reason `expression/schemas.ts` already
- * gives: they are called from inside a `z.lazy` body, where the temporal dead zone has
- * closed. The two unions below are BUILT from these lists rather than restated, so they
- * cannot drift from each other.
- *
- * What no compiler catches is a member missing from BOTH -- `z.ZodType` is covariant in its
- * output, so a union producing less than its annotation still compiles, and a
- * mutual-assignability assertion on an ANNOTATED schema is tautological. Only a runtime
- * parsing test catches that, and that is why there is one per node type.
- */
 function blockMembers() {
   return [
     TextNodeSchema,
@@ -125,35 +77,12 @@ function rowMembers() {
   return [TableRowNodeSchema, TableRowGroupNodeSchema] as const;
 }
 
-/**
- * The recursive binding for a block flow. `z.lazy` defers resolution so the schemas below
- * can reference it before they are initialised, and the explicit `z.ZodType<BlockNode>`
- * annotation keeps the inferred type from collapsing.
- *
- * **`.parse` on this schema bounds nothing.** A deep enough payload raises a bare
- * `RangeError` from Zod's own recursion rather than a typed refusal; use `parseBlockNode`
- * from `template/guard.ts` for the bounded door.
- */
+/** Zod schema for block nodes in the document flow. */
 export const BlockNodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
   z.discriminatedUnion('type', blockMembers()),
 );
 
-/**
- * Every node type, rows included. A row is only ever reached through its table when a
- * template is parsed; this union exists for `parseDocumentNode`, for a Designer validating a
- * subtree it holds in hand, and so `DocumentNode` has one schema.
- *
- * **`.parse` on this schema bounds nothing**, exactly as on {@link BlockNodeSchema}: it is
- * `z.lazy` and recursive, so a deep enough payload raises a bare `RangeError` from Zod's own
- * recursion rather than a typed refusal. Use `parseDocumentNode` from `template/guard.ts` for
- * the bounded door. The warning has to be repeated here rather than left on the sibling union:
- * the sentence above invites a Designer to parse a subtree it holds in hand, which is the very
- * call that overflows, and every other unbounded schema in this package carries the same note.
- *
- * **And this union is WIDER than a block flow.** It accepts a bare `tableRow` or
- * `tableRowGroup` at top level, which no container, loop, condition or cell will take. A
- * consumer validating something it intends to insert into a block flow wants `parseBlockNode`.
- */
+/** Zod schema for any document AST node (including table rows and row groups). */
 export const DocumentNodeSchema: z.ZodType<DocumentNode> = z.lazy(() =>
   z.discriminatedUnion('type', [...blockMembers(), ...rowMembers()]),
 );
@@ -180,12 +109,6 @@ export const ConditionNodeSchema = z.object({
   children: z.array(BlockNodeSchema),
 });
 
-/**
- * `z.number()` accepts finite values only, so `Infinity` and `NaN` are already refused and a
- * `.finite()` check would never fire. Everything a column can get wrong is decidable without
- * any data, so it is refused when the template is SAVED and adds no entry to the error
- * catalogue lot C8 enumerates.
- */
 export const TableColumnSchema = z.object({
   id: z.string().min(1, 'A table column id is required'),
   width: z
@@ -216,32 +139,8 @@ export const TableRowGroupNodeSchema = z.object({
   rows: z.array(TableRowNodeSchema).min(1, 'A table row group needs at least one row'),
 });
 
-/**
- * Not lazy, and therefore declared AFTER its two members: `rowMembers()` is called here at
- * module-initialisation time, so the temporal dead zone is still open above this line.
- */
 export const TableBodyNodeSchema = z.discriminatedUnion('type', rowMembers());
 
-/**
- * The two faults a row can have against its table, and the asymmetry between them is
- * deliberate.
- *
- * A row that fills FEWER columns than the table declares is legal: the columns it does not
- * fill receive no content from this row, and that is exactly the shape of a totals row. A
- * cell naming a column that does not exist is refused -- it is content that would never be
- * shown, so accepting it would be a silent loss, the one thing the versioning doctrine of
- * this package exists to prevent. Two cells for one column in one row is refused for the
- * same reason: the second would be dropped.
- *
- * Checked on the TABLE, which is the one node that can see both sides, and one level deep
- * only: a nested table validates its own rows against its own columns. Iteration goes
- * through `entries()`, so nothing here meets `T | undefined` and nothing needs a non-null
- * assertion.
- *
- * No message interpolates the document. The `path` designates the fault exactly -- e.g.
- * `['footer', 0, 'cells', 1, 'columnId']` -- and displaying the offending id is the editor's
- * job: it holds the tree, and it reads it at the path this reports.
- */
 function checkCells(
   cells: readonly TableCell[],
   declared: ReadonlySet<string>,
@@ -258,8 +157,6 @@ function checkCells(
         message:
           'This cell names a column the table does not declare. Add that column, or point the cell at one of the declared ids.',
       });
-      // Not recorded as filled: a second cell naming the same absent column has the same
-      // fault as the first, and reporting the second as a duplicate would name the wrong one.
       continue;
     }
     if (filled.has(cell.columnId)) {
@@ -275,9 +172,6 @@ function checkCells(
 
 function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   const declared = new Set<string>();
-  // The general rule, and it is deliberately NOT "the set is empty": the rows are walked only
-  // when the COLUMN LIST ITSELF is sound. Any fault under `columns` makes every cell of the
-  // table look like an orphan, so reporting them would bury the one fault the author has to fix.
   let columnsAreSound = table.columns.length > 0;
   for (const [index, column] of table.columns.entries()) {
     if (declared.has(column.id)) {
@@ -289,8 +183,6 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
       });
       columnsAreSound = false;
     }
-    // An empty id was already refused by the field schema, but `too_small` is CONTINUABLE, so
-    // the column still arrives here carrying `''` and would silently "declare" that name.
     if (column.id === '') {
       columnsAreSound = false;
     }
@@ -298,14 +190,6 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   }
 
   if (!columnsAreSound) {
-    // Whatever is wrong with the column list has already been named -- by `columns.min(1)`, by
-    // the `id` bound, or by the uniqueness check above -- and NONE of those stops this function
-    // from running, because `too_small` and `custom` are continuable issues in zod 4.
-    //
-    // Measured, on the twelve-cell recipe table: walking the rows anyway yields 13 issues
-    // instead of 1 for `columns: []`, and 13 instead of 1 for a single column whose `id` is the
-    // empty string. An author who has one thing to fix must be told once, and lot C8 has to be
-    // able to say it once.
     return;
   }
 
@@ -313,20 +197,6 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
     checkCells(row.cells, declared, ['header', index], ctx);
   }
   for (const [index, entry] of table.body.entries()) {
-    // Not a second `switch (node.type)`, and not a traversal: this descends into no child,
-    // it reads one node's own two-member body union, and Zod has already discriminated it.
-    // Routing it through `visitNode` would make this module depend on the traversal module in
-    // order to dispatch two cases.
-    //
-    // What holds this branch to the union is NOT this line: measured, a third member carrying
-    // `rows: readonly TableRowNode[]` compiles here at exit 0 and is silently absorbed by the
-    // `else`.
-    //
-    // Two assertions in `ast/__tests__/nodes.test.ts` cover the two directions, and neither
-    // covers the other -- an earlier version of this comment credited the first with both.
-    // `TABLE_BODY_MEMBERS_IN_STEP` fails to compile the day the TYPE union gains a third
-    // member; `TABLE_BODY_SCHEMA_IN_STEP` fails the day `rowMembers()` loses one, which is a
-    // change this file can make on its own and which no type gate would otherwise see.
     if (entry.type === 'tableRow') {
       checkCells(entry.cells, declared, ['body', index], ctx);
     } else {
@@ -340,12 +210,7 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   }
 }
 
-/**
- * A refined object stays a `ZodObject` in zod 4 -- refinements live inside the schema rather
- * than wrapping it -- so this remains a legal member of the discriminated unions above, lazy
- * ones included. That is a dependency on library behaviour, it is measured, and it is to be
- * replayed on every zod upgrade.
- */
+/** Zod schema for table nodes with structural validation of column and cell wiring. */
 export const TableNodeSchema = z
   .object({
     type: z.literal('table'),

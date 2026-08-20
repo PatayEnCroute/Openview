@@ -1,5 +1,17 @@
 # Plan d'implémentation — `@openview/core` lot C6 : langue, devise et formats
 
+> ⛔ **PÉRIMÉ — le lot est livré (2026-08-20).** Ce document ne fait plus foi : c'est
+> [ADR 0008](../adr/0008-langue-devise-et-formats.md) qui porte les décisions, les mesures et les
+> onze attentes envers l'aval, et elle **corrige** ce plan sur trois points nommés dans sa section
+> « Ce que l'exécution a corrigé du plan ».
+>
+> Le plus important des trois, pour un lecteur qui reviendrait ici chercher du texte à recopier :
+> **le §3 prescrit ses docstrings verbatim, et `AGENTS.md` §1.6 les interdit désormais** — pas de
+> numéro de lot, pas de hachage de commit, pas d'historique de brouillon, pas de dépôt de métriques,
+> pas de majuscules de plaidoirie dans le code. Le **contrat** de ce plan a été livré tel quel ; sa
+> **prose** ne l'a pas été, et ne doit pas l'être.
+
+
 > **Document d'implémentation.** Il dit *comment* livrer un lot : découpage, fichiers touchés,
 > contrat définitif, tests, ordre des commits. Il ne dit ni *quoi* ni *pourquoi* — cela vit dans
 > `docs/roadmap/` — ni les *décisions* structurantes, qui se consignent dans `docs/adr/`. Il est

@@ -258,14 +258,56 @@ facture en français/euros et en anglais/dollars. Cela concerne les montants, le
 dates, les séparateurs de milliers, la position du symbole monétaire, et les libellés
 fixes du modèle.
 
-**Prêt quand** un unique modèle de facture produit deux documents corrects dans
-deux langues et deux devises, sans duplication du modèle.
+**Prêt quand** un unique modèle de facture **DÉCLARE** deux écritures — langue,
+devise, bornes de décimales, forme de date —, qu'un appelant en sélectionne une **par
+un argument**, que les trois fonctions de formatage rendent deux chaînes différentes
+**portant les mêmes chiffres**, et que les données requises du modèle soient les
+**mêmes** dans les deux cas.
 
-**Poids :** L — **Dépend de :** C2, C5
+⛔ **Ce critère a été SCINDÉ le 2026-08-20, et l'énoncé précédent est conservé ici
+parce qu'il expliquait pourquoi.** Il disait : « *un unique modèle de facture produit
+deux documents corrects dans deux langues et deux devises, sans duplication du
+modèle* » — et il était **mot pour mot** celui du lot moteur
+[E4](engine.md#e4-langue-et-devise-au-rendu), alors que `core` **ne rend rien**. Aucun
+contrat de `core` ne pouvait donc le satisfaire. La coupe est celle que
+[ADR 0008](../adr/0008-langue-devise-et-formats.md) argumente : **`core` déclare, E4
+produit.** Ce qui reste à E4 est inchangé — la facture qui *sort*, dans les deux
+écritures, avec les sites correctement choisis.
+
+**Poids :** L annoncé — **XL réel**, et l'écart est acté plutôt que corrigé : le
+rectifier rouvrirait l'ordonnancement de la vague. — **Dépend de :** C2, C5
 
 > **Attention, ce lot ne fait pas de conversion.** Afficher « $ » n'est pas convertir
 > des euros en dollars : un taux de change est une donnée, et son choix appartient à
 > l'intégrateur — même règle que la TVA.
+
+> ✅ **Livré le 2026-08-20.** Une écriture porte cinq champs **tous requis** — une
+> locale, une devise, **deux** bornes de fraction et une forme de date —, et un
+> `Template` en déclare une **table** dont les clés appartiennent à l'auteur du modèle.
+> L'appelant sélectionne **par un argument** ; ni `RenderRequest`, ni une clé de la
+> donnée, ni la machine n'y participent. **Estampille 7.**
+>
+> **La décision structurante est que la locale est jugée DEUX fois**, et le critère de la
+> coupure est écrit une fois pour toutes : *un champ stocké ne peut être jugé que par un
+> verdict identique sur toute machine.* La grammaire au **parse** (0 divergence sur
+> 31 933 tags entre deux ICU), l'honorat au **rendu** (527 tags contre 525, `en-FR`
+> parmi les deux qui bougent). Un tag bien formé mais inconnu **se stocke** et se
+> refuse au rendu, en **nommant sa cause** — sans quoi le même document s'ouvrirait sur
+> une machine et pas sur une autre, sur une faute appartenant à l'ICU du lecteur.
+>
+> **La moitié « libellés fixes » du Pourquoi était déjà livrée par C1**, et il faut le
+> dire : un `if` lisant une donnée imprime `Facture` ou `Invoice`, et il **réordonne**,
+> ce qu'une table de traductions ne sait pas faire. Ce lot porte les **quatre autres**
+> items, tous l'écriture d'une **valeur**, et n'ajoute aucun mécanisme de libellé.
+>
+> **Ce que le lot ne referme PAS, nommé plutôt qu'enterré :** il livre un **verbe** et
+> jamais la liste des **sites**. Rien dans un document stocké ne distingue un numéro de
+> commande d'un total, et reconnaître un total exigerait de réserver un nom de champ —
+> `20260014` s'imprimerait `20 260 014`, qui désigne une autre commande. C'est
+> l'attente **E4-1**, l'une des **onze** que l'ADR 0008 nomme avec leur propriétaire.
+>
+> Zéro code d'erreur nouveau, zéro champ sur aucun nœud, aucun `switch` neuf ; le barrel
+> public passe de **117** à **126** valeurs, mesuré par émission ESM réelle.
 
 ### C7. Les blocs insécables
 

@@ -216,6 +216,31 @@ asynchrone) : `await` explicite sur tout appel asynchrone, sans exception. Une
 promesse volontairement non attendue est marquée `void promesse` avec un
 commentaire justifiant pourquoi.
 
+### 1.6 Hygiène des commentaires & concision documentaire
+
+Le code source n'est ni un carnet de laboratoire, ni un journal de bord, ni un ADR.
+Les commentaires JSDoc et inline doivent rester **stricts, concis et focalisés sur le contrat**.
+
+- **Langue obligatoire en anglais :** Tous les commentaires dans le code source (`*.ts`,
+  `*.tsx`, `*.js`) — JSDocs et commentaires inline — **DOIVENT être rédigés en anglais**.
+  La documentation de conception et les ADRs (`docs/adr/`) restent en français.
+- **Concision du JSDoc (1 à 5 lignes) :** Documentez le *rôle*, les *paramètres/retours*
+  et les *invariants critiques* indispensables à l'appelant. Jamais de dissertation.
+- **Interdiction du contexte éphémère de développement :** Ne mentionnez **aucun** numéro
+  de lot ou de sprint (`lot C5`, `lot C8`), **aucun** hash de commit (`commit bca73f6`),
+  ni l'historique des brouillons rejetés (`an earlier draft wrote...`). Ce contexte
+  appartient aux commits Git et aux PRs.
+- **Interdiction des dépôts de métriques et dumps de tests :** Les listes exhaustives
+  de cas limites, benchmarks de versions (ex: comparaisons ICU) et dumps JSON d'erreurs
+  vivent dans les suites de tests (`*.test.ts`), jamais dans les JSDoc.
+- **Interdiction du style polémique / plaidoirie :** Pas de passages entiers en majuscules
+  (*SHOUTING*), pas de justifications défensives répétées de fichier en fichier.
+- **Séparation des responsabilités documentaires :**
+  - **Code (`*.ts`)** : Contrat public, usage et invariants stricts en anglais.
+  - **Tests (`*.test.ts`)** : Preuves empiriques, cas limites et comportement attendu.
+  - **ADR (`docs/adr/`)** : Arbitrages d'architecture et comparatifs techniques (en français).
+    Dans le code, un simple renvoi suffit : `@see docs/adr/0007-l-apparence.md`.
+
 ---
 
 ## 🏛️ 2. Architecture & séparation des responsabilités

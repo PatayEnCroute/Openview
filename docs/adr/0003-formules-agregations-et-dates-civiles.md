@@ -6,6 +6,11 @@
 - **Amende :** [ADR 0001](0001-expression-language.md) — le paragraphe « Rien d'autre. Pas
   d'arithmétique, pas d'appel de fonction » ; [ADR 0002](0002-data-binding-and-loop-scope.md) —
   l'argument de rejet de l'option A3 et la conséquence « `CURRENT_SCHEMA_VERSION` reste à 1 »
+- **⛔ Amendée par :** [ADR 0008](0008-langue-devise-et-formats.md) (2026-08-20) — la condition 2
+  du **critère d'admissibilité de la décision 5** (« *elle ne lit rien de l'environnement — ni
+  horloge, ni fuseau, ni locale, ni ICU* ») et la position sur `toLocaleUpperCase` sont **amendées**
+  par l'*Amendement C6*, écrit en toutes lettres sous la décision 5. Ce qui reste vrai sans réserve :
+  **aucune opération de l'algèbre d'expressions ne lit ICU**, et le lot C6 n'en ajoute aucune.
 - **Complétée par :** [ADR 0004](0004-les-arrondis-declares-par-le-modele.md) (2026-08-15) — la
   **décision 4** ci-dessous annonçait le kind enveloppe `round` dans sa *forme* et laissait sa
   sémantique, ses modes et la nature de `decimals` au lot C2. L'ADR 0004 les tranche, porte
@@ -243,6 +248,38 @@ sans rouvrir le débat. Une opération de date entre dans l'algèbre **si et seu
 
 Une date est une chaîne **`YYYY-MM-DD`**, grégorien proleptique, sans heure ni fuseau, bornée
 `0001-01-01 … 9999-12-31`.
+
+> ### ⛔ Amendement C6 (2026-08-20) — la dépendance à ICU, et ce qui reste garanti
+>
+> **Ce qui ne change pas, et il faut le lire d'abord.** Le critère ci-dessus gouverne **l'algèbre
+> d'expressions**, et le sujet de sa phrase est « *une opération de date* ». Le lot C6 n'ajoute
+> **aucune** opération à l'algèbre : `git grep -c "case 'round':" -- packages/core/src/expression`
+> reste à **2**, aucune union stockée ne s'élargit, et **aucune fonction d'expression ne lit ICU**.
+> La condition 2 reste donc **intégralement vraie de l'algèbre**.
+>
+> **Ce qui est amendé** est sa portée au-delà de l'algèbre, parce que
+> [`presentation/format.ts`](../../packages/core/src/presentation/format.ts) dépend d'ICU :
+>
+> Une fonction de `presentation/` peut appeler `Intl` **si et seulement si** la locale lui est
+> **déclarée par le modèle**, **structurellement valide au sens d'ECMA-402** (`wellFormedLocale`, au
+> parse) et **honorée telle quelle** par ce moteur (`honouredLocale`, au rendu), et si `timeZone`,
+> `calendar` et `numberingSystem` sont **épinglés en littéral en ligne**.
+>
+> **La garantie de déterminisme devient :** *deux rendus du même document par le **même build**
+> produisent la **même chaîne** ; deux builds portant deux versions d'ICU peuvent produire deux
+> **caractères d'espace** différents.*
+>
+> **Le second point est la contrainte que le lot moteur E6 hérite, et il est mesuré :**
+> `1 234,50 €` en `fr-FR` porte **U+202F** entre les chiffres et **U+00A0** avant le symbole, et le
+> U+202F est arrivé avec **CLDR 42 / ICU 72**. La CI tourne deux majeures de Node, donc deux jeux
+> CLDR. Conséquence opposable : **aucun test d'or ne fige une chaîne formatée.**
+>
+> **Ce que l'amendement ne concède PAS.** `core` ne lit toujours **rien** de son environnement : pas
+> d'horloge, pas de fuseau autre qu'`UTC` épinglé, **aucune locale de machine**, aucun aléa, et pas
+> un seul objet `Date` construit. Le seul appel qui interroge la machine est l'**honorat**, et il
+> demande « *ce build connaît-il **ce tag*** », jamais « *quelle est la langue de ce build* ». Sans
+> lui, `Intl` retomberait **en silence** sur la locale de l'hôte — le défaut exact que la condition 2
+> existe pour interdire, et que ce lot supprime plutôt qu'il ne l'introduit.
 
 | Kind | Couvre | Convention à choisir ? |
 | :--- | :--- | :--- |
@@ -779,6 +816,12 @@ spécification.** `toUpperCase`/`toLowerCase` sont spécifiés, mais **indexés 
 d'Unicode du moteur**. Mesuré : `'ß'.toUpperCase()` rend `"SS"` — un caractère devient deux, **la
 longueur change**, donc la mise en page, donc la pagination. Ce n'est pas un cas de
 laboratoire : une raison sociale allemande suffit.
+
+⚠️ **Amendé par l'*Amendement C6* ci-dessus, et sur le motif plutôt que sur la conclusion.** La
+conclusion tient : `toLocaleUpperCase` reste **interdite** dans l'algèbre. Mais « elle dépend d'ICU »
+n'est plus le critère — `presentation/format.ts` en dépend et est admis. Le critère est celui de
+l'amendement : ICU n'est appelable **qu'avec une locale que le modèle déclare, validée et honorée**.
+`toLocaleUpperCase` échoue précisément sur ce point, puisqu'elle lit la locale de **l'hôte**.
 
 La variante locale (`toLocaleUpperCase`) est **interdite** : elle dépend d'ICU et casse E6 pour
 de bon. La réserve s'outille par des **vecteurs de test figés** — `ß`, `ﬀ`, `İ`, plus du latin

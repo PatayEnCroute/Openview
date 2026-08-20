@@ -197,6 +197,24 @@ export {
 export type { RenderFormat, RenderPort, RenderRequest, RenderResult } from './ports/render.js';
 export type { TemplateStoragePort } from './ports/storage.js';
 export type {
+  DateStyle,
+  Presentation,
+  PresentationRefusal,
+  PresentationResolution,
+  PresentationTable,
+} from './presentation/presentation.js';
+export {
+  DATE_STYLES,
+  formatDate,
+  formatDecimal,
+  formatMoney,
+  MAX_FRACTION_DIGITS,
+  MIN_FRACTION_DIGITS,
+  PresentationSchema,
+  PresentationTableSchema,
+  resolvePresentation,
+} from './presentation/presentation.js';
+export type {
   BorderEdge,
   BoxBorder,
   BoxSpacing,

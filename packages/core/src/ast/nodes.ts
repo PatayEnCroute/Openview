@@ -1,12 +1,6 @@
 /**
- * The document AST (Composite pattern, ADR 0002; widened by ADR 0005).
- *
- * Facade module re-exporting the hand-written node types and their Zod schemas, on the
- * pattern `expression/expression.ts` already executes. Consumers import from here; the split
- * between `types.ts` and `schemas.ts` is internal, and no consumer changed one line when it
- * happened.
+ * Document AST barrel: node types and their Zod schemas.
  */
-
 export {
   BlockNodeSchema,
   ConditionNodeSchema,

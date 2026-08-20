@@ -16,12 +16,16 @@ import {
   evaluatePredicate,
   evaluateSequence,
   findNodeById,
+  formatDate,
+  formatDecimal,
+  formatMoney,
   MAX_ROUND_DECIMALS,
   MIN_ROUND_DECIMALS,
   mmFromPt,
   type PageBand,
   type PageBandOccurrence,
   type PageSetup,
+  type Presentation,
   type PrintableExpression,
   parseTemplate,
   printableAreaOf,
@@ -29,6 +33,7 @@ import {
   type RoundExpression,
   RoundExpressionSchema,
   type RoundMode,
+  resolvePresentation,
   resolveTextAlign,
   resolveTypography,
   STANDARD_SHEETS_MM,
@@ -190,14 +195,50 @@ const PAGINATION: readonly TextSegment[] = [
 ];
 
 /** Explicit stringification: `concat` refuses a number, and `text()` is where one becomes text. */
-const titre: PrintableExpression = {
+const titreFrancais: PrintableExpression = {
   kind: 'concat',
   parts: [
-    { kind: 'literal', value: 'N° ' },
+    { kind: 'literal', value: 'Facture n° ' },
     { kind: 'text', value: { kind: 'path', path: 'commande.numero' } },
     { kind: 'literal', value: ' — ' },
     { kind: 'textCase', op: 'upper', text: { kind: 'path', path: 'commande.client' } },
   ],
+};
+
+/**
+ * La moitié anglaise du même titre, et elle RÉORDONNE.
+ *
+ * C'est l'argument qui distingue le `if` d'une table de traductions : le client passe devant, et
+ * « n° » devient « no. » à une autre place de la phrase. Une table clé → texte ne sait pas faire
+ * ça ; un `if` le fait parce qu'il porte l'expression entière et non un mot.
+ */
+const titreAnglais: PrintableExpression = {
+  kind: 'concat',
+  parts: [
+    { kind: 'textCase', op: 'upper', text: { kind: 'path', path: 'commande.client' } },
+    { kind: 'literal', value: ' — Invoice no. ' },
+    { kind: 'text', value: { kind: 'path', path: 'commande.numero' } },
+  ],
+};
+
+/**
+ * Le titre, BASCULÉ PAR UNE DONNÉE — c'est le premier des deux commutateurs de la vitrine.
+ *
+ * Ce mécanisme est intégralement celui du lot C1 : le lot C6 n'ajoute RIEN pour les libellés, et
+ * c'est la première chose à dire de lui. Ce qu'il ajoute est l'écriture d'une VALEUR, et elle
+ * bascule par un tout autre canal — le NOM passé à `resolvePresentation`. Les deux sont
+ * indépendants par conception, et la section C6 plus bas montre les quatre combinaisons.
+ */
+const titre: PrintableExpression = {
+  kind: 'if',
+  when: {
+    kind: 'compare',
+    op: 'eq',
+    left: { kind: 'path', path: 'rendu.langue' },
+    right: { kind: 'literal', value: 'fr' },
+  },
+  whenTrue: titreFrancais,
+  whenFalse: titreAnglais,
 };
 
 // Le modèle s'appelle « Facture Exemple » parce que la facture est le document de
@@ -299,6 +340,32 @@ const factureAvecApparence = (a: Apparence): Template =>
     // champs et les identifiants de colonnes. `STANDARD_SHEETS_MM` est une COMMODITÉ
     // D'ÉCRITURE : elle est étalée ici, et le document, lui, n'enregistre que deux nombres.
     // Ajouter un format à cette table ne change ni le schéma, ni la version, ni un document.
+    // Les DEUX écritures que ce modèle déclare — lot C6. Elles vivent dans le DOCUMENT, pas dans
+    // le code React, et c'est tout l'objet du lot : rien de ce qui suit ne lit la machine.
+    //
+    // Les noms de clés appartiennent à l'AUTEUR du modèle. Openview n'en réserve aucun : pas de
+    // « default », pas de « fr », aucune convention liant une clé à une langue. Un modèle qui
+    // écrirait montants, quantités et prix unitaires dans deux langues déclarerait SIX entrées.
+    //
+    // La devise est requise même dans une écriture qui n'imprime pas d'argent, et c'est ce qui
+    // rend `formatMoney` totale sur toute écriture déclarée : son `undefined` a UNE cause, la
+    // valeur non finie, et non deux.
+    presentations: {
+      'fr-eur': {
+        locale: 'fr-FR',
+        currency: 'EUR',
+        minFractionDigits: 2,
+        maxFractionDigits: 2,
+        dateStyle: 'long',
+      },
+      'en-usd': {
+        locale: 'en-US',
+        currency: 'USD',
+        minFractionDigits: 2,
+        maxFractionDigits: 2,
+        dateStyle: 'long',
+      },
+    },
     page: {
       sheet: { ...STANDARD_SHEETS_MM.a4 },
       margins: { top: 18, right: 15, bottom: 18, left: 15 },
@@ -579,6 +646,10 @@ const factureVariante = factureAvecApparence(APPARENCE_B);
 // appartiennent ; `core` ne les connaît pas et ne les valide pas. AUCUN MONTANT n'y
 // figure : tous ceux affichés plus bas sont calculés par le modèle.
 const renderData = {
+  // La langue des MOTS, et c'est une DONNÉE que l'intégrateur nomme — pas une clé réservée par
+  // Openview, pas une lecture de la machine. Le `if` du titre la lit ; l'écriture des VALEURS,
+  // elle, se choisit par un argument passé à `resolvePresentation`. Deux canaux, indépendants.
+  rendu: { langue: 'fr' },
   commande: {
     numero: 20_260_014,
     client: 'acme sàrl',
@@ -1473,8 +1544,18 @@ const lignesDyadiques = lectureAPrime.montants.filter(
   (montant, index) => montant !== lectureA.montants[index],
 );
 
-/** L'écriture française d'un nombre calculé, pour que la prose et le tableau concordent. */
-const fr = (value: number): string => String(value).replace('.', ',');
+/**
+ * L'écriture française d'un nombre calculé — et la mesure la plus courte de ce que le lot C6
+ * apporte.
+ *
+ * Cette ligne était une fonction de trois lignes qui prétendait connaître le français :
+ * `String(value).replace('.', ',')`. Elle est remplacée par une écriture que L'AUTEUR DU MODÈLE
+ * déclare, et que le contrat honore. Le `?? ''` couvre la valeur non finie, seule cause
+ * d'absence de `formatDecimal`.
+ */
+const ecritureFrancaise = resolvePresentation(sampleTemplate.presentations, 'fr-eur');
+const fr = (value: number): string =>
+  (ecritureFrancaise.ok ? formatDecimal(value, ecritureFrancaise.writing) : undefined) ?? '';
 
 /** Les lignes du second jeu, telles que la page les affiche à gauche du tableau. */
 const lignesArrondi = renderData.arrondi.lignes;
@@ -1781,6 +1862,127 @@ const bandeStyle = {
   marginBottom: '0.4rem',
   fontSize: '0.85rem',
 } as const;
+
+/* ------------------------------------------------------------------------------------------- *
+ * Lot C6 — langue, devise et formats. La démonstration, et ce qu'elle refuse de faire croire.
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * Les DEUX commutateurs de la vitrine, et ils sont indépendants PAR CONCEPTION.
+ *
+ * ① la langue des MOTS est une DONNÉE (`rendu.langue`), lue par le `if` du titre — mécanisme du
+ *   lot C1, auquel C6 n'ajoute rien ;
+ * ② l'écriture des VALEURS est un NOM passé à `resolvePresentation` — mécanisme de ce lot.
+ *
+ * Les coudre interdirait un document correct : anglais + euros pour un client britannique d'une
+ * société française est une facture légitime. Les tenir cohérents appartient donc à l'intégrateur,
+ * et les deux combinaisons CROISÉES sont affichées plus bas précisément pour qu'on le voie.
+ */
+const LANGUES = ['fr', 'en'] as const;
+const ECRITURES = ['fr-eur', 'en-usd'] as const;
+
+/**
+ * Le câblage, SITE PAR SITE — fait à la main, et c'est le trou que le contrat ne referme pas.
+ *
+ * `runsDeSegments` rend `String(value)` pour TOUTE valeur liée, et rien dans le document stocké ne
+ * distingue `commande.numero` d'un total : reconnaître un total exigerait de réserver un nom de
+ * champ, ce que la règle de périmètre refuse. Une écriture appliquée à tous les nombres
+ * imprimerait `20 260 014`, qui désigne une autre commande.
+ *
+ * C6 remet donc au moteur tout ce qu'il faut pour écrire une valeur, et ne lui dit pas QUELLES
+ * valeurs écrire. C'est le lot E4 qui le tranchera, devant une vraie facture.
+ */
+interface SiteEcrit {
+  readonly libelle: string;
+  readonly fonction: string;
+  readonly rendu: (writing: Presentation) => string | undefined;
+}
+
+const sitesEcrits: readonly SiteEcrit[] = [
+  {
+    libelle: 'commande.numero',
+    fonction: 'aucune — brut',
+    // Le site qui prouve le trou : un numéro de commande n'est PAS un nombre à écrire.
+    rendu: () => String(renderData.commande.numero),
+  },
+  {
+    libelle: 'total HT (calculé)',
+    fonction: 'formatMoney',
+    rendu: (writing) => {
+      const valeur = evaluateExpression(totalHT, renderData, { budget: createBudget() });
+      return typeof valeur === 'number' ? formatMoney(valeur, writing) : undefined;
+    },
+  },
+  {
+    libelle: 'remise (calculée)',
+    fonction: 'formatMoney',
+    rendu: (writing) => {
+      const valeur = evaluateExpression(remise, renderData, { budget: createBudget() });
+      return typeof valeur === 'number' ? formatMoney(valeur, writing) : undefined;
+    },
+  },
+  {
+    libelle: 'quantité de la 3ᵉ ligne',
+    fonction: 'formatDecimal',
+    rendu: (writing) => formatDecimal(renderData.commande.lignes[2]?.prixUnitaire ?? 0, writing),
+  },
+  {
+    libelle: 'commande.dateEmission',
+    fonction: 'formatDate',
+    rendu: (writing) => formatDate(renderData.commande.dateEmission, writing),
+  },
+];
+
+/** Le titre, évalué contre le MÊME modèle et le MÊME jeu de données, langue basculée. */
+const titreDansLaLangue = (langue: string): string => {
+  const valeur = evaluateExpression(
+    titre,
+    { ...renderData, rendu: { langue } },
+    { budget: createBudget() },
+  );
+  return typeof valeur === 'string' ? valeur : '';
+};
+
+/**
+ * Les quatre combinaisons, chacune résolue UNE FOIS — jamais une fois par valeur.
+ *
+ * `resolvePresentation` construit deux formateurs de contrôle pour vérifier que ce moteur honore
+ * le tag ; le faire par valeur serait le payer N fois. Un rendu peut légitimement employer
+ * PLUSIEURS écritures (montants, quantités, prix unitaires) : ce qui est proscrit, c'est de
+ * résoudre la même deux fois.
+ */
+const combinaisons = LANGUES.flatMap((langue) =>
+  ECRITURES.map((nom) => ({
+    langue,
+    nom,
+    croisee: (langue === 'fr') !== (nom === 'fr-eur'),
+    titre: titreDansLaLangue(langue),
+    resolution: resolvePresentation(sampleTemplate.presentations, nom),
+  })),
+);
+
+/** Un nom que personne n'a déclaré : le refus porte sa cause, et c'est ce qu'A-7 a acheté. */
+const refusInconnu = resolvePresentation(sampleTemplate.presentations, 'de-chf');
+
+/**
+ * Une écriture bien formée que ce moteur n'honore pas — refusée au RENDU, jamais au parse.
+ *
+ * `zz` est grammaticalement impeccable et simplement inconnu, donc il se STOCKE : être inconnu est
+ * une propriété du LECTEUR, pas du document. Sans le refus, `Intl` retomberait en silence sur la
+ * langue de la machine de rendu — le défaut que tout ce lot existe pour supprimer.
+ */
+const refusNonHonore = resolvePresentation(
+  {
+    zz: {
+      locale: 'zz',
+      currency: 'EUR',
+      minFractionDigits: 2,
+      maxFractionDigits: 2,
+      dateStyle: 'long',
+    },
+  },
+  'zz',
+);
 
 export default function App() {
   return (
@@ -2269,6 +2471,242 @@ export default function App() {
         de gonfler celui de la facture. C'est la même règle appliquée au cas limite : ce qui n'est
         pas un document n'a pas à peser sur le budget d'un document.
       </p>
+
+      <h2>Langue, devise et formats — lot C6</h2>
+      <p>
+        Pour la première fois du projet, un critère est visible <strong>sans moteur</strong> : C1 à
+        C5 ne pouvaient montrer qu'une <em>description</em> — un arbre, des chemins, des refus — et
+        laissaient le rendu à une fonction React écrite ici. <code>formatMoney</code>,{' '}
+        <code>formatDecimal</code> et <code>formatDate</code> sont, elles,{' '}
+        <strong>du contrat</strong>, et ce que vous lisez ci-dessous est une vraie chaîne qu'elles
+        ont produite.
+      </p>
+      <p>
+        La mesure la plus courte de ce que le lot apporte tient en une ligne supprimée. Cette page
+        portait <code>const fr = (v) =&gt; String(v).replace('.', ',')</code> — une fonction de
+        trois lignes qui prétendait connaître le français, appelée trois fois. Elle est remplacée
+        par une écriture que <strong>l'auteur du modèle déclare</strong> et que le contrat honore.
+      </p>
+
+      <h3>La table d'écritures est dans le DOCUMENT, pas dans ce code</h3>
+      <p>
+        Un seul <code>Template</code>, estampillé v{sampleTemplate.schemaVersion}, portant deux
+        écritures. Les noms de clés appartiennent à l'auteur : Openview n'en réserve aucun — pas de{' '}
+        <code>default</code>, pas de <code>fr</code>, aucune convention liant une clé à une langue.
+      </p>
+      <pre style={codeStyle}>{JSON.stringify(sampleTemplate.presentations, null, 2)}</pre>
+
+      <h3>Deux commutateurs, et ils sont indépendants par conception</h3>
+      <table style={{ borderCollapse: 'collapse', marginBottom: '12px' }}>
+        <thead>
+          <tr>
+            <th style={cellStyle}>Commutateur</th>
+            <th style={cellStyle}>Ce qu'il est</th>
+            <th style={cellStyle}>Par quel mécanisme</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={cellStyle}>① la langue des MOTS</td>
+            <td style={cellStyle}>
+              une <strong>donnée</strong>, <code>rendu.langue</code>
+            </td>
+            <td style={cellStyle}>lue par le `if` du titre — lot C1, C6 n'y ajoute rien</td>
+          </tr>
+          <tr>
+            <td style={cellStyle}>② l'écriture des VALEURS</td>
+            <td style={cellStyle}>
+              un <strong>argument</strong>, le nom passé au résolveur
+            </td>
+            <td style={cellStyle}>ce lot — jamais une clé réservée, jamais la machine</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Les <strong>quatre</strong> combinaisons sont donc atteignables, et les deux{' '}
+        <strong>croisées</strong> sont affichées comme telles. Elles ne sont ni un bug de cette page
+        ni un bug du contrat : les coudre <em>interdirait un document correct</em> — anglais et
+        euros pour un client britannique d'une société française est une facture légitime. Les tenir
+        cohérents appartient à l'intégrateur, et aucune porte d'Openview ne le voit : le parse
+        accepte les deux déclarations séparément, le rendu réussit les deux.
+      </p>
+      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+        {combinaisons.map((combinaison) => {
+          // La résolution est liée à une CONSTANTE LOCALE, et ce n'est pas un détail de style : le
+          // rétrécissement d'un accès de propriété ne survit pas à la fermeture d'un rappel
+          // imbriqué, donc `combinaison.resolution.writing` ne compilerait pas dans le `map`
+          // ci-dessous. C'est le résultat discriminé qui rend ce rétrécissement écrivable du tout.
+          const { resolution } = combinaison;
+          return (
+            <div
+              key={`${combinaison.langue}-${combinaison.nom}`}
+              style={{
+                flex: '1 1 300px',
+                minWidth: '290px',
+                border: combinaison.croisee ? '2px dashed #b8860b' : '1px solid #d0d4da',
+                background: '#fff',
+                padding: '10px',
+              }}
+            >
+              <p style={{ margin: '0 0 6px' }}>
+                <strong>
+                  ① {combinaison.langue} + ② {combinaison.nom}
+                </strong>
+                {combinaison.croisee ? (
+                  <em style={{ color: '#8a6300' }}> — combinaison croisée</em>
+                ) : null}
+              </p>
+              <p style={{ margin: '0 0 8px', fontStyle: 'italic' }}>{combinaison.titre}</p>
+              {resolution.ok ? (
+                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={cellStyle}>Site</th>
+                      <th style={cellStyle}>Fonction</th>
+                      <th style={cellStyle}>Rendu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sitesEcrits.map((site) => (
+                      <tr key={site.libelle}>
+                        <td style={cellStyle}>{site.libelle}</td>
+                        <td style={cellStyle}>
+                          <code>{site.fonction}</code>
+                        </td>
+                        <td style={{ ...cellStyle, fontWeight: 'bold' }}>
+                          {/* Une écriture RÉSOLUE, jamais une bâtie à la main : c'est la seule qui a
+                            passé les deux portes de locale et la revalidation des cinq champs. */}
+                          {site.rendu(resolution.writing) ?? '(absent)'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p>écriture non résolue : {resolution.refusal}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p>
+        Ce qui ne change <strong>jamais</strong> d'une case à l'autre, et qu'il faut constater : le{' '}
+        <strong>modèle</strong>, le <strong>jeu de données</strong> (à la seule clé{' '}
+        <code>rendu.langue</code> près), le <strong>code de rendu</strong> et le{' '}
+        <strong>navigateur</strong>. Chaque case résout son écriture <strong>une fois</strong>, et
+        jamais une fois par valeur : le résolveur construit deux formateurs de contrôle pour
+        vérifier que ce moteur honore le tag.
+      </p>
+
+      <h3>⚠️ Le câblage est fait ICI, à la main — et le contrat ne sait pas le faire</h3>
+      <p>
+        La colonne du milieu ci-dessus est <strong>une décision de cette page</strong>, valeur par
+        valeur. Rien dans le document stocké ne distingue <code>commande.numero</code> d'un total,
+        et <strong>il ne le doit pas</strong> : reconnaître un total exigerait de réserver un nom de
+        champ, ce que la règle de périmètre refuse. La première ligne du tableau le montre —{' '}
+        <code>{String(renderData.commande.numero)}</code> reste <strong>brut</strong>, parce qu'une
+        écriture appliquée à tous les nombres l'imprimerait <code>20 260 014</code>, qui désigne une
+        autre commande.
+      </p>
+      <p>
+        <strong>
+          C6 remet au moteur tout ce qu'il faut pour écrire une valeur, et ne lui dit pas quelles
+          valeurs écrire.
+        </strong>{' '}
+        C'est le lot E4 qui le tranchera, devant une vraie facture. Une vitrine qui le tairait
+        ferait croire la question résolue.
+      </p>
+
+      <h3>Les données requises sont les mêmes — l'écriture n'en ajoute aucune</h3>
+      <p>
+        Une écriture ne porte <strong>aucune</strong> <code>Expression</code> et n'est traversée par
+        aucun parcours de l'AST, donc déclarer une table de deux écritures ne change pas d'une clé
+        ce que le modèle <em>lit</em>. C'est la traduction vérifiable de « sans duplication du
+        modèle », et c'est la partie du critère qu'un lecteur ne peut pas vérifier à l'œil.
+      </p>
+      <p>
+        <code>collectTemplateDataPaths</code> rend <strong>{cheminsA.length}</strong> chemins sur
+        l'apparence A et <strong>{cheminsB.length}</strong> sur l'apparence B —{' '}
+        <strong>
+          {cheminsA.join('|') === cheminsB.join('|')
+            ? 'même liste, même ordre'
+            : '⛔ LES DEUX LISTES DIVERGENT'}
+        </strong>
+        .
+      </p>
+      <pre style={codeStyle}>{cheminsA.join('\n')}</pre>
+
+      <h3>Les refus portent leur cause, et les deux portes ne sont pas au même endroit</h3>
+      <p>
+        Une locale est jugée <strong>deux fois</strong>. Le <strong>parse</strong> ne juge que la
+        grammaire, parce que son verdict doit être le même sur tout build d'ICU — c'est la propriété
+        qu'un champ <em>stocké</em> doit avoir. Le <strong>rendu</strong> demande si <em>ce</em>{' '}
+        moteur honore le tag, et ce verdict-là dépend des données CLDR de la machine qui lit.
+      </p>
+      <table style={{ borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={cellStyle}>Ce qu'on demande</th>
+            <th style={cellStyle}>Refus rendu</th>
+            <th style={cellStyle}>Qui est en faute</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={cellStyle}>un nom que personne n'a déclaré</td>
+            <td style={cellStyle}>
+              <code>{refusInconnu.ok ? 'ok' : refusInconnu.refusal}</code>
+            </td>
+            <td style={cellStyle}>l'APPEL est faux</td>
+          </tr>
+          <tr>
+            <td style={cellStyle}>
+              <code>locale: 'zz'</code>, bien formée, inconnue de ce moteur
+            </td>
+            <td style={cellStyle}>
+              <code>{refusNonHonore.ok ? 'ok' : refusNonHonore.refusal}</code>
+            </td>
+            <td style={cellStyle}>
+              ni l'un ni l'autre n'est faux — un Designer ne doit PAS en accuser l'auteur
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Sans cette seconde porte, <code>zz</code> retomberait <strong>en silence</strong> sur la
+        langue de la machine de rendu : pas d'erreur, pas d'avertissement, un document plausible,
+        imprimable, et faux d'une façon que rien en aval ne peut détecter. C'est le défaut que tout
+        ce lot existe pour supprimer.
+      </p>
+
+      <h3>Ce que cette page ne peut pas montrer, et ce n'est pas un manque du lot</h3>
+      <ul>
+        <li>
+          <strong>Aucun PDF.</strong> Le critère de <code>core</code> dit <em>décrit</em>, pas{' '}
+          <em>rendu</em> — le moteur est le lot E4.
+        </li>
+        <li>
+          <strong>Aucune preuve que le moteur fera pareil.</strong> Une vitrine qui honore les
+          attentes ne prouve rien sur un moteur qui ne les honorerait pas.
+        </li>
+        <li>
+          <strong>Aucune garantie de version d'ICU.</strong> L'ICU du navigateur n'est pas celui de
+          Node, et la promesse d'aperçu identique au PDF en dépend.
+        </li>
+        <li>
+          <strong>Aucun choix automatique des sites.</strong> C'est la limite structurante du lot,
+          et cette page la met en scène plutôt que de la masquer.
+        </li>
+        <li>
+          <strong>Aucun système de chiffres non latin.</strong> <code>numberingSystem: 'latn'</code>{' '}
+          est épinglé en dur : une facture en <code>ar-EG</code> sort en chiffres latins. C'est
+          défendable, ce n'est pas neutre, et c'est une décision produit.
+        </li>
+        <li>
+          <strong>Aucune facture « correcte »</strong> au sens fort : la conformité appartient à
+          l'intégrateur, et deux factures ne diffèrent pas seulement par les mots et les formats.
+        </li>
+      </ul>
 
       <h2>Document validé</h2>
       <pre style={codeStyle}>{JSON.stringify(sampleTemplate, null, 2)}</pre>

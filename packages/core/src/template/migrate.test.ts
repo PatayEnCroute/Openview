@@ -161,6 +161,7 @@ describe('parseTemplate', () => {
       [3, 4],
       [4, 5],
       [5, 6],
+      [6, 7],
     ]);
     expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
     // The literal expectation above is the ONLY mechanical net under the stamp of lots C1,
@@ -188,7 +189,7 @@ describe('parseTemplate', () => {
 
     const parsed = parseTemplate(stampedFive);
 
-    expect(parsed.schemaVersion).toBe(6);
+    expect(parsed.schemaVersion).toBe(7);
     expect(JSON.parse(JSON.stringify({ ...parsed, schemaVersion: 5 }))).toStrictEqual(
       JSON.parse(JSON.stringify(stampedFive)),
     );
@@ -207,7 +208,7 @@ describe('parseTemplate', () => {
 
     const parsed = parseTemplate(withBox);
 
-    expect(parsed.schemaVersion).toBe(6);
+    expect(parsed.schemaVersion).toBe(7);
     expect(parsed.root.box).toStrictEqual({ background: '#1b3a6f' });
   });
 

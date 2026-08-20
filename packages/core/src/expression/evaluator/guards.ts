@@ -19,15 +19,7 @@ export function isPrimitive(value: unknown): value is string | number | boolean 
 }
 
 /**
- * The boolean check, without the descent -- so an operand of `logical` can be
- * evaluated at its own position and then checked at that same position.
- *
- * JavaScript truthiness is refused on purpose: it would make `{ path: 'total' }` false
- * for a total of 0, and an invoice silently dropping a zero line is exactly the class
- * of bug a document engine must not have.
- *
- * Absent data is the one exception: null and undefined read as false, so a condition
- * on a field that was never supplied hides its branch instead of aborting the render.
+ * Ensures a value is boolean without JavaScript truthiness coercion. Absence (null/undefined) resolves to false.
  */
 export function requireBoolean(
   value: unknown,
@@ -47,21 +39,7 @@ export function requireBoolean(
 }
 
 /**
- * A finite number, or `undefined` for absence. Everything else raises (ADR 0003,
- * decision 6).
- *
- * Three policies meet here, and the third is the one an earlier design got wrong:
- *
- * - **Absent data propagates.** Choosing `0` would be core deciding, on
- *   `DataBindingStep`'s behalf, the question ADR 0001 left open -- and `0` is right for a
- *   sum and wrong for a division.
- * - **A value that is PRESENT and of the wrong type raises `operand-type`.** No coercion:
- *   the ADR 0001 rule is extended here, not eroded, so `1 * '2'` raises where JavaScript
- *   would have yielded 2.
- * - **A value that is present and NOT FINITE raises `not-finite`,** which is a distinct
- *   code and not a flavour of `operand-type`. One rule, stated once: *`operand-type`
- *   answers for a value's SHAPE, `not-finite` for its FINITENESS.* Two codes for one
- *   situation would have forced lot C8 to write two messages for the same fault.
+ * Validates that an operand is a finite number, propagating absence as undefined.
  */
 export function requireNumber(
   value: unknown,
@@ -78,9 +56,6 @@ export function requireNumber(
     );
   }
   if (!Number.isFinite(value)) {
-    // Sealed UPSTREAM: `Number.isFinite` rather than `typeof === 'number'`, because a NaN
-    // that came in with the data would otherwise travel through three levels of formula
-    // and print into a document.
     return fail(
       { code: 'not-finite', site, at, actualType: 'not-finite' },
       'A calculation needs a finite number. NaN and the infinities are numbers to JavaScript and faults to a document.',
@@ -90,29 +65,7 @@ export function requireNumber(
 }
 
 /**
- * The same rule at the OTHER end, and the same code -- plus the one normalisation an exit owes
- * a document.
- *
- * An accumulation overflow -- 60 000 lines at 1e307 -- must not print `Infinity` into a
- * document. `not-finite` at the entry and at the exit, so the policy cannot re-fracture at
- * the first copy-paste.
- *
- * **`-0` collapses to `0` here,** and here rather than in each operator because this is the ONE
- * door every number the algebra PRODUCES comes through: `mul(0, -1)`, `div(0, -5)` and
- * `percentOf(0, -10)` all yield `-0` under binary64, and `roundDecimal` already refused to emit
- * one for the reason it states -- a negative zero is not part of a document's vocabulary. It
- * stays invisible only while nothing formats it: `String(-0)` is `"0"`, but a currency
- * formatter keeps the sign, so lot C6 is where it would have surfaced -- on an invoice, and
- * `Object.is` makes it visible in a test and in a `min`/`max` fold long before that.
- *
- * It is a sign on an exact zero, NOT a rounding. `div` and `percentOf` still round nothing, and
- * the two tests that pin that -- `does NOT round a division` and `does not round either` --
- * keep their assertions untouched, as ADR 0004 requires.
- *
- * What it deliberately does NOT do: rewrite a `-0` the caller's DATA carries. `min`/`max`
- * return an element rather than a computed value, and a `path` returns the datum itself;
- * normalising those would be `core` deciding on `DataBindingStep`'s behalf, which is the
- * boundary ADR 0001 leaves to the integrator.
+ * Validates that a numeric operation output is finite, normalizing -0 to 0.
  */
 export function requireFiniteResult(
   value: number,
@@ -125,18 +78,11 @@ export function requireFiniteResult(
       'This calculation overflowed to a number that is not finite. A document must never print Infinity or NaN.',
     );
   }
-  // `value === 0` is true of both zeros, so this one comparison is the whole normalisation.
   return value === 0 ? 0 : value;
 }
 
 /**
- * The bound on a string an operator PRODUCED, checked after every construction.
- *
- * After every construction and not only at the end, because that is the only order that
- * stops the intermediate string from existing before being refused: `concat` amplifies by
- * 2^depth times the longest string in the data, so a depth-18 balanced tree over a 1 kB
- * value reaches 268 MB. All three text-producing kinds come through this one door -- without
- * that, the bound would be sidestepped by `upper(concat(...))`.
+ * Enforces string length limits on evaluation results.
  */
 export function acceptText(
   value: string,
@@ -153,7 +99,9 @@ export function acceptText(
   return value;
 }
 
-/** A string operand: absence propagates, anything else that is not text raises. */
+/**
+ * Validates that an operand is a string, propagating absence as undefined.
+ */
 export function requireText(
   value: unknown,
   site: ExpressionErrorSite,
@@ -172,12 +120,7 @@ export function requireText(
 }
 
 /**
- * A date operand, as a day number.
- *
- * `site` comes from the CALLING node and is never hard-coded to `'dateAdd'`. That is the most
- * likely copy-paste mistake of the lot, and it passes all four gates while naming the wrong
- * operator to the user -- which is exactly what lot C8 exists to prevent. Hence the tests on
- * `dateDiff` and `endOfMonth`, not only on `dateAdd`.
+ * Validates an ISO civil date string operand and returns its day number.
  */
 export function requireDate(
   value: unknown,
@@ -203,7 +146,9 @@ export function requireDate(
   return dayNumber;
 }
 
-/** A whole number of days. A fraction is a wrong operand shape, not a wrong date. */
+/**
+ * Validates that an operand represents an integer number of days.
+ */
 export function requireDays(
   value: unknown,
   site: ExpressionErrorSite,
@@ -214,10 +159,6 @@ export function requireDays(
     return undefined;
   }
   if (!Number.isInteger(days)) {
-    // `not-a-whole-number` and NOT `operand-type`: the shape here is right -- it IS a
-    // number -- and only its wholeness is wrong. Reporting `operand-type` with
-    // `actualType: 'number'` made the payload contradict itself, so lot C8 generating from
-    // code plus actualType would have said "operates on numbers, got a number".
     return fail(
       { code: 'not-a-whole-number', site, at, actualType: 'number' },
       'A date shift is a whole number of days. Wrap the value in a `round` first, with a `decimals` of 0 and a `mode` of `halfExpand` or `halfEven`.',
@@ -226,6 +167,9 @@ export function requireDays(
   return days;
 }
 
+/**
+ * Checks if a value is empty (null, undefined, empty string, empty array, or empty object).
+ */
 export function isEmptyValue(value: unknown): boolean {
   if (value === null || value === undefined || value === '') {
     return true;
