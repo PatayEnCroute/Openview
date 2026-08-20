@@ -2498,6 +2498,13 @@ export default function App() {
 
       <h3>Deux commutateurs, et ils sont indépendants par conception</h3>
       <table style={{ borderCollapse: 'collapse', marginBottom: '12px' }}>
+        <thead>
+          <tr>
+            <th style={cellStyle}>Commutateur</th>
+            <th style={cellStyle}>Ce qu'il est</th>
+            <th style={cellStyle}>Par quel mécanisme</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
             <td style={cellStyle}>① la langue des MOTS</td>
@@ -2552,6 +2559,13 @@ export default function App() {
               <p style={{ margin: '0 0 8px', fontStyle: 'italic' }}>{combinaison.titre}</p>
               {resolution.ok ? (
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={cellStyle}>Site</th>
+                      <th style={cellStyle}>Fonction</th>
+                      <th style={cellStyle}>Rendu</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {sitesEcrits.map((site) => (
                       <tr key={site.libelle}>
@@ -2630,6 +2644,13 @@ export default function App() {
         moteur honore le tag, et ce verdict-là dépend des données CLDR de la machine qui lit.
       </p>
       <table style={{ borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={cellStyle}>Ce qu'on demande</th>
+            <th style={cellStyle}>Refus rendu</th>
+            <th style={cellStyle}>Qui est en faute</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
             <td style={cellStyle}>un nom que personne n'a déclaré</td>
