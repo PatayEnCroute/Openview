@@ -845,6 +845,37 @@ Tout le reste du dépôt passe par `CURRENT_SCHEMA_VERSION` et reste **vert**.
 d'une estampille, jamais l'oubli **des deux à la fois** — qui est exactement la façon dont on se
 trompe. Le seul filet mécanique sur la marche neuve est la **liste littérale**.
 
+### ④ Une sonde de la définition de fini a un FAUX POSITIF, et il est nommé
+
+Le plan fait de « aucune chaîne formatée n'est figée » un critère **mécanique** :
+
+```
+git grep -cE "(toBe|toContain)\('[^']*[0-9][^0-9']" -- packages/core/src/presentation/__tests__
+```
+
+attendu **0**. Il rend **1**, et c'est la sonde qui a tort :
+
+```
+expect(issue?.message).toContain('ISO 4217 alphabetic code in upper case');
+```
+
+`4217` est suivi d'une espace, donc le motif mord — alors que cette chaîne est un message dont
+**Openview est l'auteur**, ce que la règle autorise explicitement. La sonde cherche un **chiffre
+adjacent à un séparateur** là où le critère porte sur une **chaîne produite par CLDR** : c'est
+exactement la classe de défaut que le plan documente pour huit de ses autres sondes.
+
+**La propriété de fond, elle, est vérifiée** — et par la revue exhaustive plutôt que par le motif :
+aucune valeur attendue du fichier ne mêle un chiffre à un séparateur CLDR, et les seules chaînes
+figées sont des suites de chiffres nues (séparateurs retirés par `digitsOf`), des **tags de langue**,
+des **codes d'issue zod** et des **noms de champ** — c'est-à-dire le vocabulaire d'Openview et rien
+d'autre.
+
+**Formulation corrigée**, qui mesure le fait plutôt que le mot :
+
+```
+git grep -nE "(toBe|toStrictEqual|toContain)\(['\"][^'\"]*[0-9][ ,.  ][0-9]" -- packages/core/src/presentation/__tests__
+```
+
 ### ③ La vitrine montre les quatre combinaisons à la fois, plutôt que deux boutons
 
 Le plan prescrivait **deux boutons** à état. La page est bâtie **entièrement de constantes de
