@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import type { MutuallyAssignable } from '../../ast/__tests__/fixtures.js';
 import { MAX_ROUND_DECIMALS } from '../../expression/types.js';
+import { formatDate, formatDecimal, formatMoney } from '../format.js';
 import { honouredLocale, wellFormedLocale } from '../locale.js';
+import { resolvePresentation } from '../resolve.js';
 import { PresentationSchema, PresentationTableSchema } from '../schemas.js';
 import {
   DATE_STYLES,
   MAX_FRACTION_DIGITS,
   MIN_FRACTION_DIGITS,
   type Presentation,
+  type PresentationRefusal,
+  type PresentationTable,
 } from '../types.js';
 
 /**
@@ -74,6 +78,47 @@ const issueCount = (
   const parsed = schema.safeParse(candidate);
   return parsed.success ? 0 : parsed.error.issues.length;
 };
+
+/**
+ * Every digit of a printed value, separators and symbols removed.
+ *
+ * The general tool of this file: it survives any CLDR release because it removes everything CLDR
+ * put there. No formatted string is pinned anywhere here -- `1 234,50 €` in `fr-FR` carries U+202F
+ * between the digits and U+00A0 before the symbol, and the U+202F arrived with CLDR 42, while the
+ * CI runs two Node majors and therefore two CLDR data sets.
+ */
+const digitsOf = (printed: string | undefined): string => (printed ?? '').replace(/[^0-9]/gu, '');
+
+/** Two declared writings differing in every field, and a table that holds both. */
+const FR: Presentation = {
+  locale: 'fr-FR',
+  currency: 'EUR',
+  minFractionDigits: 2,
+  maxFractionDigits: 2,
+  dateStyle: 'long',
+};
+
+const EN: Presentation = {
+  locale: 'en-US',
+  currency: 'USD',
+  minFractionDigits: 2,
+  maxFractionDigits: 2,
+  dateStyle: 'long',
+};
+
+const TABLE: PresentationTable = { 'montant-en': EN, 'montant-fr': FR };
+
+/**
+ * A table whose writing carries a `locale` of `null` rather than a bad string.
+ *
+ * A source string parsed at use, because a caller in plain JavaScript can hand this and the
+ * repository forbids the cast that would express it in TypeScript.
+ */
+const NULL_LOCALE_TABLE =
+  '{"x":{"locale":null,"currency":"EUR","minFractionDigits":2,"maxFractionDigits":2,"dateStyle":"long"}}';
+
+/** A writing built from {@link FR} with fields replaced. Typed, so only legal values pass. */
+const like = (overrides: Partial<Presentation>): Presentation => ({ ...FR, ...overrides });
 
 describe('a locale is judged twice, and the two judgements are deliberately not the same', () => {
   it('accepts at parse the tags a hand-written tuple forgets', () => {
@@ -311,5 +356,237 @@ describe('the bounds this contract publishes are derived, never restated', () =>
     expect(MAX_FRACTION_DIGITS).toBe(15);
     expect(MIN_FRACTION_DIGITS).toBe(0);
     expect(DATE_STYLES).toStrictEqual(['short', 'medium', 'long', 'full']);
+  });
+});
+
+describe('picking a writing out of a table', () => {
+  it('distinguishes two declared writings by the name the caller passes', () => {
+    const fr = resolvePresentation(TABLE, 'montant-fr');
+    const en = resolvePresentation(TABLE, 'montant-en');
+    expect(fr).toStrictEqual({ ok: true, writing: FR });
+    expect(en).toStrictEqual({ ok: true, writing: EN });
+  });
+
+  it('reads only the own entries of a table, never the inherited ones', () => {
+    // A parsed table inherits from `Object.prototype`, so an index read answers a function for at
+    // least eleven names nobody declared -- and a function's `.locale` is `undefined`, which is the
+    // arity-zero call to `Intl` this contract exists to make unreachable. The guard is on the READ
+    // and not on the key, because a writing legitimately called `constructor` is silly, not illegal.
+    for (const name of ['constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
+      expect(resolvePresentation(TABLE, name)).toStrictEqual({
+        ok: false,
+        refusal: 'unknown-writing',
+      });
+    }
+    const inherited: PresentationTable = Object.create(TABLE);
+    expect(resolvePresentation(inherited, 'montant-fr')).toStrictEqual({
+      ok: false,
+      refusal: 'unknown-writing',
+    });
+  });
+
+  it('answers unknown-writing for an absent table and for a name nobody declared', () => {
+    expect(resolvePresentation(undefined, 'montant-fr')).toStrictEqual({
+      ok: false,
+      refusal: 'unknown-writing',
+    });
+    expect(resolvePresentation(TABLE, 'montant-de')).toStrictEqual({
+      ok: false,
+      refusal: 'unknown-writing',
+    });
+  });
+
+  it('revalidates all five fields, because three of them are unprotected by the type', () => {
+    // `Presentation` is structural: `currency` is a `string` and the two bounds are `number`s, so
+    // only `dateStyle` is protected. Measured, a hand-built writing reaches ICU with four RangeError
+    // families -- an invalid currency code, an inverted pair, a negative minimum, a malformed locale
+    // -- plus one non-integer bound that ICU accepts and the schema refuses.
+    const unsound: ReadonlyArray<Record<string, unknown>> = [
+      { currency: 'AB' },
+      { maxFractionDigits: 2, minFractionDigits: 5 },
+      { minFractionDigits: -1 },
+      { minFractionDigits: 2.5 },
+      { locale: 'i-klingon' },
+      { locale: '' },
+    ];
+    for (const overrides of unsound) {
+      const table = JSON.parse(JSON.stringify({ x: { ...FR, ...overrides } })) as PresentationTable;
+      expect(resolvePresentation(table, 'x')).toStrictEqual({
+        ok: false,
+        refusal: 'invalid-writing',
+      });
+    }
+  });
+
+  it('answers invalid-writing, and does not throw, for a writing whose locale is null', () => {
+    // The order of the two gates is a correctness decision. Measured,
+    // `Intl.getCanonicalLocales(null)` raises a `TypeError`, which `wellFormedLocale` re-throws by
+    // design, so reading the locale before validating it would let an exception escape a total
+    // signature. `JSON.parse` builds the untyped caller without a cast.
+    const table = JSON.parse(NULL_LOCALE_TABLE) as PresentationTable;
+    expect(() => resolvePresentation(table, 'x')).not.toThrow();
+    // And the cause must be the document rather than this engine: a null locale is wrong everywhere.
+    expect(resolvePresentation(table, 'x')).toStrictEqual({
+      ok: false,
+      refusal: 'invalid-writing',
+    });
+  });
+
+  it('names the unhonoured locale as such, and not as a fault of the document', () => {
+    // The one refusal a Designer must not blame on the author. `en-Latn-US` is the case that states
+    // the policy: ICU supports it and minimises it to `en`.
+    for (const locale of ['zz', 'fr-XX', 'en-Latn-US']) {
+      expect(resolvePresentation({ x: like({ locale }) }, 'x')).toStrictEqual({
+        ok: false,
+        refusal: 'unhonoured-locale',
+      });
+    }
+  });
+
+  it('reaches all three refusals, and keeps them distinct', () => {
+    // Before the result was discriminated, these outcomes were one `undefined`, so a mutation that
+    // swapped two refusals was invisible to every test.
+    const refusals: readonly PresentationRefusal[] = [
+      resolvePresentation(TABLE, 'nobody-declared-this'),
+      resolvePresentation(JSON.parse(NULL_LOCALE_TABLE) as PresentationTable, 'x'),
+      resolvePresentation({ x: like({ locale: 'zz' }) }, 'x'),
+    ].map((resolution) => (resolution.ok ? 'unknown-writing' : resolution.refusal));
+    expect(refusals).toStrictEqual(['unknown-writing', 'invalid-writing', 'unhonoured-locale']);
+    expect(new Set(refusals).size).toBe(3);
+  });
+
+  it('hands back a copy, canonicalised, carrying exactly the five declared keys', () => {
+    // `FR-fr` in, `fr-FR` out: both are the same locale and only the second compares equal to
+    // itself. The object is the one zod built, so a key the schema does not know is already gone --
+    // and it is never the stored object, which a caller could otherwise normalise from underneath.
+    const stored = { ...FR, horsSchema: 'ignored', locale: 'FR-fr' };
+    const table = JSON.parse(JSON.stringify({ x: stored })) as PresentationTable;
+    const resolved = resolvePresentation(table, 'x');
+    expect(resolved).toStrictEqual({ ok: true, writing: { ...FR, locale: 'fr-FR' } });
+    if (resolved.ok) {
+      expect(Object.keys(resolved.writing)).toHaveLength(5);
+      expect(resolved.writing).not.toBe(table.x);
+    }
+  });
+});
+
+describe('a number is written the way the model declared, and never the way ICU would', () => {
+  it('round-trips through Number() when the writing has no grouping to do', () => {
+    // The precision tool, and it has two preconditions that belong in the title: a decimal point
+    // rather than a comma, and a value below the grouping threshold. Both belong to CLDR, so a
+    // realistic amount substituted here would go red for a reason nobody could see.
+    const printed = formatDecimal(123.5, EN);
+    expect(Number(printed)).toBe(123.5);
+    expect(digitsOf(printed)).toBe('12350');
+  });
+
+  it('makes the CLDR currency-to-minor-units table unreachable', () => {
+    // Measured: by default `1234.5678` prints with zero decimals in JPY and three in TND, so digits
+    // disappear from a document nobody rounded. Naming both bounds removes that table, and the
+    // proof is a digit count rather than a pinned string.
+    const counts = ['EUR', 'JPY', 'TND', 'ZZZ'].map((currency) =>
+      digitsOf(formatMoney(1234.5678, like({ currency }))),
+    );
+    expect(new Set(counts).size).toBe(1);
+    expect(counts[0]).toBe('123457');
+  });
+
+  it('pads to the minimum and truncates at the maximum, both as declared', () => {
+    // A minimum below the maximum is a trailing-zero policy, and a document that decides it per
+    // value has decided it by accident.
+    expect(digitsOf(formatDecimal(1.5, like({ maxFractionDigits: 2, minFractionDigits: 2 })))).toBe(
+      '150',
+    );
+    expect(digitsOf(formatDecimal(1.5, like({ maxFractionDigits: 2, minFractionDigits: 0 })))).toBe(
+      '15',
+    );
+    expect(
+      digitsOf(formatDecimal(1.23456789, like({ maxFractionDigits: 4, minFractionDigits: 0 }))),
+    ).toBe('12346');
+  });
+
+  it('pins the numbering system, on the amounts and not only on the dates', () => {
+    // Without the pin, `ar-EG` prints eastern digits, and `digitsOf` keeps only the latin ones, so
+    // the assertion goes red on an empty string rather than on a wrong one.
+    expect(digitsOf(formatMoney(1234.5, like({ locale: 'ar-EG' })))).toBe('123450');
+    expect(digitsOf(formatDecimal(1234.5, like({ locale: 'ar-EG' })))).toBe('123450');
+  });
+
+  it('refuses the three non-finite doubles rather than printing them', () => {
+    // Measured, ICU prints them rather than refusing: three characters that look like a value on a
+    // total line are worse than no characters at all.
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(formatMoney(value, FR)).toBeUndefined();
+      expect(formatDecimal(value, FR)).toBeUndefined();
+    }
+  });
+
+  it('folds the negative zero, and only the exact one', () => {
+    // `0 * -1` and a discount of nothing both produce it, and ICU prints its sign.
+    expect(formatMoney(-0, FR)).toBe(formatMoney(0, FR));
+    expect(formatDecimal(-0, FR)).toBe(formatDecimal(0, FR));
+    // A value that really is negative keeps its sign, because hiding it would invent a number.
+    expect(formatDecimal(-0.001, FR)).not.toBe(formatDecimal(0, FR));
+  });
+
+  it('writes one value two ways, with the same digits, from one model', () => {
+    // The testable translation of "two writings of one value", and the only form that survives two
+    // CLDR data sets. Asserted with no currency too, so the property does not rest on the symbol.
+    expect(formatMoney(1234.5, FR)).not.toBe(formatMoney(1234.5, EN));
+    expect(digitsOf(formatMoney(1234.5, FR))).toBe(digitsOf(formatMoney(1234.5, EN)));
+    expect(formatDecimal(1234.5, FR)).not.toBe(formatDecimal(1234.5, EN));
+    expect(digitsOf(formatDecimal(1234.5, FR))).toBe(digitsOf(formatDecimal(1234.5, EN)));
+  });
+
+  it('prints a well-formed currency ICU does not know, rather than refusing it', () => {
+    // Openview holds no ISO 4217 register, so an unknown money degrades to a legible document.
+    expect(formatMoney(1234.5, like({ currency: 'ZZZ' }))).toContain('ZZZ');
+  });
+});
+
+describe('a date is written in the calendar the contract pins, not the one the locale prefers', () => {
+  it('prints the Gregorian year, in locales whose own calendar would print another', () => {
+    // Measured without the pins: `th-TH` prints the Buddhist year 2569 and `fa-IR` the Persian year
+    // 1405, from a correct date and with no error anywhere. The positive half only holds because the
+    // fixture declares `dateStyle: 'long'`: `th-TH` with `short` prints a two-digit year, so
+    // simplifying the fixture would disarm this assertion without touching it.
+    for (const locale of ['th-TH', 'fa-IR', 'ja-JP']) {
+      const printed = formatDate('2026-08-19', like({ locale })) ?? '';
+      expect(printed).toContain('2026');
+      expect(printed).not.toContain('2569');
+      expect(printed).not.toContain('1405');
+    }
+  });
+
+  it('prints latin digits, in a locale whose own numbering system is not latin', () => {
+    expect(digitsOf(formatDate('2026-08-19', like({ locale: 'fa-IR' })))).toContain('2026');
+  });
+
+  it('honours the declared date style rather than one of its own', () => {
+    const short = formatDate('2026-08-19', like({ dateStyle: 'short' })) ?? '';
+    const long = formatDate('2026-08-19', like({ dateStyle: 'long' })) ?? '';
+    expect(short).not.toBe(long);
+    expect(short.length).toBeLessThan(long.length);
+    // All four declared styles produce an output: a declared style must never be unusable.
+    for (const dateStyle of DATE_STYLES) {
+      expect(formatDate('2026-08-19', like({ dateStyle }))).toBeDefined();
+    }
+  });
+
+  it('writes one date two ways, from one model', () => {
+    expect(formatDate('2026-02-19', FR)).not.toBe(formatDate('2026-02-19', EN));
+  });
+
+  it('accepts exactly the dates the algebra accepts, and builds no Date object', () => {
+    // The range is the algebra's, with no month-length table and no leap-year rule written here.
+    for (const value of ['0001-01-01', '9999-12-31', '2000-02-29', '2026-08-19']) {
+      expect(formatDate(value, FR)).toBeDefined();
+    }
+    for (const value of ['2026-02-30', '2025-02-29', '10000-01-01', 'not-a-date', '']) {
+      expect(formatDate(value, FR)).toBeUndefined();
+    }
+    // The proof that `Date.UTC` was not used: it maps years 0 to 99 onto 1900 to 1999, so it would
+    // print these two dates identically.
+    expect(formatDate('0042-01-01', FR)).not.toBe(formatDate('1942-01-01', FR));
   });
 });

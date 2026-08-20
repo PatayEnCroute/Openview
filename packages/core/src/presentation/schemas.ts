@@ -13,15 +13,8 @@ const INVERTED_BOUNDS_MESSAGE =
   'minFractionDigits is above maxFractionDigits. A writing prints at least its minimum and at most its maximum, so the pair has to be ordered.';
 
 /**
- * Refuses a pair of fraction bounds in the wrong order, once the rest of the object is sound.
- *
- * The cut-off is the point: a continuable fault on one bound leaves that field out of the
- * payload's value, so a predicate that read it would add a second issue for the same fault. An
- * author who has one thing to fix must be told once.
- *
- * `.check` with a payload is the only zod 4 form that can express it, because the payload carries
- * `issues` beside `value`. The path names the field and not the object, so an editor can place a
- * marker; the `custom` code belongs to no error catalogue.
+ * Validates that minFractionDigits <= maxFractionDigits.
+ * Executed only if no earlier issue occurred on the payload.
  */
 const refuseInvertedBounds = (payload: z.core.ParsePayload<Presentation>): void => {
   if (payload.issues.length > 0) {
@@ -52,22 +45,7 @@ const fractionDigitsSchema = z
   );
 
 /**
- * The Zod side of the writing contract.
- *
- * The locale check asks {@link wellFormedLocale} and only that: grammar, no `-u-` extension. It
- * must not ask whether the reader's ICU honours the tag, because that answer moves between builds
- * and a stored document gated on a moving answer opens on one machine and not on another.
- * `resolvePresentation` asks that half, at render.
- *
- * It is a `.refine` on the FIELD, so a refusal carries the path `['locale']` and produces exactly
- * one issue. It does not normalise, it does not check a currency against a register, and it does
- * not decide that a locale and a currency belong together -- that would be a business rule.
- *
- * No schema in this file carries a `z.ZodType<T>` annotation: nothing here is recursive, and the
- * annotation would destroy the key assertions in `__tests__/` that guard against a field drifting
- * out of step.
- *
- * @see docs/adr/0008-langue-devise-et-formats.md
+ * Zod schema for a presentation writing declaration.
  */
 export const PresentationSchema = z
   .object({
@@ -93,11 +71,7 @@ const UNNAMED_WRITING_MESSAGE =
   'A writing needs a name, and the empty string is not one: it is the one name a caller cannot ask for on purpose.';
 
 /**
- * Refuses a table entry whose key is empty, once nothing else is wrong with the table.
- *
- * Written by hand rather than declared as `z.record(z.string().min(1), ...)`, because a failing key
- * schema yields zod's own message on the empty path -- naming the table instead of the entry.
- * Here the path IS the offending key, so a Designer can highlight the row.
+ * Refuses table entries with an empty key name.
  */
 const refuseUnnamedWriting = (payload: z.core.ParsePayload<Record<string, Presentation>>): void => {
   if (payload.issues.length > 0) {
@@ -116,12 +90,7 @@ const refuseUnnamedWriting = (payload: z.core.ParsePayload<Record<string, Presen
 };
 
 /**
- * The stored table: writings by the name the model author chose. The key is validated minimally --
- * it must not be empty -- and nothing else about a name is this package's business.
- *
- * `z.record` drops a `__proto__` key, so this field cannot pollute a prototype, but the object it
- * returns still inherits from `Object.prototype`. That is why `resolvePresentation` exists as a
- * function rather than as a property read.
+ * Stored presentation table mapping author-chosen names to presentation configurations.
  */
 export const PresentationTableSchema = z
   .record(z.string(), PresentationSchema)
