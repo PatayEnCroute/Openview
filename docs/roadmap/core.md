@@ -410,6 +410,34 @@ sa conversion, dans le même mouvement. Repoussée, elle ne se fait jamais.
 
 **Poids :** S par lot, jamais reporté — **Dépend de :** chaque lot ci-dessus
 
+> ✅ **Livré le 2026-08-21.** Un **corpus historique de huit fixtures** — une par version stockée,
+> aucune typée comme le contrat courant — et **un seul test propriétaire de la chaîne**, dont
+> l'attendu est dérivé de la version initiale et de la version courante au lieu d'être recopié.
+> Un resserrement de production : **une étape doit produire exactement le `to` qu'elle annonce**,
+> refusé par le code existant `invalid-migration-result`.
+> **Zéro champ de modèle, zéro migration nouvelle, zéro dépendance, zéro export** :
+> `CURRENT_SCHEMA_VERSION` reste **8**, la chaîne reste à **sept** entrées et le barrel reste à
+> **133** valeurs. [ADR 0011](../adr/0011-la-perennite-a-chaque-ajout.md) fait foi.
+>
+> **Les deux moitiés de « s'ouvre et se rend », séparées explicitement.** Ce lot livre
+> « **s'ouvre** » : la fixture v1 — sans `page`, donc traversant réellement la seule migration
+> transformante — est migrée, validée, parcourue, ses chemins collectés, et sa boucle, son alias,
+> sa condition et sa liaison **évalués** sur un jeu de données explicite avec le résultat attendu.
+> « **Se rend** » appartient à **[E7](engine.md#e7-le-lot-de-documents-figés-de-non-régression)**,
+> qui reçoit la même fixture comme document figé : `core` ne produit ni DOM, ni PDF, ni pixel, et
+> un faux renderer de test aurait été à jeter dès E1.
+>
+> **Ce que le lot ne prétend PAS automatiser, dit plutôt qu'enterré :** le filet devient fort
+> **après** que la version a été incrémentée. Détecter qu'un champ nouvellement ajouté *aurait dû*
+> provoquer ce bump reste une **revue humaine** — aucun fingerprint des internes de Zod, aucun
+> snapshot géant, aucune modification de CI n'a été ajouté pour faire semblant du contraire.
+>
+> **Ce que le lot laisse à l'aval :** le protocole en neuf étapes que tout futur lot persistant
+> doit suivre est écrit dans l'ADR, pas dispersé dans les plans C1 à C9.
+
+> 🏁 **Vague 1 close le 2026-08-21**, sans version 9 et sans moteur. Les neuf lots C1 à C9 ont livré
+> le contrat de modèle ; la suite appartient à la vague E et, pour C10, au jalon J3.
+
 ---
 
 ## Vague 2 — de quoi alimenter l'éditeur (après J3)

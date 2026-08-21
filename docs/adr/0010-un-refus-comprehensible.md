@@ -433,6 +433,15 @@ fantôme. La réciproque l'est aussi — **une API qui n'est pas persistée n'ou
 estampille**. Ajouter une entrée `8 → 9` ici aurait rendu illisibles tous les documents écrits par
 ce build pour n'importe quel build antérieur, sans qu'aucune forme stockée ait bougé.
 
+> **Complété par l'[ADR 0011](0011-la-perennite-a-chaque-ajout.md) (2026-08-21).** C9 a repris à ce
+> lot les deux preuves transversales qu'il portait — le contrôle littéral de la version 8 avec la
+> liste `[1..7]`, et le mini-test v1 dont l'oracle se limitait à « la migration atteint la version
+> courante ». Elles y sont remplacées par une preuve strictement plus forte, et la recette C8 garde
+> ce qui lui appartient : la politique de la donnée absente. C9 a par ailleurs confirmé la décision
+> ci-dessus — il n'a créé **ni** version 9, **ni** huitième migration — et a étendu la couverture de
+> `invalid-migration-result` à une étape qui ne produit pas le `to` qu'elle déclare, **sans**
+> nouveau code, nouvelle phrase ni nouveau champ.
+
 ### Ce que le lot a corrigé dans les tests existants
 
 Deux tests pré-existants assertaient le **nombre total** de valeurs exportées, `126` — l'un dans

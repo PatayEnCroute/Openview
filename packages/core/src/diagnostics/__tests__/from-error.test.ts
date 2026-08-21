@@ -112,6 +112,10 @@ describe('diagnosticsOf on a migration refusal', () => {
       (input: Record<string, unknown>) => ({ ...input, schemaVersion: undefined }),
     ],
     ['does not advance', (input: Record<string, unknown>) => ({ ...input, schemaVersion: 1 })],
+    [
+      'overshoots the version it declares',
+      (input: Record<string, unknown>) => ({ ...input, schemaVersion: 3 }),
+    ],
   ])('names an upgrade step that %s', (_label, migrate) => {
     const faulty: readonly TemplateMigration[] = [{ from: 1, to: 2, migrate }];
     const diagnostic = only(() => migrateToCurrent(stored(1), faulty));

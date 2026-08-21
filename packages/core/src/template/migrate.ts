@@ -19,6 +19,10 @@ function compatibilityPage(): PageSetup {
 
 /**
  * Migration step in the sequential version upgrade chain.
+ *
+ * Both bounds are executed, not decorative: a selected step runs only on a document stamped
+ * `from`, and its output must carry exactly `to`. An injected chain may declare any destination,
+ * including a direct one, provided it announces the version it really produces.
  */
 export interface TemplateMigration {
   readonly from: number;
@@ -163,6 +167,13 @@ function runMigrations(raw: unknown, migrations: readonly TemplateMigration[]): 
       `Migration ${step.from} -> ${step.to}`,
       'invalid-migration-result',
     );
+    if (next !== step.to) {
+      throw new TemplateMigrationError(
+        `Migration ${step.from} -> ${step.to} produced schemaVersion ${next}; a step must produce exactly the version it declares.`,
+        version,
+        { code: 'invalid-migration-result' },
+      );
+    }
     if (next <= version) {
       throw new TemplateMigrationError(
         `Migration ${step.from} -> ${step.to} left schemaVersion at ${next}; it must advance past ${version}.`,

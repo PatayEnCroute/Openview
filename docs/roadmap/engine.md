@@ -190,6 +190,18 @@ automatiquement, en désignant la facture et la page concernées.
 
 **Poids :** M — **Dépend de :** E6
 
+> 📥 **Scénario transmis par [C9](core.md#c9-la-pérennité-à-chaque-ajout) (2026-08-21).** La
+> fixture historique **v1** — celle qui ne déclare aucune `page` et traverse donc la seule
+> migration transformante — rejoint ce corpus dès que le moteur existe : `parseTemplate` la migre,
+> le moteur la rend, et son PDF devient une référence figée.
+>
+> C9 a livré la moitié « **s'ouvre** » de la promesse (le modèle est migré, validé, parcouru et
+> **évalué** avec le résultat attendu) ; la moitié « **se rend** » est ce lot-ci, et personne
+> d'autre ne peut la tenir. La fixture vit dans
+> [`packages/core/src/template/__tests__/compatibility-fixtures.ts`](../../packages/core/src/template/__tests__/compatibility-fixtures.ts)
+> et n'est typée par rien : si la représentation intermédiaire du moteur change, c'est
+> l'adaptateur de test E7 qui évolue, jamais le document stocké.
+
 ### E8. Le moteur survit à un document hostile
 
 **Pourquoi.** Rendre un modèle, c'est exécuter ce que quelqu'un d'autre a écrit. Un
