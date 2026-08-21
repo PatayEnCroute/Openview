@@ -22,7 +22,11 @@ const nodeIdSchema = z.string().min(1, 'A node id is required');
  * Accepts `true`, and `undefined` whether written or omitted -- a written `undefined` is kept in
  * memory but drops at serialisation, so `true` and the absent key are the only persisted spellings.
  */
-const keepTogetherField = z.literal(true).optional();
+const keepTogetherField = z
+  .literal(true, {
+    error: 'This field must be true when present; omit it to allow the block to split.',
+  })
+  .optional();
 const boxField = BoxStyleSchema.optional();
 const typographyField = TypographySchema.optional();
 

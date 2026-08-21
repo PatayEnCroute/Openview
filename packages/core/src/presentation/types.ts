@@ -30,7 +30,13 @@ export interface Presentation {
 export type PresentationTable = Readonly<Record<string, Presentation>>;
 
 /** Refusal reasons when resolving a presentation writing. */
-export type PresentationRefusal = 'unknown-writing' | 'invalid-writing' | 'unhonoured-locale';
+export const PRESENTATION_REFUSALS = [
+  'unknown-writing',
+  'invalid-writing',
+  'unhonoured-locale',
+] as const;
+
+export type PresentationRefusal = (typeof PRESENTATION_REFUSALS)[number];
 
 /** Result of resolving a presentation writing by name. */
 export type PresentationResolution =

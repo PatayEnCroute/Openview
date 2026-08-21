@@ -263,7 +263,7 @@ describe('evaluateSequence', () => {
 
   it('keeps the loop wording verbatim when no caller is named', () => {
     expect(() => evaluateSequence(path('invoice.total'), scope)).toThrow(
-      'A loop needs a list to iterate over, got a number.',
+      'This block needs a list to repeat, but the selected value is a number.',
     );
   });
 

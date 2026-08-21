@@ -161,9 +161,13 @@ export function evaluatePredicate(
   );
 }
 
+/**
+ * The subject of the "needs a list" refusal. A loop and a table body share one word because both
+ * are blocks an author sees on the page; `site` is what still tells them apart.
+ */
 const LIST_CALLER_SUBJECTS: Readonly<Partial<Record<ExpressionErrorSite, string>>> = {
-  loop: 'A loop',
-  tableRowGroup: 'A table body',
+  loop: 'This block',
+  tableRowGroup: 'This block',
   aggregate: 'An aggregation',
   count: 'A count',
   filter: 'A filter',
@@ -186,7 +190,7 @@ export function evaluateSequence(
   if (!Array.isArray(value)) {
     return fail(
       { code: 'not-a-list', site, at: [], actualType: valueTypeOf(value) },
-      `${LIST_CALLER_SUBJECTS[site] ?? 'An expression'} needs a list to iterate over, got ${describe(valueTypeOf(value))}.`,
+      `${LIST_CALLER_SUBJECTS[site] ?? 'An expression'} needs a list to repeat, but the selected value is ${describe(valueTypeOf(value))}.`,
     );
   }
 

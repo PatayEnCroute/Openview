@@ -1,26 +1,21 @@
 # Plan d'implémentation — `@openview/core` lot C8 : un refus compréhensible
 
-> **Document d'implémentation.** Il décrit le contrat public, le découpage, les tests et l'ordre de
-> livraison du lot. Il n'implémente rien. Une fois C8 livré, son ADR fera foi et ce plan deviendra
-> périmé.
+> **⛔ PÉRIMÉ — lot livré le 2026-08-21.**
+> [ADR 0010 — Un refus compréhensible](../adr/0010-un-refus-comprehensible.md) fait foi, et elle
+> **corrige ce plan sur cinq points** nommés à sa section « Ce que l'exécution a corrigé du plan » :
+> la phrase de `keepTogether` vit dans le schéma et non dans la façade ; seule la famille
+> `expression-evaluation` réutilise la phrase de l'erreur levée ; le mapping des codes d'issue est un
+> `Record` total et non un `switch` ; `LIST_CALLER_SUBJECTS` a dû changer ; et deux tests existants
+> assertaient déjà le compte d'exports que le §1.3 ci-dessous interdit.
 >
-> **Statut : 🟡 CONTRAT C8 PRÊT ; EXÉCUTION CONDITIONNÉE PAR LA CLÔTURE DE C7.** Le plan peut être
-> relu pendant l'implémentation de C7, mais aucune valeur dépendante de son état intermédiaire ne
-> devient une constante C8.
+> Ce fichier n'est conservé que comme trace du raisonnement d'avant-livraison. **Ne l'utilisez pas
+> comme référence de contrat.**
 >
-> **Précondition :** C7 doit être livré et ses fichiers ne plus être en cours d'édition. Au
-> démarrage de C8, l'implémenteur relève la version de schéma courante, le prochain numéro d'ADR
-> libre, la surface publique et les catalogues d'erreurs effectivement livrés. Ces valeurs forment
-> la baseline post-C7 ; le présent plan ne leur attribue aucun nombre à l'avance.
+> **Baseline post-C7 effectivement relevée au démarrage :** `BASE_SCHEMA_VERSION` = **8**,
+> `NEXT_ADR` = **0010**, barrel public à **126** valeurs. Après livraison :
+> `CURRENT_SCHEMA_VERSION` toujours **8**, barrel à **133**.
 >
-> **Pourquoi ce fichier est là avant que C7 soit clos, et ce que cela n'autorise pas.** Il a été
-> rédigé pendant C7 et **ne fait pas partie de la livraison C7** : le contrôle de périmètre n° 1 du
-> [plan C7](c7-les-blocs-insecables.md) demande une branche propre hors changements attribués à C7,
-> donc ce plan se commite **séparément**, jamais dans le même commit que le code de C7. Sa
-> précondition ci-dessus reste entière : le relevé du §1.1 est à **refaire** sur l'arbre post-C7,
-> parce que celui pris pendant C7 l'a été sur un état intermédiaire.
->
-> **Date :** 2026-08-20 · **Brique :** `@openview/core`, vague 1 · **Jalon visé :** J1
+> **Date de rédaction :** 2026-08-20 · **Brique :** `@openview/core`, vague 1 · **Jalon atteint :** J1
 
 ---
 

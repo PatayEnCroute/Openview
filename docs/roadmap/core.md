@@ -369,6 +369,35 @@ messages qu'un utilisateur corrige seul.
 
 **Poids :** M — **Dépend de :** C1 à C7
 
+> ✅ **Livré le 2026-08-21.** Une **union discriminée** de six familles,
+> `OpenviewDiagnostic`, et **deux** fonctions publiques : `diagnosticsOf(error, context)`
+> pour ce qui est levé, `diagnosticOfPresentationRefusal(refusal, context)` pour ce qui
+> est *rendu*. Chaque diagnostic porte `source`, `code`, `message`, `path` et `nodeId` ;
+> `source` + `code` est la clé de traduction, et la phrase par défaut est anglaise.
+> **Zéro champ de modèle, zéro migration, zéro dépendance** : `CURRENT_SCHEMA_VERSION`
+> reste à **8** et la chaîne à **sept** entrées. Le barrel public passe de **126** à
+> **133** valeurs. [ADR 0010](../adr/0010-un-refus-comprehensible.md) fait foi.
+>
+> **Ce que le lot ne fait PAS, et c'est la moitié de la décision :** une erreur qu'il ne
+> reconnaît pas rend `undefined`, jamais un refus générique — le patron consommateur la
+> **relance**. Une faute de programmation dans une fonction de migration fournie par
+> l'appelant traverse donc la façade intacte, avec sa pile, au lieu de devenir une phrase
+> qu'un auteur de modèle essaierait de corriger.
+>
+> **Aucune valeur de rendu ne sort, nulle part.** Ni la donnée fautive, ni un extrait du
+> modèle, ni la `cause`, ni une valeur reçue par le validateur. Les seules valeurs
+> variables admises dans une phrase sont une limite de configuration, une **forme** de
+> valeur fermée et les **choix ou bornes déclarés par un schéma**. `nodeId` et `path` sont
+> des champs séparés de `message` et n'y sont jamais interpolés : c'est ce qui permet à
+> une interface de les échapper.
+>
+> **Ce que le lot laisse à l'aval, nommé plutôt qu'enterré :** la politique de la **donnée
+> absente** (« blanc ou échec ») reste au futur `DataBindingStep`, seul endroit qui
+> connaisse la position finale d'impression — la nommer ici renverserait l'ADR 0001, et
+> trois tests épinglent le comportement actuel pour l'empêcher. Les refus de
+> téléchargement, de DOM, de pagination et de police appartiennent aux lots moteur et à
+> leurs **propres** enveloppes, pas à un code fourre-tout de cette union.
+
 ### C9. La pérennité, à chaque ajout
 
 **Pourquoi.** Les huit lots ci-dessus modifient le contrat. La mécanique de

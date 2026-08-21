@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { TemplateMigrationError } from '../errors.js';
+import { TemplateMigrationError, type TemplateMigrationErrorCode } from '../errors.js';
 import type { PageSetup } from '../page/page.js';
 import { assertBoundedShape, type ShapeLimits } from './guard.js';
 import { CURRENT_SCHEMA_VERSION, type Template, TemplateSchema } from './template.js';
@@ -84,13 +84,17 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
 const recordSchema = z.record(z.string(), z.unknown());
 const versionedSchema = z.object({ schemaVersion: z.number().int().nonnegative() });
 
-function readSchemaVersion(candidate: unknown, context: string): number {
+function readSchemaVersion(
+  candidate: unknown,
+  context: string,
+  code: TemplateMigrationErrorCode,
+): number {
   const parsed = versionedSchema.safeParse(candidate);
   if (!parsed.success) {
     throw new TemplateMigrationError(
       `${context}: expected a numeric "schemaVersion" field. A stored template without one cannot be migrated safely.`,
       Number.NaN,
-      { cause: parsed.error },
+      { cause: parsed.error, code },
     );
   }
   return parsed.data.schemaVersion;
@@ -117,18 +121,19 @@ function runMigrations(raw: unknown, migrations: readonly TemplateMigration[]): 
     throw new TemplateMigrationError(
       'Expected a template object, received a non-object value.',
       Number.NaN,
-      { cause: asRecord.error },
+      { cause: asRecord.error, code: 'invalid-template' },
     );
   }
 
   let current: Record<string, unknown> = asRecord.data;
   let applied = 0;
-  let version = readSchemaVersion(current, 'Stored template');
+  let version = readSchemaVersion(current, 'Stored template', 'missing-schema-version');
 
   if (version > CURRENT_SCHEMA_VERSION) {
     throw new TemplateMigrationError(
       `Template uses schema version ${version} but this build understands at most ${CURRENT_SCHEMA_VERSION}. It was written by a newer release of Openview; upgrade before opening it.`,
       version,
+      { code: 'newer-schema-version' },
     );
   }
 
@@ -138,16 +143,22 @@ function runMigrations(raw: unknown, migrations: readonly TemplateMigration[]): 
       throw new TemplateMigrationError(
         `No migration registered from schema version ${version}. The upgrade chain to ${CURRENT_SCHEMA_VERSION} is broken.`,
         version,
+        { code: 'missing-migration' },
       );
     }
 
     current = step.migrate(current);
     applied += 1;
-    const next = readSchemaVersion(current, `Migration ${step.from} -> ${step.to}`);
+    const next = readSchemaVersion(
+      current,
+      `Migration ${step.from} -> ${step.to}`,
+      'invalid-migration-result',
+    );
     if (next <= version) {
       throw new TemplateMigrationError(
         `Migration ${step.from} -> ${step.to} left schemaVersion at ${next}; it must advance past ${version}.`,
         version,
+        { code: 'invalid-migration-result' },
       );
     }
     version = next;

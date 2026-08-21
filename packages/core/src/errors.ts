@@ -83,15 +83,37 @@ export class ExpressionEvaluationError extends OpenviewError {
   }
 }
 
+/** Error codes naming why a template could not be brought up to the current schema version. */
+export const TEMPLATE_MIGRATION_ERROR_CODES = [
+  'invalid-template',
+  'missing-schema-version',
+  'newer-schema-version',
+  'missing-migration',
+  'invalid-migration-result',
+] as const;
+
+export type TemplateMigrationErrorCode = (typeof TEMPLATE_MIGRATION_ERROR_CODES)[number];
+
+/**
+ * Source-compatible with `ErrorOptions`, so an existing two-argument call still compiles; a caller
+ * that omits `code` gets `invalid-migration-result`.
+ */
+export interface TemplateMigrationErrorOptions extends ErrorOptions {
+  readonly code?: TemplateMigrationErrorCode | undefined;
+}
+
 /** Error raised when template migration fails. */
 export class TemplateMigrationError extends OpenviewError {
+  readonly code: TemplateMigrationErrorCode;
+
   constructor(
     message: string,
     readonly fromVersion: number,
-    options?: ErrorOptions | undefined,
+    options?: TemplateMigrationErrorOptions | undefined,
   ) {
     super(message, options);
     this.name = 'TemplateMigrationError';
+    this.code = options?.code ?? 'invalid-migration-result';
   }
 }
 

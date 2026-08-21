@@ -277,6 +277,18 @@ belle : le lot publie un **troisième tuple de littéraux** (`PresentationRefusa
 `throw` — c'est une **réponse**, et c'est l'appelant qui décide si elle est fatale (question 2
 d'ADR 0001, toujours ouverte).
 
+> ⛔ **Le mot « tuple » était en avance sur le code, et [ADR 0010](0010-un-refus-comprehensible.md)
+> l'a rattrapé.** `PresentationRefusal` était une union **écrite à la main**, pas un tuple : elle
+> ne s'énumérait donc pas à l'exécution, et rien ne pouvait vérifier que les trois causes ont
+> trois phrases distinctes. C8 publie `PRESENTATION_REFUSALS` et en **dérive** le type, ce qui
+> rend l'énumération réelle — un test compte désormais trois codes **et** trois messages.
+>
+> La fonction qui les nomme, `diagnosticOfPresentationRefusal()`, reste **séparée** de
+> `diagnosticsOf()` précisément pour la raison écrite ci-dessus : un refus est une **réponse**,
+> pas une exception, et le passer à une façade dont le contrat est « rends `undefined` si tu ne
+> reconnais pas » serait un contresens. La troisième phrase n'accuse personne, ce que cette ADR
+> demandait qu'un Designer n'imprime pas de travers.
+
 ### D-12 — Les deux prédicats de locale ne sont PAS exportés du barrel
 
 Aucun consommateur hors du paquet ne les nomme, et la règle anti-sur-ingénierie refuse un export

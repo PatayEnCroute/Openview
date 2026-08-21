@@ -6,12 +6,13 @@ import {
   childScope,
   collectTemplateDataPaths,
   createBudget,
+  type DiagnosticContext,
   type DocumentNode,
+  diagnosticOfPresentationRefusal,
+  diagnosticsOf,
   type EvaluationBudget,
   type EvaluationScope,
   type Expression,
-  ExpressionEvaluationError,
-  ExpressionSchema,
   evaluateExpression,
   evaluatePredicate,
   evaluateSequence,
@@ -22,6 +23,7 @@ import {
   MAX_ROUND_DECIMALS,
   MIN_ROUND_DECIMALS,
   mmFromPt,
+  type OpenviewDiagnostic,
   type PageBand,
   type PageBandOccurrence,
   type PageSetup,
@@ -55,7 +57,7 @@ import type { CSSProperties, ReactNode } from 'react';
 
 // Exercises the core contract end to end: recursive parsing, Visitor traversal,
 // static path analysis, expression evaluation, loop scoping, the C1 algebra and the
-// error payload lot C8 will turn into sentences. If @openview/core breaks its
+// C8 diagnostics that turn a refusal into a sentence. If @openview/core breaks its
 // contract, this page stops rendering -- which is the point of the playground, and
 // the reason nothing below falls back to a default.
 //
@@ -1561,60 +1563,263 @@ const fr = (value: number): string =>
 const lignesArrondi = renderData.arrondi.lignes;
 
 /**
- * Un refus au SAVE TIME, qui n'a rien à voir avec un refus au rendu.
+ * Le budget des démonstrations de refus, et il est SÉPARÉ de celui de la facture.
  *
- * Il lui faut son propre véhicule : `reportRefusal` ne capture qu'une
- * `ExpressionEvaluationError` et relance tout le reste, or un `ZodError` ne porte ni
- * `code`, ni `site`, ni `at`. Et l'argument fautif ne se construirait même pas —
- * `{ mode: 'halfUp' }` ne type-checke pas comme `Expression`, ce qui est exactement le
- * garde-fou attendu côté TypeScript. D'où un `unknown` et un `safeParse`.
+ * Ces formules fautives n'appartiennent à aucun document : les charger au budget de la
+ * facture gonflait le compteur que la section « Budget du rendu » affiche sous son nom —
+ * mesuré, 145 opérations affichées pour 124 réelles. La page enseigne qu'un compteur
+ * partagé au-delà d'un document est l'erreur ; elle n'a pas le droit de la commettre en
+ * la montrant.
  */
-interface ParseRefusalReport {
-  readonly title: string;
-  readonly path: string;
-  readonly message: string;
+const budgetDemonstrations: EvaluationBudget = createBudget();
+
+/**
+ * Le lot C8, et c'est la SEULE façon dont cette page lit désormais un refus.
+ *
+ * Avant C8, deux rapporteurs coexistaient ici : l'un ouvrait `ZodError.issues`, l'autre
+ * `ExpressionEvaluationError.details`, et chacun rebâtissait un contrat local — un chemin,
+ * une phrase, un code — que rien n'obligeait à rester cohérent d'une section à l'autre. Il
+ * n'en reste qu'un, et il n'inspecte plus rien : il passe l'erreur à `diagnosticsOf` et
+ * relance ce que la façade ne reconnaît pas. C'est exactement le patron qu'une application
+ * intégratrice doit écrire.
+ *
+ * Le `nodeId` et le `pathPrefix` viennent de la page, jamais du modèle ni des données : ce
+ * sont deux faits que le CONSOMMATEUR possède déjà, et core ne les devine pas.
+ */
+function diagnostiquer(
+  titre: string,
+  agir: () => unknown,
+  contexte?: DiagnosticContext,
+): readonly OpenviewDiagnostic[] {
+  try {
+    agir();
+  } catch (error) {
+    const diagnostics = diagnosticsOf(error, contexte);
+    if (diagnostics === undefined) {
+      throw error;
+    }
+    return diagnostics;
+  }
+  throw new Error(`« ${titre} » aurait dû être refusée : contrat de core cassé.`);
 }
 
-function reportParseRefusal(title: string, raw: unknown): ParseRefusalReport {
-  const result = ExpressionSchema.safeParse(raw);
-  if (result.success) {
-    throw new Error(`« ${title} » aurait dû être refusée au parse : contrat de core cassé.`);
-  }
-  const issue = result.error.issues[0];
-  if (issue === undefined) {
-    throw new Error(`« ${title} » a été refusée sans motif : contrat de core cassé.`);
-  }
-  return { title, path: issue.path.join(' → '), message: issue.message };
+/** Une carte de recette : ce qu'un Designer affiche à l'auteur du modèle. */
+interface CarteRecette {
+  readonly titre: string;
+  readonly diagnostic: OpenviewDiagnostic;
 }
 
-const arrondiValide = { kind: 'round', value: { kind: 'path', path: 'arrondi.total' } };
+/**
+ * Retient le diagnostic du champ visé quand un refus en porte plusieurs.
+ *
+ * Par chemin, jamais par indice : C8 ne promet aucun ordre entre les issues d'une même
+ * `ZodError`, et deux corrections indépendantes restent deux corrections.
+ */
+function carte(
+  titre: string,
+  diagnostics: readonly OpenviewDiagnostic[],
+  chemin: readonly (string | number)[],
+): CarteRecette {
+  const trouve = diagnostics.find((diagnostic) => diagnostic.path.join(' ') === chemin.join(' '));
+  if (trouve === undefined) {
+    throw new Error(`« ${titre} » n'a rien dit sur [${chemin.join(', ')}] : contrat cassé.`);
+  }
+  return { titre, diagnostic: trouve };
+}
 
-const parseRefusals: readonly ParseRefusalReport[] = [
-  reportParseRefusal('Un mode qui n’existe pas', { ...arrondiValide, decimals: 2, mode: 'halfUp' }),
-  reportParseRefusal('Un nom de règle plutôt qu’une opération', {
-    ...arrondiValide,
-    decimals: 2,
-    mode: 'bankers',
-  }),
-  reportParseRefusal('Une position fractionnaire', {
-    ...arrondiValide,
-    decimals: 2.5,
-    mode: 'halfEven',
-  }),
-  reportParseRefusal('Une position hors de la fenêtre', {
-    ...arrondiValide,
-    decimals: MIN_ROUND_DECIMALS - 1,
-    mode: 'halfEven',
-  }),
+const pageValide = {
+  sheet: { width: 210, height: 297 },
+  margins: { top: 20, right: 20, bottom: 20, left: 20 },
+  header: [],
+  footer: [],
+};
+
+/** Un modèle stocké minimal, dont chaque cas de recette ne casse qu'UNE chose. */
+function modeleStocke(remplacements: Record<string, unknown>): unknown {
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    id: 'facture-recette',
+    name: 'Facture (recette C8)',
+    version: '1.0.0',
+    page: pageValide,
+    root: { type: 'container', id: 'racine', children: [] },
+    ...remplacements,
+  };
+}
+
+function conteneurImbrique(niveaux: number): Record<string, unknown> {
+  let noeud: Record<string, unknown> = { type: 'container', id: 'feuille', children: [] };
+  for (let niveau = 0; niveau < niveaux; niveau += 1) {
+    noeud = { type: 'container', id: `c${niveau}`, children: [noeud] };
+  }
+  return noeud;
+}
+
+/**
+ * Les cinq refus de contrat, à la SAUVEGARDE du modèle.
+ *
+ * Les fixtures emploient `CURRENT_SCHEMA_VERSION` et `CURRENT_SCHEMA_VERSION + 1`, jamais
+ * un numéro littéral : la page reste juste au lot suivant sans qu'on y revienne.
+ */
+const refusDeContrat: readonly CarteRecette[] = [
+  carte(
+    'La marque d’insécabilité écrite avec false',
+    diagnostiquer(
+      'La marque d’insécabilité écrite avec false',
+      () =>
+        parseTemplate(
+          modeleStocke({
+            root: {
+              type: 'container',
+              id: 'racine',
+              children: [
+                { type: 'text', id: 'mentions-legales', keepTogether: false, content: [] },
+              ],
+            },
+          }),
+        ),
+      { nodeId: 'mentions-legales' },
+    ),
+    ['root', 'children', 0, 'keepTogether'],
+  ),
+  carte(
+    'Un segment de pagination qui ne nomme aucun champ',
+    diagnostiquer(
+      'Un segment de pagination qui ne nomme aucun champ',
+      () =>
+        parseTemplate(
+          modeleStocke({
+            root: {
+              type: 'container',
+              id: 'racine',
+              children: [{ type: 'text', id: 'pied-de-page', content: [{ kind: 'pageField' }] }],
+            },
+          }),
+        ),
+      { nodeId: 'pied-de-page' },
+    ),
+    ['root', 'children', 0, 'content', 0, 'field'],
+  ),
+  carte(
+    'Une largeur de feuille infinie',
+    diagnostiquer('Une largeur de feuille infinie', () =>
+      parseTemplate(
+        modeleStocke({
+          page: { ...pageValide, sheet: { width: Number.POSITIVE_INFINITY, height: 297 } },
+        }),
+      ),
+    ),
+    ['page', 'sheet', 'width'],
+  ),
+  carte(
+    'Un modèle au-delà de la limite de profondeur',
+    diagnostiquer('Un modèle au-delà de la limite de profondeur', () =>
+      parseTemplate(modeleStocke({ root: conteneurImbrique(80) })),
+    ),
+    [],
+  ),
+  carte(
+    'Un modèle estampillé par la version suivante',
+    diagnostiquer('Un modèle estampillé par la version suivante', () =>
+      parseTemplate(modeleStocke({ schemaVersion: CURRENT_SCHEMA_VERSION + 1 })),
+    ),
+    [],
+  ),
 ];
+
+/**
+ * Les cinq refus de formule, au RENDU.
+ *
+ * Rien de la charge ne vient des DONNÉES : `actualType` est le *tag* d'une valeur, pas la
+ * valeur. C'est ce qui rend un refus sûr à journaliser même quand le document ne l'est pas.
+ */
+const refusDeFormule: readonly CarteRecette[] = [
+  carte(
+    'Diviser par un nombre de lignes non gardé',
+    diagnostiquer(
+      'Diviser par un nombre de lignes non gardé',
+      () =>
+        evaluateExpression(
+          { kind: 'arithmetic', op: 'div', left: totalHT, right: { kind: 'literal', value: 0 } },
+          renderData,
+          { budget: budgetDemonstrations },
+        ),
+      { nodeId: 'bloc-total', pathPrefix: ['root', 'children', 3] },
+    ),
+    ['root', 'children', 3, 'right'],
+  ),
+  carte(
+    'Additionner un texte à un nombre',
+    diagnostiquer(
+      'Additionner un texte à un nombre',
+      () =>
+        evaluateExpression(
+          {
+            kind: 'arithmetic',
+            op: 'add',
+            left: { kind: 'path', path: 'commande.client' },
+            right: { kind: 'literal', value: 1 },
+          },
+          renderData,
+          { budget: budgetDemonstrations },
+        ),
+      { nodeId: 'bloc-total' },
+    ),
+    ['left'],
+  ),
+  carte(
+    'Une date qui n’existe pas au calendrier',
+    diagnostiquer(
+      'Une date qui n’existe pas au calendrier',
+      () =>
+        evaluateExpression(
+          { kind: 'endOfMonth', date: { kind: 'literal', value: '2026-02-30' } },
+          renderData,
+          { budget: budgetDemonstrations },
+        ),
+      { nodeId: 'bloc-echeance' },
+    ),
+    ['date'],
+  ),
+  carte(
+    'Répéter un corps de tableau sur un nombre',
+    diagnostiquer(
+      'Répéter un corps de tableau sur un nombre',
+      () =>
+        evaluateSequence({ kind: 'path', path: 'commande.numero' }, renderData, {
+          budget: budgetDemonstrations,
+          caller: 'tableRowGroup',
+        }),
+      { nodeId: 'corps-des-lignes', pathPrefix: ['root', 'children', 2, 'body', 0, 'each'] },
+    ),
+    ['root', 'children', 2, 'body', 0, 'each'],
+  ),
+  carte(
+    'Une condition qui produit du texte',
+    diagnostiquer(
+      'Une condition qui produit du texte',
+      () =>
+        evaluatePredicate({ kind: 'path', path: 'commande.client' }, renderData, {
+          budget: budgetDemonstrations,
+        }),
+      { nodeId: 'bloc-remise', pathPrefix: ['root', 'children', 1, 'when'] },
+    ),
+    ['root', 'children', 1, 'when'],
+  ),
+];
+
+/** Les dix cartes de la recette J1 : les refus de contrat d'abord, les formules ensuite. */
+const cartesRecette: readonly CarteRecette[] = [...refusDeContrat, ...refusDeFormule];
 
 /**
  * Le même contrôle, du point de vue de l'INTÉGRATEUR.
  *
  * Il construit un nœud par programme et veut le valider avant de le stocker, sans passer
  * par le template entier : c'est ce consommateur — immédiat, et hors du dépôt — qui
- * justifie que le kind exporte son schéma membre et les deux bornes de sa fenêtre.
+ * justifie que le kind exporte son schéma membre et les deux bornes de sa fenêtre. Et il
+ * lit la phrase par la façade, comme tout le reste de la page.
  */
+const arrondiValide = { kind: 'round', value: { kind: 'path', path: 'arrondi.total' } };
 const horsFenetre = RoundExpressionSchema.safeParse({
   ...arrondiValide,
   decimals: MAX_ROUND_DECIMALS + 1,
@@ -1622,88 +1827,7 @@ const horsFenetre = RoundExpressionSchema.safeParse({
 });
 const messageHorsFenetre = horsFenetre.success
   ? '(acceptée — ce que le contrat interdit)'
-  : (horsFenetre.error.issues[0]?.message ?? '(refusée sans motif)');
-
-/**
- * Un avant-goût du lot C8 : la charge machine qu'une formule fautive rend.
- *
- * Le `catch` EST la démonstration ici — c'est la seule section où il ne s'agit pas de
- * dégrader. Il est narrowé par `instanceof`, jamais par un cast, et il affiche
- * `details.code`, `details.site` et `details.at`. Le champ s'appelle `site` et non
- * `kind` parce que `LoopNode.each` et `ConditionNode.when` portent une expression sans
- * en être : `ExpressionKind` ne suffisait pas.
- *
- * Rien de la charge ne vient des DONNÉES : `actualType` est le *tag* d'une valeur, pas
- * la valeur. C'est ce qui rend un refus sûr à journaliser même quand le document ne
- * l'est pas.
- */
-interface RefusalReport {
-  readonly title: string;
-  readonly code: string;
-  readonly site: string;
-  readonly at: string;
-  readonly detail: string;
-  readonly message: string;
-}
-
-/**
- * Le budget des démonstrations de refus, et il est SÉPARÉ de celui de la facture.
- *
- * Ces quatre formules fautives n'appartiennent à aucun document : les charger au budget de
- * la facture gonflait le compteur que la section « Budget du rendu » affiche sous son nom —
- * mesuré, 145 opérations affichées pour 124 réelles. La page enseigne qu'un compteur partagé
- * au-delà d'un document est l'erreur ; elle n'a pas le droit de la commettre en la montrant.
- */
-const budgetDemonstrations: EvaluationBudget = createBudget();
-
-function reportRefusal(title: string, expression: Expression): RefusalReport {
-  try {
-    evaluateExpression(expression, renderData, { budget: budgetDemonstrations });
-  } catch (error) {
-    if (error instanceof ExpressionEvaluationError) {
-      const details = error.details;
-      return {
-        title,
-        code: details.code,
-        site: details.site,
-        at: details.at.length === 0 ? '(racine)' : details.at.join(' → '),
-        detail:
-          'actualType' in details
-            ? `actualType : ${details.actualType}`
-            : `limit : ${details.limit}`,
-        message: error.message,
-      };
-    }
-    throw error;
-  }
-  throw new Error(`« ${title} » aurait dû être refusée : contrat de core cassé.`);
-}
-
-const refusals: readonly RefusalReport[] = [
-  reportRefusal('Diviser par un nombre de lignes non gardé', {
-    kind: 'arithmetic',
-    op: 'div',
-    left: totalHT,
-    right: { kind: 'literal', value: 0 },
-  }),
-  reportRefusal('Additionner un texte à un nombre', {
-    kind: 'arithmetic',
-    op: 'add',
-    left: { kind: 'path', path: 'commande.client' },
-    right: { kind: 'literal', value: 1 },
-  }),
-  reportRefusal('Coller un nombre sans passer par text()', {
-    kind: 'concat',
-    parts: [
-      { kind: 'literal', value: 'N° ' },
-      { kind: 'path', path: 'commande.numero' },
-    ],
-  }),
-  reportRefusal('Une date qui n’existe pas au calendrier', {
-    kind: 'endOfMonth',
-    date: { kind: 'literal', value: '2026-02-30' },
-  }),
-];
+  : (diagnosticsOf(horsFenetre.error)?.[0]?.message ?? '(refusée sans motif)');
 
 const codeStyle = {
   background: '#f4f4f4',
@@ -2360,36 +2484,81 @@ export default function App() {
         l'arbre, <em>sans données et sans rendu</em>.
       </p>
 
-      <h2>Refus à la SAUVEGARDE du modèle (et non au rendu)</h2>
+      <h2>Un refus compréhensible — les dix cas de recette du lot C8</h2>
       <p>
-        Les refus de la section suivante se produisent au <em>rendu</em> ; ceux-ci se produisent
-        quand le modèle est <em>enregistré</em>. La distinction n'est pas cosmétique : ce que le
-        schéma tranche au save time est ce que le lot C2 n'a eu besoin d'aucun code d'erreur nouveau
-        pour dire. La charge n'a donc ni <code>code</code>, ni <code>site</code> — elle a un chemin
-        et une phrase.
+        Chacun des dix cas ci-dessous est fautif <em>volontairement</em>. Ce que la page affiche
+        n'est plus un rapport qu'elle rebâtit : c'est le <strong>diagnostic</strong> que{' '}
+        <code>diagnosticsOf</code> rend, tel quel. La page ne lit plus ni{' '}
+        <code>ZodError.issues</code>, ni <code>ExpressionEvaluationError.details</code> — elle passe
+        l'erreur à la façade et <strong>relance</strong> ce que la façade ne reconnaît pas, parce
+        qu'une faute de programmation ne doit jamais devenir une phrase qu'un auteur essaierait de
+        corriger.
       </p>
       <p>
-        Les deux premiers rendent <em>la même</em> phrase, et c'est voulu : un nom à consonance
-        réglementaire n'obtient aucun traitement de faveur. Un nom désigne une <em>opération</em>,
-        jamais une règle — <code>halfEven</code> est le nom de « l'arrondi du banquier » quand on le
-        décrit au lieu de l'invoquer.
+        <code>source</code> et <code>code</code> forment la clé de traduction : une application qui
+        traduit se branche là, jamais sur la phrase. <code>nodeId</code> et <code>path</code> sont
+        des champs <strong>séparés</strong> de <code>message</code> et ne sont jamais interpolés
+        dedans — c'est ce qui permet à une interface de les échapper. Et aucune valeur de rendu
+        n'apparaît nulle part : <code>actualType</code> est le <em>tag</em> d'une valeur, pas la
+        valeur.
       </p>
-      {parseRefusals.map((refusal) => (
-        <div key={refusal.title} style={parseRefusalStyle}>
-          <strong>{refusal.title}</strong>
+      <p>
+        Les cinq premiers refus se produisent quand le modèle est <strong>enregistré</strong>, les
+        cinq suivants au <strong>rendu</strong>. La distinction n'est pas cosmétique, et les deux
+        couleurs de carte la portent.
+      </p>
+      {cartesRecette.map(({ titre, diagnostic }, index) => (
+        <div
+          key={`${diagnostic.source}-${diagnostic.code}-${diagnostic.path.join('.')}`}
+          style={index < refusDeContrat.length ? parseRefusalStyle : refusalStyle}
+        >
+          <strong>
+            {index + 1}. {titre}
+          </strong>
           <ul>
             <li>
-              <code>issue.path</code> : <code>{refusal.path}</code>
+              <code>source</code> : <code>{diagnostic.source}</code> — <code>code</code> :{' '}
+              <code>{diagnostic.code}</code>
             </li>
-            <li>{refusal.message}</li>
+            <li>
+              <code>path</code> :{' '}
+              <code>
+                {diagnostic.path.length === 0 ? '(racine du modèle)' : diagnostic.path.join(' → ')}
+              </code>
+            </li>
+            <li>
+              <code>nodeId</code> :{' '}
+              <code>{diagnostic.nodeId ?? '(non fourni par le consommateur)'}</code>
+            </li>
+            {'site' in diagnostic ? (
+              <li>
+                <code>site</code> : <code>{diagnostic.site}</code>
+              </li>
+            ) : undefined}
+            {'actualType' in diagnostic ? (
+              <li>
+                <code>actualType</code> : <code>{diagnostic.actualType}</code>
+              </li>
+            ) : undefined}
+            {'limit' in diagnostic && diagnostic.limit !== undefined ? (
+              <li>
+                <code>limit</code> : <code>{diagnostic.limit}</code>
+              </li>
+            ) : undefined}
+            {'fromVersion' in diagnostic && diagnostic.fromVersion !== undefined ? (
+              <li>
+                <code>fromVersion</code> : <code>{diagnostic.fromVersion}</code>
+              </li>
+            ) : undefined}
           </ul>
+          <p>{diagnostic.message}</p>
         </div>
       ))}
       <p>
         Et le même contrôle vu de l'application intégratrice, qui construit un nœud par programme et
         le valide avant de le stocker — sans passer par le template entier :{' '}
         <code>RoundExpressionSchema.safeParse</code> d'une position à{' '}
-        <code>{MAX_ROUND_DECIMALS + 1}</code> rend « {messageHorsFenetre} ».
+        <code>{MAX_ROUND_DECIMALS + 1}</code> rend « {messageHorsFenetre} », par la même façade.
       </p>
 
       <h2>Dates : échéance, « 45 jours fin de mois » et jours de retard</h2>
@@ -2409,34 +2578,6 @@ export default function App() {
       <p>
         <code>{countSegments.join(' + ')}</code>
       </p>
-
-      <h2>Refus compréhensible (avant-goût du lot C8)</h2>
-      <p>
-        Chaque formule ci-dessous est fautive <em>volontairement</em>. Ce que core rend est un code,
-        un opérateur et un chemin depuis la racine de la formule ; il ne rend jamais la valeur
-        fautive, seulement sa <em>forme</em>. C'est ce qui rend un refus sûr à journaliser même
-        quand le document ne l'est pas.
-      </p>
-      {refusals.map((refusal) => (
-        <div key={refusal.code + refusal.at} style={refusalStyle}>
-          <strong>{refusal.title}</strong>
-          <ul>
-            <li>
-              <code>details.code</code> : <code>{refusal.code}</code>
-            </li>
-            <li>
-              <code>details.site</code> : <code>{refusal.site}</code>
-            </li>
-            <li>
-              <code>details.at</code> : <code>{refusal.at}</code>
-            </li>
-            <li>
-              <code>{refusal.detail}</code>
-            </li>
-          </ul>
-          <p>{refusal.message}</p>
-        </div>
-      ))}
 
       <h2>Budget du rendu — un par DOCUMENT</h2>
       <p>
@@ -2583,7 +2724,7 @@ export default function App() {
                   </tbody>
                 </table>
               ) : (
-                <p>écriture non résolue : {resolution.refusal}</p>
+                <p>{diagnosticOfPresentationRefusal(resolution.refusal).message}</p>
               )}
             </div>
           );
@@ -2648,6 +2789,7 @@ export default function App() {
           <tr>
             <th style={cellStyle}>Ce qu'on demande</th>
             <th style={cellStyle}>Refus rendu</th>
+            <th style={cellStyle}>Ce que C8 en dit</th>
             <th style={cellStyle}>Qui est en faute</th>
           </tr>
         </thead>
@@ -2657,6 +2799,11 @@ export default function App() {
             <td style={cellStyle}>
               <code>{refusInconnu.ok ? 'ok' : refusInconnu.refusal}</code>
             </td>
+            <td style={cellStyle}>
+              {refusInconnu.ok
+                ? '(résolue)'
+                : diagnosticOfPresentationRefusal(refusInconnu.refusal).message}
+            </td>
             <td style={cellStyle}>l'APPEL est faux</td>
           </tr>
           <tr>
@@ -2665,6 +2812,11 @@ export default function App() {
             </td>
             <td style={cellStyle}>
               <code>{refusNonHonore.ok ? 'ok' : refusNonHonore.refusal}</code>
+            </td>
+            <td style={cellStyle}>
+              {refusNonHonore.ok
+                ? '(résolue)'
+                : diagnosticOfPresentationRefusal(refusNonHonore.refusal).message}
             </td>
             <td style={cellStyle}>
               ni l'un ni l'autre n'est faux — un Designer ne doit PAS en accuser l'auteur
