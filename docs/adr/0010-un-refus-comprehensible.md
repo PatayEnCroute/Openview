@@ -47,6 +47,8 @@
   [`src/template/migrate.ts`](../../packages/core/src/template/migrate.ts) (l'attribution du code
   exact à chacun des cinq sites),
   [`src/presentation/types.ts`](../../packages/core/src/presentation/types.ts) (le tuple),
+  [`src/validation-messages.ts`](../../packages/core/src/validation-messages.ts) (la liste fermée
+  des phrases de schéma que la façade peut conserver),
   [`src/ast/schemas.ts`](../../packages/core/src/ast/schemas.ts) (la phrase de `keepTogether`),
   et les cinq sites de levée d'expression reformulés
 
@@ -108,7 +110,7 @@ elle :
 
 | Branche | Détails propres |
 | :--- | :--- |
-| `template-validation` | aucun |
+| `template-validation` | `expected` pour `invalid-type`, `acceptedValues` pour `invalid-value` |
 | `template-migration` | `fromVersion: number \| undefined` |
 | `template-shape` | `limit: number \| undefined` |
 | `expression-evaluation` | `site`, puis `actualType` **ou** `limit` |
@@ -163,6 +165,8 @@ if (diagnostics === undefined) {
 Un `OpenviewError` **nu** tombe dans ce cas, délibérément : la classe de base n'est pas une famille.
 Une exception arbitraire levée par une fonction de migration fournie par l'appelant n'est **pas
 reclassée** — elle traverse la façade et le patron ci-dessus la relance telle quelle, avec sa pile.
+Le moteur marque cette identité dans un `WeakSet` interne avant de relancer : même une `ZodError`
+émise par le code de migration reste donc une faute de l'appelant, sans mutation ni perte de pile.
 
 Une erreur de validation peut porter **plusieurs** issues et rend alors plusieurs diagnostics. Ce
 lot ne garde pas seulement la première, ne fusionne pas deux corrections indépendantes et **ne
@@ -172,8 +176,8 @@ jamais par indice. Le playground fait de même.
 ### D4 — Anglais par défaut, `source` + `code` pour la traduction
 
 Le message par défaut est anglais, comme tous les messages et commentaires du code. `source` +
-`code` est la **clé stable** de traduction : une application qui traduit se branche là, plus les
-détails structurés, jamais sur la phrase.
+`code` choisit la **branche stable** de traduction ; `expected`, `acceptedValues`, `site`,
+`actualType`, `limit` et `fromVersion` fournissent les paramètres nécessaires, jamais la phrase.
 
 **La langue d'une `Presentation` n'est jamais consultée.** Une écriture décrit le **document
 imprimé** ; un diagnostic adresse l'**outillage de l'auteur**. Ce sont deux publics, et le lot C6 a
@@ -195,10 +199,11 @@ Les **seules** valeurs variables admises dans une phrase sont des limites de con
 forme de valeur fermée (`text`, `a number`, `a list`…) et les **choix ou bornes déclarés par un
 schéma**. La distinction est nette : `values: ["number", "count"]` vient du schéma, pas de l'entrée.
 
-Un point mérite d'être dit parce qu'il tient tout seul et qu'on aurait pu le croire acquis : le
-validateur **retire** le champ `input` de ses issues finalisées. La non-fuite ne repose donc pas
-seulement sur la discipline de ce lot, elle est déjà vraie une couche plus bas — et c'est aussi ce
-qui interdit une autre implémentation, décrite à D7.
+Le validateur retire `input` de l'issue finalisée, mais une `customError` globale peut l'avoir
+interpolé dans `message` avant ce retrait. La façade ne traite donc jamais un message générique Zod
+comme fiable : elle le reconstruit depuis les champs structurés et ne conserve que les phrases
+exactes de la liste fermée `SAFE_SCHEMA_MESSAGES` ou les messages `custom` que les schémas
+Openview écrivent eux-mêmes.
 
 ### D6 — Six familles ; `code` unique dans sa famille, et surtout pas de catalogue rival
 
@@ -246,28 +251,22 @@ nôtre : on choisit le contrôle le plus fort disponible, pas le patron le plus 
 | `invalid_union`, `invalid_key`, `invalid_element`, `unrecognized_keys` | `invalid-structure` | demander une forme prise en charge |
 | `custom` | `invalid-relation` | conserver le message de relation |
 
-**Pour les deux premières lignes, il faut distinguer une phrase écrite par un schéma d'une phrase
-écrite par le validateur, et c'est le seul endroit du lot où le contrat repose sur du texte.** Les
-messages génériques sont remplacés — `Invalid input: expected number, received number` ne dit rien à
-un auteur —, tandis qu'une phrase écrite par un schéma est **conservée**, parce qu'elle connaît le
-vocabulaire du champ : `A column width is a finite whole number of weight units` en dit plus que
-`This field must be a whole number.`
+**Pour les deux premières lignes, aucun message global Zod n'est digne de confiance.** Une
+application peut appeler `z.config()` avec une autre locale ou une `customError` qui interpole la
+valeur reçue. `invalid_type` et `invalid_value` sont donc toujours reconstruits depuis `expected`
+et `values`, sauf si leur phrase correspond exactement à `SAFE_SCHEMA_MESSAGES`. Cette liste
+fermée contient les rares phrases qu'un schéma écrit parce qu'il connaît le vocabulaire du champ :
+`A column width is a finite whole number of weight units` en dit plus que la phrase générique.
 
-La détection est un **préfixe** sur les deux ouvertures génériques du validateur, `Invalid input` et
-`Invalid option`. Deux implémentations plus séduisantes ont été écartées :
+`TemplateValidationDiagnostic` conserve le narrowing correspondant : `invalid-type` porte
+`expected`, `invalid-value` porte `acceptedValues`, et les quatre autres codes ne portent aucun de
+ces deux champs. Une traduction peut ainsi garder l'action exacte sans analyser la phrase anglaise.
+Deux tests configurent successivement une `customError` qui inclut une fausse clé secrète et la
+locale française de Zod ; le diagnostic reste anglais et ne contient jamais la valeur.
 
-1. **Régénérer la phrase par défaut** avec `z.core.locales.en().localeError(issue)` et comparer.
-   Exact sur le papier, **faux en pratique** : la phrase par défaut d'`invalid_type` embarque le type
-   **reçu**, or `input` est retiré de l'issue finalisée (D5). La régénération rend « *received
-   undefined* » là où l'original disait « *received number* », donc **toute** issue de type serait
-   classée « écrite par un schéma ». Le mécanisme qui protège la donnée est celui qui interdit cette
-   approche.
-2. **Ne jamais conserver** et dériver pour tous les codes. Cela perdait la phrase de
-   `TableColumnSchema.width`, la seule qui nomme l'unité d'une largeur de colonne.
-
-Le préfixe est donc retenu, **et il est épinglé** : deux tests vérifient que Zod ouvre toujours ses
-refus de type et de choix par ces deux mots. Une montée qui les reformulerait fait **échouer un
-test** au lieu de laisser la règle conserver silencieusement du texte générique.
+`invalid_union` distingue enfin les unions discriminées des unions ordinaires. Une union sans
+branche et avec la note « No matching discriminator » conseille de vérifier `type` ou `kind` ; une
+union primitive, comme la valeur d'un littéral, demande seulement une forme prise en charge.
 
 Conséquence directe et voulue : la phrase du cas de recette n° 1 vit dans **`ast/schemas.ts`**, pas
 dans la façade. `keepTogether` est un `z.literal(true).optional()`, et seul le schéma sait que la
@@ -388,8 +387,8 @@ compris les huit que la recette ne sélectionne pas.
 | entrées de `TEMPLATE_MIGRATIONS` | 7 | **7** |
 | champs de modèle ajoutés | — | **0** |
 | dépendances ajoutées | — | **0** |
-| tests | 733 | **841** (+108) |
-| couverture, statements | — | **99,68 %** |
+| tests | 733 | **845** (+112) |
+| couverture, statements | — | **99,69 %** |
 | couverture, branches | — | **99,24 %** |
 | couverture, functions | — | **100 %** |
 
@@ -467,8 +466,9 @@ chez l'intégrateur. Un Port d'i18n exigerait un second adaptateur réel, qui n'
 que l'union les déclare et que la table est totale sur elle ; leurs deux tests **construisent**
 l'issue au lieu de la provoquer, et le disent.
 
-**La détection de phrase générique reste du texte.** C'est le seul endroit du lot où le contrat ne
-repose pas sur un type. Deux tests l'épinglent, et D7 explique pourquoi les alternatives sont pires.
+**La conservation d'une phrase de schéma reste une liste fermée.** Une phrase absente de
+`SAFE_SCHEMA_MESSAGES` retombe sur une formulation structurée sûre ; la dérive dégrade donc la
+précision, jamais la confidentialité.
 
 ---
 
@@ -513,10 +513,10 @@ Toute mesure de cette ADR est rejouable, et voici comment.
 | :--- | :--- |
 | le compte du barrel (126 → 133) | `Object.keys` sur l'import ESM réel de `packages/core/dist/index.js`, après `pnpm run build` |
 | les +7 valeurs et +13 types | comparer les deux blocs `export` de `src/index.ts` à leur état d'avant le lot |
-| les 108 tests, la couverture | `pnpm run test:coverage`, et le rapport `text` du répertoire `packages/core/src/diagnostics/**` pour le détail |
+| les 112 tests, la couverture | `pnpm run test:coverage`, et le rapport `text` du répertoire `packages/core/src/diagnostics/**` pour le détail |
 | les dix phrases distinctes | `npx vitest run packages/core/src/diagnostics/__tests__/recette.test.ts` |
 | la totalité du mapping d'issues | retirer une entrée de `VALIDATION_CODE_BY_ISSUE`, jouer `pnpm run type-check`, restaurer |
 | la source-compatibilité du constructeur de migration | appeler `new TemplateMigrationError('m', 1, { cause: e })` sans `code`, jouer `pnpm run type-check` |
-| les dix cartes du playground | `pnpm --filter @openview/playground dev`, puis compter les cartes de la section « les dix cas de recette du lot C8 » |
-| la non-fuite | sérialiser les dix diagnostics et chercher une valeur du jeu de données ; deux tests le font déjà |
+| les dix cartes du playground | `pnpm --filter @openview/playground dev`, puis compter les cartes de la section « dix cas de recette » |
+| la non-fuite | sérialiser les diagnostics sous une `customError` globale qui interpole l'entrée ; le test doit rester muet sur la fausse clé secrète |
 | le format stocké inchangé | `git diff` sur `packages/core/src/template/template.ts` et sur `TEMPLATE_MIGRATIONS` : vide |

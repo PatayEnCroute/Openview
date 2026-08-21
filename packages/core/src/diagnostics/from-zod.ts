@@ -1,4 +1,5 @@
 import type { z } from 'zod/v4';
+import { SAFE_SCHEMA_MESSAGES } from '../validation-messages.js';
 import { UNNAMEABLE_LOCATION_MESSAGE } from './messages.js';
 import { joinPath, nameableSegments } from './paths.js';
 import type {
@@ -15,7 +16,7 @@ type ZodPrimitive = string | number | symbol | bigint | boolean | null | undefin
  * Total by construction: a validator release that adds an issue code fails to compile here rather
  * than falling into a silent default.
  */
-const VALIDATION_CODE_BY_ISSUE: Readonly<Record<ZodIssue['code'], TemplateValidationCode>> = {
+const VALIDATION_CODE_BY_ISSUE = {
   invalid_type: 'invalid-type',
   invalid_value: 'invalid-value',
   invalid_format: 'invalid-format',
@@ -27,17 +28,7 @@ const VALIDATION_CODE_BY_ISSUE: Readonly<Record<ZodIssue['code'], TemplateValida
   invalid_element: 'invalid-structure',
   unrecognized_keys: 'invalid-structure',
   custom: 'invalid-relation',
-};
-
-/**
- * The validator's own openers for the two codes C8 rephrases. A schema that writes its own message
- * names the field's vocabulary and is kept; these two say nothing a model author can act on.
- */
-const GENERIC_OPENERS = ['Invalid input', 'Invalid option'] as const;
-
-function isGeneric(message: string): boolean {
-  return GENERIC_OPENERS.some((opener) => message.startsWith(opener));
-}
+} as const satisfies Readonly<Record<ZodIssue['code'], TemplateValidationCode>>;
 
 /**
  * Nouns naming what a schema demands, article included. Partial on purpose: a type Openview never
@@ -64,10 +55,8 @@ const EXPECTED_NOUNS: Readonly<Partial<Record<ZodTypeName, string>>> = {
 
 /** Sentences for the structural codes: which shape is wrong, without repeating the input. */
 const STRUCTURE_MESSAGES: Readonly<
-  Record<'invalid_union' | 'invalid_key' | 'invalid_element' | 'unrecognized_keys', string>
+  Record<'invalid_key' | 'invalid_element' | 'unrecognized_keys', string>
 > = {
-  invalid_union:
-    'This value matches none of the supported shapes. Check the "type" or "kind" that names it.',
   invalid_key: 'This object carries a key of an unsupported shape.',
   invalid_element: 'This collection carries an element of an unsupported shape.',
   unrecognized_keys: 'This object carries keys the schema does not define. Remove them.',
@@ -89,6 +78,12 @@ function acceptedValues(values: readonly ZodPrimitive[]): string {
   return `This field must be one of ${parts.slice(0, -1).join(', ')} or ${last}.`;
 }
 
+function invalidUnionMessage(issue: Extract<ZodIssue, { readonly code: 'invalid_union' }>): string {
+  return issue.errors.length === 0
+    ? 'This value matches none of the supported shapes. Check the "type" or "kind" that names it.'
+    : 'This value matches none of the supported forms.';
+}
+
 /**
  * The sentence an issue becomes. Bounds, formats and cross-field relations keep the words the
  * schema wrote; the validator's generic type and value refusals are rephrased.
@@ -96,12 +91,17 @@ function acceptedValues(values: readonly ZodPrimitive[]): string {
 function messageOf(issue: ZodIssue): string {
   switch (issue.code) {
     case 'invalid_type':
-      return isGeneric(issue.message)
-        ? `This field must be ${EXPECTED_NOUNS[issue.expected] ?? `a ${issue.expected}`}.`
-        : issue.message;
+      return SAFE_SCHEMA_MESSAGES.has(issue.message)
+        ? issue.message
+        : `This field must be ${EXPECTED_NOUNS[issue.expected] ?? `a ${issue.expected}`}.`;
     case 'invalid_value':
-      return isGeneric(issue.message) ? acceptedValues(issue.values) : issue.message;
+      return SAFE_SCHEMA_MESSAGES.has(issue.message) ? issue.message : acceptedValues(issue.values);
     case 'invalid_union':
+      return invalidUnionMessage(issue);
+    case 'invalid_format':
+      return SAFE_SCHEMA_MESSAGES.has(issue.message)
+        ? issue.message
+        : `This field must use the ${issue.format} format.`;
     case 'invalid_key':
     case 'invalid_element':
     case 'unrecognized_keys':
@@ -116,12 +116,38 @@ function diagnosticOfIssue(
   context: DiagnosticContext | undefined,
 ): TemplateValidationDiagnostic {
   const { segments, complete } = nameableSegments(issue.path);
-  return {
+  const common = {
     source: 'template-validation',
-    code: complete ? VALIDATION_CODE_BY_ISSUE[issue.code] : 'invalid-structure',
-    message: complete ? messageOf(issue) : UNNAMEABLE_LOCATION_MESSAGE,
     path: joinPath(context?.pathPrefix, segments),
     nodeId: context?.nodeId,
+  } as const;
+  if (!complete) {
+    return {
+      ...common,
+      code: 'invalid-structure',
+      message: UNNAMEABLE_LOCATION_MESSAGE,
+    };
+  }
+  if (issue.code === 'invalid_type') {
+    return {
+      ...common,
+      code: 'invalid-type',
+      message: messageOf(issue),
+      expected: issue.expected,
+    };
+  }
+  if (issue.code === 'invalid_value') {
+    return {
+      ...common,
+      code: 'invalid-value',
+      message: messageOf(issue),
+      acceptedValues: issue.values.map(quoted),
+    };
+  }
+  return {
+    ...common,
+    code: VALIDATION_CODE_BY_ISSUE[issue.code],
+    message: messageOf(issue),
   };
 }
 

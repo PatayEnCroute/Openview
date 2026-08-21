@@ -694,7 +694,7 @@ describe('the public surface of the writing contract', () => {
     // left unexported breaks nothing, it merely makes a feature unreachable for an integrator, and
     // no gate sees it. So the names are listed.
     //
-    // By name and not by total: a total breaks on every later lot for a reason that has nothing to
+    // By name and not by total: a total breaks on every later feature for a reason unrelated to
     // do with this contract, and it misses the one fault that matters -- a rename.
     const values = Object.keys(core);
     for (const symbol of [
@@ -710,7 +710,7 @@ describe('the public surface of the writing contract', () => {
     ]) {
       expect(values).toContain(symbol);
     }
-    // Types do not appear in the keys of a JavaScript module, so the five this lot adds cannot be
+    // Types do not appear in the keys of a JavaScript module, so the five exported types cannot be
     // reached this way. That is the limit these assertions inherit, stated rather than forgotten.
   });
 

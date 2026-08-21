@@ -373,7 +373,9 @@ messages qu'un utilisateur corrige seul.
 > `OpenviewDiagnostic`, et **deux** fonctions publiques : `diagnosticsOf(error, context)`
 > pour ce qui est levé, `diagnosticOfPresentationRefusal(refusal, context)` pour ce qui
 > est *rendu*. Chaque diagnostic porte `source`, `code`, `message`, `path` et `nodeId` ;
-> `source` + `code` est la clé de traduction, et la phrase par défaut est anglaise.
+> `source` + `code` choisit la branche de traduction, complétée par les détails structurés
+> (`expected`, `acceptedValues`, `site`, `actualType`, `limit`, `fromVersion`) ; la phrase
+> par défaut est anglaise.
 > **Zéro champ de modèle, zéro migration, zéro dépendance** : `CURRENT_SCHEMA_VERSION`
 > reste à **8** et la chaîne à **sept** entrées. Le barrel public passe de **126** à
 > **133** valeurs. [ADR 0010](../adr/0010-un-refus-comprehensible.md) fait foi.

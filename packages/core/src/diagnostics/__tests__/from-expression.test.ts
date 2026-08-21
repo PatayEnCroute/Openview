@@ -46,7 +46,7 @@ function diagnose(
   throw new Error('This formula was expected to be refused.');
 }
 
-describe('the five recette formulas of J1', () => {
+describe('the five formula acceptance examples', () => {
   it('says how to guard a division by zero', () => {
     const diagnostic = diagnose(
       () =>
@@ -145,6 +145,30 @@ describe('the branches of an expression diagnostic', () => {
     }
     expect(diagnostic.limit).toBe(1);
     expect('actualType' in diagnostic).toBe(false);
+  });
+
+  it.each([
+    [
+      'date shift',
+      { kind: 'dateAdd', date: literal('2026-01-01'), days: literal('tomorrow') } as const,
+      ['days'],
+    ],
+    [
+      'rounding',
+      {
+        kind: 'round',
+        value: literal('12.30'),
+        decimals: 2,
+        mode: 'halfExpand',
+      } as const,
+      ['value'],
+    ],
+  ])('does not call a %s formula arithmetic', (_label, expression, expectedPath) => {
+    const diagnostic = diagnose(() => evaluateExpression(expression, data));
+    expect(diagnostic.message).toBe(
+      'This formula needs a number, but the highlighted value is text.',
+    );
+    expect(diagnostic.path).toEqual(expectedPath);
   });
 
   it('orders the path root first, prefix then position inside the formula', () => {

@@ -3,6 +3,7 @@ import {
   ExpressionEvaluationError,
   InvalidEvaluationLimitsError,
   InvalidShapeLimitsError,
+  isProgrammingFault,
   TemplateMigrationError,
   TemplateShapeError,
 } from '../errors.js';
@@ -23,22 +24,16 @@ import type {
 } from './types.js';
 
 /**
- * Names a refusal Openview raised, or returns `undefined` for anything else so the caller can
- * rethrow it. A programming fault is never turned into a sentence a model author would try to fix:
- *
- * ```ts
- * const diagnostics = diagnosticsOf(error, context);
- * if (diagnostics === undefined) {
- *   throw error;
- * }
- * ```
- *
- * A validation error carries one diagnostic per issue; every other family carries exactly one.
+ * Names a refusal Openview raised, or returns `undefined` for caller and programming faults.
+ * Validation errors carry one diagnostic per issue; every other family carries exactly one.
  */
 export function diagnosticsOf(
   error: unknown,
   context?: DiagnosticContext,
 ): readonly OpenviewDiagnostic[] | undefined {
+  if (isProgrammingFault(error)) {
+    return undefined;
+  }
   if (error instanceof z.core.$ZodError) {
     return diagnosticsOfZodError(error, context);
   }

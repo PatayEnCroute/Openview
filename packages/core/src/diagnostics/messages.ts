@@ -19,7 +19,7 @@ export const MIGRATION_MESSAGES: Readonly<Record<TemplateMigrationErrorCode, str
   'missing-migration':
     'This build has no upgrade step for the schema version this template declares. Its upgrade chain is incomplete.',
   'invalid-migration-result':
-    'An upgrade step left this template without a usable schema version. Its upgrade chain is faulty.',
+    'An upgrade step failed to produce a usable later schema version. Its upgrade chain is faulty.',
 };
 
 /** Shape sentences. The bound itself travels in `limit`, so a host may show it or withhold it. */

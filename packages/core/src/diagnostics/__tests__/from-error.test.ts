@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import {
   CURRENT_SCHEMA_VERSION,
   createBudget,
@@ -116,7 +117,7 @@ describe('diagnosticsOf on a migration refusal', () => {
     const diagnostic = only(() => migrateToCurrent(stored(1), faulty));
     expect(diagnostic.code).toBe('invalid-migration-result');
     expect(diagnostic.message).toBe(
-      'An upgrade step left this template without a usable schema version. Its upgrade chain is faulty.',
+      'An upgrade step failed to produce a usable later schema version. Its upgrade chain is faulty.',
     );
   });
 
@@ -147,6 +148,30 @@ describe('diagnosticsOf on a migration refusal', () => {
     ];
     expect(diagnosticsOf(boom)).toBeUndefined();
     expect(() => diagnose(() => migrateToCurrent(stored(1), exploding))).toThrow(boom);
+  });
+
+  it('leaves a validation error thrown by caller-provided migration code unknown', () => {
+    let caught: unknown;
+    try {
+      migrateToCurrent(stored(1), [
+        {
+          from: 1,
+          to: 2,
+          migrate: () => z.object({ required: z.string() }).parse({ required: 42 }),
+        },
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+    if (!(caught instanceof z.ZodError)) {
+      throw new Error('The caller-provided schema was expected to raise a ZodError.');
+    }
+    expect(diagnosticsOf(caught)).toBeUndefined();
+    expect(() =>
+      diagnose(() => {
+        throw caught;
+      }),
+    ).toThrow(caught);
   });
 });
 

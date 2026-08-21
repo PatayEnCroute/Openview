@@ -1,6 +1,29 @@
 import type { ExpressionKind } from './expression/expression.js';
 import type { ExpressionValueType } from './expression/value-type.js';
 
+const programmingFaults = new WeakSet<object>();
+
+function referenceOf(error: unknown): object | undefined {
+  if ((typeof error === 'object' && error !== null) || typeof error === 'function') {
+    return error;
+  }
+  return undefined;
+}
+
+/** Marks a callback failure that diagnostics must leave untouched. */
+export function markAsProgrammingFault(error: unknown): void {
+  const reference = referenceOf(error);
+  if (reference !== undefined) {
+    programmingFaults.add(reference);
+  }
+}
+
+/** Reports whether an error came unchanged from caller-provided code. */
+export function isProgrammingFault(error: unknown): boolean {
+  const reference = referenceOf(error);
+  return reference !== undefined && programmingFaults.has(reference);
+}
+
 /** Base class for all typed Openview errors. */
 export class OpenviewError extends Error {
   constructor(message: string, options?: ErrorOptions | undefined) {

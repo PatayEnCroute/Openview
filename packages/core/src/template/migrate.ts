@@ -1,5 +1,9 @@
 import { z } from 'zod/v4';
-import { TemplateMigrationError, type TemplateMigrationErrorCode } from '../errors.js';
+import {
+  markAsProgrammingFault,
+  TemplateMigrationError,
+  type TemplateMigrationErrorCode,
+} from '../errors.js';
 import type { PageSetup } from '../page/page.js';
 import { assertBoundedShape, type ShapeLimits } from './guard.js';
 import { CURRENT_SCHEMA_VERSION, type Template, TemplateSchema } from './template.js';
@@ -147,7 +151,12 @@ function runMigrations(raw: unknown, migrations: readonly TemplateMigration[]): 
       );
     }
 
-    current = step.migrate(current);
+    try {
+      current = step.migrate(current);
+    } catch (error) {
+      markAsProgrammingFault(error);
+      throw error;
+    }
     applied += 1;
     const next = readSchemaVersion(
       current,

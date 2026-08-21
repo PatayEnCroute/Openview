@@ -8,7 +8,7 @@ import type {
 import type { ExpressionValueType } from '../expression/value-type.js';
 import type { PresentationRefusal } from '../presentation/types.js';
 
-/** Diagnostic families. `code` is unique within a family, so `source` + `code` is the stable key. */
+/** Diagnostic families. `source` and `code` select a stable translation branch. */
 export const DIAGNOSTIC_SOURCES = [
   'template-validation',
   'template-migration',
@@ -62,10 +62,23 @@ interface DiagnosticBase {
   readonly nodeId: string | undefined;
 }
 
-export interface TemplateValidationDiagnostic extends DiagnosticBase {
+interface TemplateValidationDiagnosticBase extends DiagnosticBase {
   readonly source: 'template-validation';
-  readonly code: TemplateValidationCode;
 }
+
+/** Schema validation facts needed to translate a diagnostic without parsing its English message. */
+export type TemplateValidationDiagnostic =
+  | (TemplateValidationDiagnosticBase & {
+      readonly code: 'invalid-type';
+      readonly expected: string;
+    })
+  | (TemplateValidationDiagnosticBase & {
+      readonly code: 'invalid-value';
+      readonly acceptedValues: readonly string[];
+    })
+  | (TemplateValidationDiagnosticBase & {
+      readonly code: Exclude<TemplateValidationCode, 'invalid-type' | 'invalid-value'>;
+    });
 
 export interface TemplateMigrationDiagnostic extends DiagnosticBase {
   readonly source: 'template-migration';

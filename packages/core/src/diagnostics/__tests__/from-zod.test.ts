@@ -20,7 +20,7 @@ function refuse(schema: z.ZodType, raw: unknown): readonly OpenviewDiagnostic[] 
   return diagnostics;
 }
 
-/** Found by path, never by index: C8 promises no order between the issues of one error. */
+/** Finds by path because issue order is not part of the contract. */
 function at(
   diagnostics: readonly OpenviewDiagnostic[],
   path: readonly (string | number)[],
@@ -56,20 +56,32 @@ function withSheet(width: unknown, height: unknown = 297): Record<string, unknow
   return { ...validPage, sheet: { width, height } };
 }
 
-describe('the validator openers C8 rephrases', () => {
-  // The negative control of the whole rephrasing rule: C8 replaces the validator's own generic
-  // wording and keeps a schema's own words. If a Zod release rewrites these two openers, this test
-  // fails instead of the rule silently keeping generic text nobody can act on.
-  it('still opens a bare type refusal with "Invalid input"', () => {
-    const result = z.number().safeParse('nope');
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message.startsWith('Invalid input')).toBe(true);
+describe('validator message isolation', () => {
+  it('ignores a global error map that includes the received value', () => {
+    const previous = z.config();
+    try {
+      z.config({ customError: (issue) => `received=${JSON.stringify(issue.input)}` });
+      const diagnostics = refuse(
+        TemplateSchema,
+        template(emptyRoot, withSheet('sk-live-DONOTLOG')),
+      );
+      const diagnostic = at(diagnostics, ['page', 'sheet', 'width']);
+      expect(diagnostic.message).toBe('This field must be a finite number.');
+      expect(JSON.stringify(diagnostic)).not.toContain('DONOTLOG');
+    } finally {
+      z.config(previous);
+    }
   });
 
-  it('still opens a bare choice refusal with "Invalid option"', () => {
-    const result = z.enum(['a', 'b']).safeParse('c');
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message.startsWith('Invalid option')).toBe(true);
+  it('keeps diagnostics in English when Zod uses another locale', () => {
+    const previous = z.config();
+    try {
+      z.config(z.locales.fr());
+      const [diagnostic] = refuse(z.object({ width: z.number() }), { width: 'wide' });
+      expect(diagnostic?.message).toBe('This field must be a finite number.');
+    } finally {
+      z.config(previous);
+    }
   });
 });
 
@@ -82,6 +94,7 @@ describe('diagnosticsOf on a validation error', () => {
       message: 'This field must be a finite number.',
       path: ['width'],
       nodeId: undefined,
+      expected: 'number',
     });
   });
 
@@ -112,6 +125,9 @@ describe('diagnosticsOf on a validation error', () => {
     const diagnostic = at(diagnostics, ['root', 'children', 0, 'content', 0, 'field']);
     expect(diagnostic.code).toBe('invalid-value');
     expect(diagnostic.message).toBe('This field must be one of "number" or "count".');
+    if (diagnostic.code === 'invalid-value') {
+      expect(diagnostic.acceptedValues).toEqual(['"number"', '"count"']);
+    }
   });
 
   it('keeps the words a schema wrote for a single accepted value', () => {
@@ -162,7 +178,7 @@ describe('diagnosticsOf on a validation error', () => {
     });
     const diagnostic = at(diagnostics, ['createdAt']);
     expect(diagnostic.code).toBe('invalid-format');
-    expect(diagnostic.message).toBe('Invalid ISO datetime');
+    expect(diagnostic.message).toBe('This field must use the datetime format.');
   });
 
   it('asks for a supported shape when a discriminant is unknown', () => {
@@ -175,6 +191,26 @@ describe('diagnosticsOf on a validation error', () => {
     expect(diagnostic.message).toBe(
       'This value matches none of the supported shapes. Check the "type" or "kind" that names it.',
     );
+  });
+
+  it('does not invent a discriminant for a plain union', () => {
+    const diagnostics = refuse(TemplateSchema, {
+      ...template(emptyRoot),
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [
+          {
+            type: 'text',
+            id: 't1',
+            content: [{ kind: 'binding', value: { kind: 'literal', value: [] } }],
+          },
+        ],
+      },
+    });
+    const diagnostic = at(diagnostics, ['root', 'children', 0, 'content', 0, 'value', 'value']);
+    expect(diagnostic.code).toBe('invalid-structure');
+    expect(diagnostic.message).toBe('This value matches none of the supported forms.');
   });
 
   it('keeps the sentence a cross-field relation wrote', () => {

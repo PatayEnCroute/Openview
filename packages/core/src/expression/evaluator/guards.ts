@@ -50,9 +50,13 @@ export function requireNumber(
     return undefined;
   }
   if (typeof value !== 'number') {
+    const subject =
+      site === 'arithmetic'
+        ? 'This arithmetic formula needs numbers, but the highlighted operand'
+        : 'This formula needs a number, but the highlighted value';
     return fail(
       { code: 'operand-type', site, at, actualType: valueTypeOf(value) },
-      `This arithmetic formula needs numbers, but the highlighted operand is ${describe(valueTypeOf(value))}.`,
+      `${subject} is ${describe(valueTypeOf(value))}.`,
     );
   }
   if (!Number.isFinite(value)) {

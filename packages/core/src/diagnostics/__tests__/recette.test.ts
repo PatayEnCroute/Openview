@@ -89,7 +89,7 @@ function at(
   throw new Error('This case was expected to be refused.');
 }
 
-/** The five refusals of J1 that are not formulas. */
+/** The five acceptance refusals that are not formulas. */
 const CONTRACT_CASES = [
   {
     title: 'the fragmentation mark written with false',
@@ -177,7 +177,7 @@ const CONTRACT_CASES = [
   },
 ] as const;
 
-/** The five formula refusals of J1. */
+/** The five formula acceptance refusals. */
 const FORMULA_CASES = [
   {
     title: 'a division by an unguarded count',
@@ -257,7 +257,7 @@ const FORMULA_CASES = [
 
 const RECETTE_CASES = [...CONTRACT_CASES, ...FORMULA_CASES];
 
-describe('the ten recette cases of J1', () => {
+describe('the ten acceptance examples', () => {
   it('is five contract refusals and five formula refusals', () => {
     expect(CONTRACT_CASES).toHaveLength(5);
     expect(FORMULA_CASES).toHaveLength(5);
@@ -308,7 +308,7 @@ describe('the ten recette cases of J1', () => {
   });
 });
 
-describe('what C8 leaves exactly as C7 left it', () => {
+describe('the contracts this diagnostic facade leaves unchanged', () => {
   it('changes no stored format', () => {
     expect(CURRENT_SCHEMA_VERSION).toBe(8);
     expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);

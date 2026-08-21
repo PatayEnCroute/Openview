@@ -106,11 +106,11 @@ describe('the public surface of the package', () => {
     // The only guard there is on the public surface: nothing else compares it to the intention, so
     // a symbol forgotten in `index.ts` compiles and ships missing.
     //
-    // By name and not by total: a total breaks on every later lot for a reason unrelated to this
+    // By name and not by total: a total breaks on every later feature for a reason unrelated to this
     // contract, and it misses a rename, which is the fault that actually costs an integrator.
     //
     // VALUES only, and that limit is stated rather than hidden: a TYPE does not appear in the keys
-    // of a JavaScript module, so the nine types this lot adds cannot be reached this way.
+    // of a JavaScript module, so the nine exported types cannot be reached this way.
     const values = Object.keys(core);
     const added = [
       'BorderEdgeSchema',

@@ -75,7 +75,7 @@ describe('the diagnostic catalogues', () => {
   });
 
   it('keeps the expression and shape catalogues as the only source of their codes', () => {
-    // C8 copies neither into a list of its own: a member added upstream must land in the scenario
+    // The facade copies neither into its own list: a member added upstream must land in the scenario
     // matrices of this folder, not in a second catalogue that could drift from the first.
     const expression: Readonly<Record<ExpressionErrorCode, true>> = {
       'operand-type': true,
