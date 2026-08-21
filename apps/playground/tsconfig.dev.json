@@ -1,0 +1,27 @@
+{
+  /**
+   * The Node side of this app: the dev-server render bridge and the Vite config that mounts it.
+   *
+   * It needs its own pass because `tsconfig.json` is the BROWSER config -- `lib: DOM`, no Node
+   * types, and `include: src/**` -- so neither `vite.config.ts` nor anything under `dev/` was
+   * compiled by anything. A bridge nothing type-checks is exactly the untested server the plan
+   * refuses, so the app's `type-check` script runs both passes.
+   *
+   * No DOM here, deliberately: this code runs in Node, and the browser side of the same feature
+   * lives in `src/rendering/`.
+   */
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["dev/**/*.ts", "vite.config.ts", "src/examples/**/*.ts"],
+  "exclude": ["node_modules"]
+}

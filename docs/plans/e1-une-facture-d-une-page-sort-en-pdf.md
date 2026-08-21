@@ -1,6 +1,18 @@
 # Plan d'implémentation — `@openview/engine` lot E1 : une facture d'une page sort en PDF
 
-> **Statut :** prêt à exécuter, non livré.
+> ## ⚠️ PÉRIMÉ — le lot est livré
+>
+> **Ce document ne fait plus foi.** L'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md)
+> le remplace : elle enregistre ce qui a été construit, les résultats des sondes Chromium et les
+> **six points sur lesquels l'exécution corrige ce plan** — notamment l'abandon de
+> `border-collapse: collapse`, le troisième champ de `PdfSourceDocument`, la peinture des filets en
+> ombres insérées et les deux vocabulaires de facture. Lisez l'ADR, pas ce plan.
+>
+> Conservé tel quel comme trace de la décision d'exécution.
+>
+> ---
+>
+> **Statut :** ~~prêt à exécuter, non livré~~ — **livré le 2026-08-21**.
 >
 > **Baseline relevée le 2026-08-21 :** la vague 1 de `@openview/core` est close au
 > `schemaVersion` **8** ; `@openview/engine` ne contient qu'une constante de version et son test ;

@@ -16,9 +16,14 @@
 
 ## Où on en est
 
-**Rien.** La brique est une coquille vide : aucun document ne sort d'Openview
-aujourd'hui. C'est ici que se joue la crédibilité du projet, et c'est le chantier
-le plus lourd des cinq.
+**Le premier document sort.** Le lot **E1 est livré** : un modèle et un jeu de données
+donnent une facture d'une page en PDF, à la feuille déclarée, et le playground permet
+réellement de choisir, puis de télécharger. Le jalon **J2 est atteint**. Le reste de la
+brique — pagination, reports, écritures, déterminisme, corpus figé, durcissement — est
+devant, et E2 démarre sur un pipeline réel plutôt que sur une coquille.
+
+Voir l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md) pour ce que le lot a
+tranché, ce que les sondes Chromium ont corrigé et ce qui reste ouvert.
 
 Format retenu pour la première version : **le PDF, et lui seul**. HTML et image
 sont écartés — mais on n'écrira rien qui interdise de les ajouter ensuite.
@@ -37,7 +42,11 @@ logo, l'apparence du modèle respectée.
 **Prêt quand** le playground affiche : « choisir un modèle, choisir un jeu de
 données, télécharger le PDF » — et que le PDF obtenu est présentable.
 
-**Poids :** L — **Dépend de :** [core](core.md) vague 1 — **Jalon : J2**
+**Poids :** L — **Dépend de :** [core](core.md) vague 1 — **Jalon : J2** —
+**✅ livré le 2026-08-21**, [ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md).
+Puppeteer vit dans son propre paquet, `@openview/adapter-puppeteer` : installer le moteur
+seul ne télécharge aucun navigateur. Un contenu qui ne tient pas est **refusé**, jamais
+tronqué.
 
 ### E2. Le tableau déborde proprement
 

@@ -91,7 +91,7 @@ Aucun n'est public : la publication est groupée (décision 2). Ils existent pou
 | Jalon | Ce qu'on peut montrer | Brique |
 | :--- | :--- | :--- |
 | **J1** ✅ | *Atteint le 2026-08-21.* Une facture comptable complète, en deux langues, est **décrite** dans un modèle ; un modèle incohérent est refusé avec un message compréhensible. Les **dix cas de recette** — cinq refus de contrat, cinq erreurs de formule — sont démontrés par le playground à travers la façade publique de [C8](core.md#c8-un-refus-compréhensible) | [core](core.md) |
-| **J2** | Un modèle + un jeu de données donnent une **facture d'une page en PDF** | [engine](engine.md) |
+| **J2** ✅ | *Atteint le 2026-08-21.* Un modèle + un jeu de données donnent une **facture d'une page en PDF** à la feuille déclarée, et le playground permet réellement de choisir un modèle, choisir un jeu de données et télécharger le résultat. Chromium vit derrière un paquet adaptateur distinct ; un contenu qui ne tient pas est **refusé**, jamais tronqué ([ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md)) | [engine](engine.md) |
 | **J3** | La **facture comptable** sort : 3 pages, 60 lignes, totaux reportés, mentions au bon endroit, en français/euros puis anglais/dollars | [engine](engine.md) |
 | **J4** | On **voit la facture avant de la produire**, et un contrôle automatique atteste que l'aperçu et le PDF sont identiques | [viewer](viewer.md) |
 | **J5** | Une application tierce obtient sa facture **sans installer le moteur** | [service](service-de-rendu.md) |

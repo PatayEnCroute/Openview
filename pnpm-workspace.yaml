@@ -2,6 +2,22 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
+# pnpm 11 does not run a dependency's install scripts unless it is named here, and
+# `pnpm add` writes the entry with no value so that the decision is taken rather
+# than inherited.
+#
+# REVIEW RULE: no entry may be set to `true` without naming, in the pull request,
+# what its script does and why running it is required.
+#
+# puppeteer -- its install script downloads the Chromium build pinned by the version
+# in packages/adapter-puppeteer/package.json (~150-300 MB) into the pnpm store. That
+# download IS the reason the dependency exists: without it
+# `@openview/adapter-puppeteer` has no browser to print with. It is confined to that
+# one adapter package, so an integrator installing `@openview/engine` alone never
+# fetches it (AGENTS.md 3.C).
+allowBuilds:
+  puppeteer: true
+
 # pnpm 11 refuses, by default, to install a package published more recently than
 # its supply-chain cooldown window. `pnpm add` writes an exemption for whatever
 # you just installed, which silently defeats the protection unless someone reads
