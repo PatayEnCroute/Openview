@@ -1,8 +1,7 @@
 import { collectTemplateDataPaths, type EvaluationScope } from '@openview/core';
 import { createPdfRenderPort, DocumentRenderError, type PdfSourceDocument } from '@openview/engine';
 import { describe, expect, it } from 'vitest';
-import { createPuppeteerPdfStrategy } from '../puppeteer-pdf-strategy.js';
-import { CORRUPT_PNG, inspectPdf } from './fixtures.js';
+import { CORRUPT_PNG, hostStrategy, inspectPdf } from './fixtures.js';
 import {
   APPEARANCES,
   type Appearance,
@@ -38,7 +37,7 @@ async function preparedHtml(
   return source;
 }
 
-const printed = createPdfRenderPort(createPuppeteerPdfStrategy());
+const printed = createPdfRenderPort(hostStrategy());
 
 describe('the two appearances declare the same document', () => {
   it('reads exactly the same data paths', () => {
@@ -230,7 +229,7 @@ describe('the same document, mutated to fail', () => {
         sheet: source.sheet,
         images: [{ nodeId: 'logo', path: [], src: CORRUPT_PNG }],
       };
-      const caught: unknown = await createPuppeteerPdfStrategy()
+      const caught: unknown = await hostStrategy()
         .render(broken)
         .catch((error: unknown) => error);
       expect(caught).toBeInstanceOf(DocumentRenderError);

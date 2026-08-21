@@ -5,14 +5,24 @@ import puppeteer from 'puppeteer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHEET_TOLERANCE_PT } from '../capability.js';
 import { createPuppeteerPdfStrategy, PDF_OPTIONS } from '../puppeteer-pdf-strategy.js';
-import { CORRUPT_PNG, inspectPdf, LOGO_PNG, pageOf, sourceOf, TINY_PNG, text } from './fixtures.js';
+import {
+  CORRUPT_PNG,
+  HOST_LAUNCH_OPTIONS,
+  hostStrategy,
+  inspectPdf,
+  LOGO_PNG,
+  pageOf,
+  sourceOf,
+  TINY_PNG,
+  text,
+} from './fixtures.js';
 
 /** Chromium launches once per render on purpose, so every case needs room for a process. */
 const CHROMIUM_TIMEOUT_MS = 60_000;
 
 const PT_PER_MM = 72 / 25.4;
 
-const strategy = createPuppeteerPdfStrategy();
+const strategy = hostStrategy();
 
 /** Every colour written into the pdf content streams, as DeviceRGB operands. */
 function paintedColours(bytes: Uint8Array): readonly string[] {
@@ -376,8 +386,10 @@ describe('resource lifetime', () => {
     'closes the browser after a successful render',
     async () => {
       const launched: { connected: boolean }[] = [];
+      const seen: (readonly string[] | undefined)[] = [];
       const launch = puppeteer.launch.bind(puppeteer);
       vi.spyOn(puppeteer, 'launch').mockImplementation(async (options) => {
+        seen.push(options?.args);
         const browser = await launch(options);
         launched.push(browser);
         return browser;
@@ -387,9 +399,27 @@ describe('resource lifetime', () => {
       );
       expect(launched).toHaveLength(1);
       expect(launched[0]?.connected).toBe(false);
+      /* The launch arguments the caller asked for reach the browser, and the ones it did not ask
+         for are absent: the strategy adds none of its own, and the sandbox stays on by default. */
+      expect(seen[0]).toStrictEqual(HOST_LAUNCH_OPTIONS.args);
     },
     CHROMIUM_TIMEOUT_MS,
   );
+
+  it('names no launch argument of its own, so the sandbox an integrator gets stays on', async () => {
+    const seen: unknown[] = [];
+    vi.spyOn(puppeteer, 'launch').mockImplementation((options) => {
+      seen.push(options);
+      return Promise.reject(new Error('this launch is observed, not performed'));
+    });
+    await createPuppeteerPdfStrategy()
+      .render(sourceWith(rawPage('')))
+      .catch(() => undefined);
+    /* Exactly this, and nothing more: no `args`, so Chromium keeps its own sandbox, and no
+       `executablePath`, so it keeps the build the install pinned. Dropping the sandbox is a
+       decision only a caller can take, and only for a host that cannot provide one. */
+    expect(seen).toStrictEqual([{ headless: true }]);
+  });
 
   it(
     'closes the browser after a refusal measured in the page',

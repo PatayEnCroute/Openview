@@ -377,6 +377,21 @@ Les options d'impression sont **toutes** énoncées : `preferCSSPageSize: true`,
 ni `format`. L'interception réseau est installée **avant** `setContent`, son handler reste
 synchrone et vérifie `isInterceptResolutionHandled`.
 
+**Le bac à sable de Chromium reste actif par défaut, et c'est une décision.** Construite sans
+options, la stratégie lance le navigateur avec exactement `{ headless: true }` : ni `args`, ni
+`executablePath`. Un test l'observe en interceptant `puppeteer.launch` sans l'exécuter, parce que
+rendre un modèle est exécuter du contenu arbitraire et que la frontière de processus est une
+défense réelle.
+
+L'intégration continue, elle, **doit** la retirer : l'image Ubuntu du runner restreint par AppArmor
+les espaces de noms non privilégiés dont ce bac à sable a besoin, et Chromium avorte sur
+`No usable sandbox` avant le premier test. `--no-sandbox` est donc passé
+**par les tests**, gardé derrière la variable `CI` que le runner définit lui-même, et jamais promu
+en défaut de la stratégie. Un runner est un conteneur éphémère qui ne rend que nos propres
+fixtures ; un intégrateur, non. Céder le bac à sable de tout le monde pour verdir un pipeline
+serait desserrer la contrainte au lieu de résoudre le problème. Aucun fichier de workflow n'a eu à
+être modifié pour cela.
+
 ### D-13 — Le pont du playground n'est pas un service de rendu
 
 `GET /__openview/render-catalog` rend des identifiants et des libellés.

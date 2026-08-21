@@ -6,6 +6,32 @@ import {
 } from '@openview/core';
 import { createPdfRenderPort, type PdfSourceDocument } from '@openview/engine';
 import { PDFDocument } from 'pdf-lib';
+import {
+  createPuppeteerPdfStrategy,
+  type PuppeteerPdfStrategyOptions,
+} from '../puppeteer-pdf-strategy.js';
+
+/**
+ * Launch options the HOST needs, decided by the caller and never by the strategy.
+ *
+ * Chromium's own sandbox needs unprivileged user namespaces, and the Ubuntu image the pipeline runs
+ * on restricts them through AppArmor: the browser aborts with "No usable sandbox" before a single
+ * test runs. `--no-sandbox` is the documented answer for a runner that is already an ephemeral
+ * isolated container rendering nothing but these fixtures.
+ *
+ * It stays HERE, in the tests, and is not the default of `createPuppeteerPdfStrategy`. Printing a
+ * template is executing arbitrary content, so the process boundary is a real defence: trading it
+ * away for every integrator in order to turn a pipeline green would be exactly the wrong move. A
+ * local run therefore keeps the sandbox an integrator gets, and only a host that cannot provide one
+ * asks for it to be dropped.
+ *
+ * `CI` is set by the runner itself, so no workflow had to be edited to say this.
+ */
+export const HOST_LAUNCH_OPTIONS: PuppeteerPdfStrategyOptions =
+  process.env.CI === undefined ? {} : { args: ['--no-sandbox'] };
+
+/** The strategy under test, launched the way this host can launch a browser. */
+export const hostStrategy = () => createPuppeteerPdfStrategy(HOST_LAUNCH_OPTIONS);
 
 /** A valid 4x2 navy png. */
 export const TINY_PNG =
