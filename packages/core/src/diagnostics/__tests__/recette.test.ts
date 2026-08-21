@@ -6,11 +6,9 @@ import {
   evaluatePredicate,
   evaluateSequence,
   type LiteralExpression,
-  migrateToCurrent,
   type OpenviewDiagnostic,
   type PathExpression,
   parseTemplate,
-  TEMPLATE_MIGRATIONS,
 } from '../../index.js';
 
 const data = { invoice: { total: 1200, customer: 'Fabrique Martin' }, lines: [{ amount: 400 }] };
@@ -309,24 +307,9 @@ describe('the ten acceptance examples', () => {
 });
 
 describe('the contracts this diagnostic facade leaves unchanged', () => {
-  it('changes no stored format', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
-    expect(TEMPLATE_MIGRATIONS).toHaveLength(CURRENT_SCHEMA_VERSION - 1);
-    expect(TEMPLATE_MIGRATIONS.map((step) => step.from)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-  });
-
-  it('still walks a pre-C1 document all the way up', () => {
-    const legacy = {
-      schemaVersion: 1,
-      id: 'old',
-      name: 'Old',
-      version: '1.0.0',
-      root: { type: 'container', id: 'root', children: [] },
-    };
-    const migrated = migrateToCurrent(legacy);
-    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(() => parseTemplate(legacy)).not.toThrow();
-  });
+  // The stored format and the upgrade chain are owned by `template/__tests__/compatibility.test.ts`
+  // alone. Pinned here too, they reddened on the next persisted change for a reason that had
+  // nothing to do with diagnostics.
 
   it('adds no code that would preempt the missing-data policy of a future data binding step', () => {
     // ADR 0001 stands: an absent value makes a condition false, a loop empty, and a scalar absent.

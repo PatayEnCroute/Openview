@@ -622,9 +622,9 @@ describe('the stored shape, its stamp and its migration', () => {
 
   it('registers the step that stamped this field, and the chain still passes through it', () => {
     // The stamp of this field is 7, and it stays 7 for ever: it is the version from which a build
-    // understands `presentations`. The CURRENT version is not this file's business -- the literal
-    // chain lives in `template/migrate.test.ts`, which owns it -- so this assertion names the step
-    // and not the end of the chain, and dropping the 6 -> 7 entry is still what reddens it.
+    // understands `presentations`. The CURRENT version is not this file's business -- the whole
+    // chain is owned by `template/__tests__/compatibility.test.ts` -- so this assertion names the
+    // step and not the end of the chain, and dropping the 6 -> 7 entry is still what reddens it.
     expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(PRESENTATIONS_SCHEMA_VERSION);
     expect(TEMPLATE_MIGRATIONS.map((step) => [step.from, step.to])).toContainEqual([
       PRESENTATIONS_SCHEMA_VERSION - 1,

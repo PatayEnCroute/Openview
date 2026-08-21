@@ -1,6 +1,12 @@
 # Plan d'implémentation — `@openview/core` lot C9 : la pérennité, à chaque ajout
 
-> 🟡 **À EXÉCUTER.** Ce document planifie C9 ; il ne livre aucune modification de code.
+> 🔴 **PÉRIMÉ — C9 livré le 2026-08-21.** C'est
+> [l'ADR 0011](../adr/0011-la-perennite-a-chaque-ajout.md) qui fait foi, et elle **corrige** ce
+> plan sur quatre points : le module de fixtures porte aussi la référence courante partagée, le
+> contrôle de `to` **s'ajoute** au contrôle de progression au lieu de le remplacer (sans quoi le
+> runner boucle), le balayage des capacités futures ne collecte les clés que des objets
+> discriminés, et la comparaison sérialisable ne suffit pas à prouver qu'aucune capacité n'est
+> inventée. Ce document est conservé pour l'historique du raisonnement, pas comme référence.
 >
 > **Baseline relevée le 2026-08-21, après C8 :** `CURRENT_SCHEMA_VERSION` vaut **8**,
 > `TEMPLATE_MIGRATIONS` contient les **sept** étapes 1→2 à 7→8, et
