@@ -462,7 +462,18 @@ défaut à proposer**, ni troisième état à afficher (D6), ni message à compo
 ### Pour C8 et C9
 
 **C8** hérite d'un **chemin d'issue** stable, `keepTogether`, et d'aucun message : la présentation
-du refus lui appartient, et ce lot ne fige pas le texte que lira un non-développeur. **C9** est tenu
+du refus lui appartient, et ce lot ne fige pas le texte que lira un non-développeur.
+
+> ✅ **[ADR 0010](0010-un-refus-comprehensible.md) a livré ce message, et il n'a pas coûté un
+> champ — mais il ne vit pas où l'on croyait.** La phrase « *This field must be true when
+> present; omit it to allow the block to split.* » est écrite dans le **schéma**, sur
+> `keepTogetherField`, et non dans la façade : rien dans une issue de validation ne dit que la
+> clé est **optionnelle**, et un `z.literal(true)` **requis** absent produit exactement la même
+> issue, où « *omit it* » serait un conseil faux. Seul le schéma le sait, donc c'est lui qui le
+> dit — et la façade conserve les phrases qu'un schéma a écrites.
+>
+> C'est aussi le premier cas de recette du jalon **J1**, et le chemin d'issue promis ici est
+> celui que le diagnostic rend : `root → children → 0 → keepTogether`. **C9** est tenu
 dans le même mouvement que le champ — l'estampille et la migration appartiennent au **même commit**
 que la forme persistée, de sorte qu'il n'existe aucun état enregistré, publiable ou bisectable
 sachant écrire la nouvelle forme sous l'ancienne estampille.

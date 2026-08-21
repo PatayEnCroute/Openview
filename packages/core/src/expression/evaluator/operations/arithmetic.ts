@@ -37,7 +37,7 @@ export function evaluateArithmetic(
   if (op === 'div' && second === 0) {
     return fail(
       { code: 'division-by-zero', site, at: ['right'], actualType: 'number' },
-      'This formula divides by zero. A divisor that is present and equal to zero is a wrong formula, not missing data: guard it with an `if`, or the document would carry Infinity.',
+      'This formula divides by zero. Guard the divisor with an "if" before dividing.',
     );
   }
   return requireFiniteResult(apply(op, first, second), site, []);

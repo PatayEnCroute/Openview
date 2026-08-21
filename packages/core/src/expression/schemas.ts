@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { ROUNDING_POSITION_TYPE_MESSAGE } from '../validation-messages.js';
 import { dayNumberOf } from './civil-date.js';
 import { aliasSchema, FORBIDDEN_IDENTIFIERS, PATH_PATTERN } from './identifiers.js';
 import {
@@ -91,7 +92,7 @@ export const RoundExpressionSchema = z.object({
   kind: z.literal('round'),
   value: PrintableExpressionSchema,
   decimals: z
-    .number({ error: 'A rounding position is a finite whole number of decimal places' })
+    .number({ error: ROUNDING_POSITION_TYPE_MESSAGE })
     .int('A rounding position is a whole number of decimal places')
     .min(MIN_ROUND_DECIMALS, `A rounding position may not go below ${MIN_ROUND_DECIMALS}`)
     .max(MAX_ROUND_DECIMALS, `A rounding position may not exceed ${MAX_ROUND_DECIMALS}`),

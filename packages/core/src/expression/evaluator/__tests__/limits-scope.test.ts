@@ -190,11 +190,11 @@ describe('expression error payload', () => {
     // où le libellé disparaît.
     expect(() =>
       evaluateSequence(path('invoice.total'), scope, { caller: 'tableRowGroup' }),
-    ).toThrow('A table body needs a list to iterate over, got a number.');
+    ).toThrow('This block needs a list to repeat, but the selected value is a number.');
 
     // Le contrôle croisé est gratuit et vaut d'être écrit à côté : deux sites, deux sujets.
     expect(() => evaluateSequence(path('invoice.total'), scope, { caller: 'loop' })).toThrow(
-      'A loop needs a list to iterate over, got a number.',
+      'This block needs a list to repeat, but the selected value is a number.',
     );
   });
 

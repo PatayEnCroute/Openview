@@ -298,7 +298,7 @@ describe('evaluatePredicate', () => {
 
   it('refuses JavaScript truthiness', () => {
     expect(() => evaluatePredicate(path('invoice.total'), scope)).toThrow(
-      /must evaluate to a boolean/,
+      /must return true or false, but it returns a number/,
     );
     expect(() => evaluatePredicate(path('invoice.label'), scope)).toThrow(
       ExpressionEvaluationError,

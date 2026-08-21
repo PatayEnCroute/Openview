@@ -21,7 +21,7 @@ export interface AttributedEvaluationOptions extends EvaluationOptions {
 
 const VALUE_DESCRIPTIONS: Readonly<Record<ExpressionValueType, string>> = {
   absent: 'nothing',
-  string: 'a string',
+  string: 'text',
   number: 'a number',
   'not-finite': 'a number that is not finite',
   boolean: 'a boolean',

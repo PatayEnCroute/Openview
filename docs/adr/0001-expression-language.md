@@ -187,6 +187,15 @@ Reste à décider pour les **valeurs textuelles** rendues dans le document : un
 `{{ invoice.total }}` absent doit-il imprimer un blanc ou faire échouer le
 rendu ? À trancher à l'étape 2, quand `DataBindingStep` existera.
 
+> **[ADR 0010](0010-un-refus-comprehensible.md) a eu l'occasion de fermer cette question, et
+> l'a laissée ouverte volontairement.** La roadmap demandait à C8 de « pointer un champ
+> disparu », ce qui aurait signifié un code `missing-data` dans `core` — donc l'inverse
+> exact des deux comportements ci-dessus, plus la propagation scalaire de `undefined`, plus
+> `isEmpty(path)`, qui **utilise** légitimement cette absence. La façade C8 n'a donc reçu
+> aucun code d'absence, et trois assertions de son lot **épinglent** les trois comportements
+> pour qu'un lot ultérieur ne les renverse pas par inadvertance. La politique reste au
+> `DataBindingStep`, seul endroit qui connaisse la position finale d'impression.
+
 > [ADR 0002](0002-data-binding-and-loop-scope.md) a depuis fourni la
 > représentation manquante — un texte porte des segments, dont certains sont des
 > liaisons. La question restante est donc purement une question de *politique*, et

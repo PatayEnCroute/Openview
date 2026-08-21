@@ -502,6 +502,18 @@ recopiés caractère pour caractère. Seuls changements de vocabulaire assumés 
 `a list` au lieu de `an array`, cesse de qualifier `NaN` de `a number`, et le message de
 `evaluateSequence` nomme l'opérateur appelant au lieu de dire « loop » à un agrégat.
 
+> **[ADR 0010](0010-un-refus-comprehensible.md) a livré cette formulation, et la façade que
+> cette décision annonçait.** La charge machine décrite ici devient la branche
+> `expression-evaluation` d'`OpenviewDiagnostic`, qui **conserve** le narrowing de
+> `ExpressionErrorDetails` — `actualType` sur un code d'opérande, `limit` sur un code de
+> borne. Le `nodeId` que « le moteur saura » est désormais **fourni** par le consommateur via
+> `DiagnosticContext`, et jamais deviné : `core` ne reçoit ni le template ni les données.
+>
+> Cinq messages ont été reformulés au site de levée, et `describe()` a changé **une** entrée
+> — `string` dit `text` et non `a string`, parce qu'un auteur de facture ne lit pas « *a
+> string* ». La garantie de non-fuite énoncée ici est **étendue à toute la façade** : aucune
+> famille de diagnostic ne porte une valeur de rendu, un extrait de modèle ou une `cause`.
+
 ---
 
 ## Décision 8 — Le bornage : ce que C1 doit rendre **possible** pour E8

@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { InvalidEvaluationLimitsError } from '../errors.js';
+import { LIMIT_TYPE_MESSAGE } from '../validation-messages.js';
 
 /**
  * Safety ceilings for expression evaluation.
@@ -36,7 +37,7 @@ export const LIMIT_MIN = 1;
 export const LIMIT_HARD_CEILING = 1_000_000_000;
 
 export const limitSchema = z
-  .number({ error: 'A limit must be a number' })
+  .number({ error: LIMIT_TYPE_MESSAGE })
   .int('A limit must be a whole number')
   .min(LIMIT_MIN, `A limit may not go below ${LIMIT_MIN}`)
   .max(LIMIT_HARD_CEILING, `A limit may not exceed ${LIMIT_HARD_CEILING}`);

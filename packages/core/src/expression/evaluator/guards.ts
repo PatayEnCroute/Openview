@@ -34,7 +34,7 @@ export function requireBoolean(
   }
   return fail(
     { code: 'not-a-boolean', site, at, actualType: valueTypeOf(value) },
-    `A condition must evaluate to a boolean, got ${describe(valueTypeOf(value))}. Wrap it in isEmpty, not, or a comparison instead of relying on truthiness.`,
+    `This condition must return true or false, but it returns ${describe(valueTypeOf(value))}. Add a comparison or use isEmpty.`,
   );
 }
 
@@ -50,9 +50,13 @@ export function requireNumber(
     return undefined;
   }
   if (typeof value !== 'number') {
+    const subject =
+      site === 'arithmetic'
+        ? 'This arithmetic formula needs numbers, but the highlighted operand'
+        : 'This formula needs a number, but the highlighted value';
     return fail(
       { code: 'operand-type', site, at, actualType: valueTypeOf(value) },
-      `A calculation operates on numbers, got ${describe(valueTypeOf(value))}. The algebra refuses coercion, so turn the value into what you need explicitly.`,
+      `${subject} is ${describe(valueTypeOf(value))}.`,
     );
   }
   if (!Number.isFinite(value)) {
@@ -140,7 +144,7 @@ export function requireDate(
   if (dayNumber === undefined) {
     return fail(
       { code: 'not-a-date', site, at, actualType: 'string' },
-      'A date must be written YYYY-MM-DD, between 0001-01-01 and 9999-12-31. There is no time and no time zone: a civil date has no stable rendering in any zone but an explicit one.',
+      'This formula needs a valid date in YYYY-MM-DD form between 0001-01-01 and 9999-12-31.',
     );
   }
   return dayNumber;

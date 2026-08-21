@@ -1,6 +1,29 @@
 import type { ExpressionKind } from './expression/expression.js';
 import type { ExpressionValueType } from './expression/value-type.js';
 
+const programmingFaults = new WeakSet<object>();
+
+function referenceOf(error: unknown): object | undefined {
+  if ((typeof error === 'object' && error !== null) || typeof error === 'function') {
+    return error;
+  }
+  return undefined;
+}
+
+/** Marks a callback failure that diagnostics must leave untouched. */
+export function markAsProgrammingFault(error: unknown): void {
+  const reference = referenceOf(error);
+  if (reference !== undefined) {
+    programmingFaults.add(reference);
+  }
+}
+
+/** Reports whether an error came unchanged from caller-provided code. */
+export function isProgrammingFault(error: unknown): boolean {
+  const reference = referenceOf(error);
+  return reference !== undefined && programmingFaults.has(reference);
+}
+
 /** Base class for all typed Openview errors. */
 export class OpenviewError extends Error {
   constructor(message: string, options?: ErrorOptions | undefined) {
@@ -83,15 +106,37 @@ export class ExpressionEvaluationError extends OpenviewError {
   }
 }
 
+/** Error codes naming why a template could not be brought up to the current schema version. */
+export const TEMPLATE_MIGRATION_ERROR_CODES = [
+  'invalid-template',
+  'missing-schema-version',
+  'newer-schema-version',
+  'missing-migration',
+  'invalid-migration-result',
+] as const;
+
+export type TemplateMigrationErrorCode = (typeof TEMPLATE_MIGRATION_ERROR_CODES)[number];
+
+/**
+ * Source-compatible with `ErrorOptions`, so an existing two-argument call still compiles; a caller
+ * that omits `code` gets `invalid-migration-result`.
+ */
+export interface TemplateMigrationErrorOptions extends ErrorOptions {
+  readonly code?: TemplateMigrationErrorCode | undefined;
+}
+
 /** Error raised when template migration fails. */
 export class TemplateMigrationError extends OpenviewError {
+  readonly code: TemplateMigrationErrorCode;
+
   constructor(
     message: string,
     readonly fromVersion: number,
-    options?: ErrorOptions | undefined,
+    options?: TemplateMigrationErrorOptions | undefined,
   ) {
     super(message, options);
     this.name = 'TemplateMigrationError';
+    this.code = options?.code ?? 'invalid-migration-result';
   }
 }
 

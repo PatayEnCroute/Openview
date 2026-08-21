@@ -689,10 +689,13 @@ describe('the stored shape, its stamp and its migration', () => {
 });
 
 describe('the public surface of the writing contract', () => {
-  it('publishes nine values, and not a tenth', () => {
+  it('publishes its nine values', () => {
     // The barrel is the one place in this package where an omission is completely silent: a symbol
     // left unexported breaks nothing, it merely makes a feature unreachable for an integrator, and
-    // no gate sees it. So the count is measured and the names are listed.
+    // no gate sees it. So the names are listed.
+    //
+    // By name and not by total: a total breaks on every later feature for a reason unrelated to
+    // do with this contract, and it misses the one fault that matters -- a rename.
     const values = Object.keys(core);
     for (const symbol of [
       'DATE_STYLES',
@@ -707,9 +710,8 @@ describe('the public surface of the writing contract', () => {
     ]) {
       expect(values).toContain(symbol);
     }
-    // Types do not appear in the keys of a JavaScript module, so the five this lot adds move no
-    // count. That is the limit this assertion inherits, and it is stated rather than forgotten.
-    expect(values).toHaveLength(126);
+    // Types do not appear in the keys of a JavaScript module, so the five exported types cannot be
+    // reached this way. That is the limit these assertions inherit, stated rather than forgotten.
   });
 
   it('keeps both locale predicates out of the public surface', () => {

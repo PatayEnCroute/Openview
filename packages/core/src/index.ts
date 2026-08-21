@@ -66,12 +66,34 @@ export {
 } from './ast/visitor.js';
 
 export type {
+  ConfigurationDiagnostic,
+  ConfigurationDiagnosticCode,
+  DiagnosticContext,
+  DiagnosticSource,
+  ExpressionEvaluationDiagnostic,
+  OpenviewDiagnostic,
+  PresentationResolutionDiagnostic,
+  TemplateMigrationDiagnostic,
+  TemplateShapeDiagnostic,
+  TemplateValidationCode,
+  TemplateValidationDiagnostic,
+} from './diagnostics/diagnostics.js';
+export {
+  CONFIGURATION_DIAGNOSTIC_CODES,
+  DIAGNOSTIC_SOURCES,
+  diagnosticOfPresentationRefusal,
+  diagnosticsOf,
+  TEMPLATE_VALIDATION_CODES,
+} from './diagnostics/diagnostics.js';
+export type {
   ExpressionErrorCode,
   ExpressionErrorDetails,
   ExpressionErrorSite,
   LimitErrorCode,
   OperandErrorCode,
   ShapeErrorCode,
+  TemplateMigrationErrorCode,
+  TemplateMigrationErrorOptions,
 } from './errors.js';
 export {
   EXPRESSION_ERROR_CODES,
@@ -82,6 +104,7 @@ export {
   OPERAND_ERROR_CODES,
   OpenviewError,
   SHAPE_ERROR_CODES,
+  TEMPLATE_MIGRATION_ERROR_CODES,
   TemplateMigrationError,
   TemplateShapeError,
 } from './errors.js';
@@ -210,6 +233,7 @@ export {
   formatMoney,
   MAX_FRACTION_DIGITS,
   MIN_FRACTION_DIGITS,
+  PRESENTATION_REFUSALS,
   PresentationSchema,
   PresentationTableSchema,
   resolvePresentation,

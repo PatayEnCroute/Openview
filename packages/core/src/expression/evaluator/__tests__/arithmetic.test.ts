@@ -121,7 +121,9 @@ describe('arithmetic', () => {
     });
     // JavaScript would have yielded 2 here. No coercion: the ADR 0001 rule is extended,
     // not eroded.
-    expect(() => compute('mul', path('broken.text'), literal(1))).toThrow(/refuses coercion/);
+    expect(() => compute('mul', path('broken.text'), literal(1))).toThrow(
+      /needs numbers, but the highlighted operand is text/,
+    );
     expect(expectEvaluationError(() => compute('add', literal(true), literal(1))).code).toBe(
       'operand-type',
     );

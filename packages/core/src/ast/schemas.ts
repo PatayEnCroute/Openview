@@ -5,6 +5,7 @@ import {
   PrintableExpressionSchema,
 } from '../expression/expression.js';
 import { BoxStyleSchema, TypographySchema } from '../style/style.js';
+import { COLUMN_WIDTH_TYPE_MESSAGE, KEEP_TOGETHER_VALUE_MESSAGE } from '../validation-messages.js';
 import {
   type BlockNode,
   type DocumentNode,
@@ -22,7 +23,11 @@ const nodeIdSchema = z.string().min(1, 'A node id is required');
  * Accepts `true`, and `undefined` whether written or omitted -- a written `undefined` is kept in
  * memory but drops at serialisation, so `true` and the absent key are the only persisted spellings.
  */
-const keepTogetherField = z.literal(true).optional();
+const keepTogetherField = z
+  .literal(true, {
+    error: KEEP_TOGETHER_VALUE_MESSAGE,
+  })
+  .optional();
 const boxField = BoxStyleSchema.optional();
 const typographyField = TypographySchema.optional();
 
@@ -152,7 +157,7 @@ export const ConditionNodeSchema = z.object({
 export const TableColumnSchema = z.object({
   id: z.string().min(1, 'A table column id is required'),
   width: z
-    .number({ error: 'A column width is a finite whole number of weight units' })
+    .number({ error: COLUMN_WIDTH_TYPE_MESSAGE })
     .int('A column width is a whole number of weight units, not a length')
     .min(MIN_COLUMN_WIDTH, `A column width may not go below ${MIN_COLUMN_WIDTH}`)
     .max(MAX_COLUMN_WIDTH, `A column width may not exceed ${MAX_COLUMN_WIDTH}`),
