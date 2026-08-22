@@ -16,13 +16,15 @@
 
 ## Où on en est
 
-**Le premier document sort.** Le lot **E1 est livré** : un modèle et un jeu de données
-donnent une facture d'une page en PDF, à la feuille déclarée, et le playground permet
-réellement de choisir, puis de télécharger. Le jalon **J2 est atteint**. Le reste de la
-brique — pagination, reports, écritures, déterminisme, corpus figé, durcissement — est
-devant, et E2 démarre sur un pipeline réel plutôt que sur une coquille.
+**Le document se pagine.** Les lots **E1 et E2 sont livrés** : un modèle et un jeu de
+données donnent une facture en PDF à la feuille déclarée, et une facture de soixante
+lignes en sort sur quatre pages, en-tête de colonnes répété et « page n / N » exact. Le
+jalon **J2 est atteint**. Le jalon **J3 ne l'est pas** : reports, blocs insécables
+ordonnés, écritures, déterminisme, corpus figé et durcissement sont devant, et E3 démarre
+sur une pagination explicite et mesurable plutôt que sur un refus mono-page.
 
-Voir l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md) pour ce que le lot a
+Voir l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md) et
+l'[ADR 0013](../adr/0013-le-tableau-deborde-proprement.md) pour ce que les deux lots ont
 tranché, ce que les sondes Chromium ont corrigé et ce qui reste ouvert.
 
 Format retenu pour la première version : **le PDF, et lui seul**. HTML et image
@@ -58,7 +60,11 @@ colonnes**, répéter l'en-tête et le pied de page du modèle, et numéroter
 **Prêt quand** une facture de soixante lignes produit quatre pages lisibles, dont
 aucune ne commence par une ligne orpheline ou un tableau sans en-tête.
 
-**Poids :** L — **Dépend de :** E1
+**Poids :** L — **Dépend de :** E1 —
+**✅ livré le 2026-08-22**, [ADR 0013](../adr/0013-le-tableau-deborde-proprement.md).
+La coupure appartient au moteur : Chromium mesure, il ne pagine pas. Une ligne qu'aucune
+page ne peut contenir se fragmente par flux de cellules, ce qui rend paginable un tableau
+imbriqué. Les veuves, les orphelines typographiques et le report de total restent à E3.
 
 ### E3. Les exigences comptables
 

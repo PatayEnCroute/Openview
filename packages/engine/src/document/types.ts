@@ -1,6 +1,8 @@
 import type {
   BoxStyle,
   Color,
+  PageBandOccurrence,
+  PageField,
   PageMargins,
   PrintableArea,
   Sheet,
@@ -20,13 +22,38 @@ export interface ResolvedTypography {
   readonly color: Color;
 }
 
-/** One inline run: text already produced, typography already complete. */
-export interface MaterialRun {
+/** One inline run of text already produced by data binding. */
+export interface MaterialTextRun {
+  readonly kind: 'text';
   readonly text: string;
   readonly typography: ResolvedTypography;
 }
 
+/**
+ * A page marker that survived data binding unresolved.
+ *
+ * Its value is the rank of the page that ends up holding it, which is not known until the cuts are
+ * chosen, so binding leaves the marker in place and page composition writes the digits.
+ */
+export interface MaterialPageFieldRun {
+  readonly kind: 'pageField';
+  readonly field: PageField;
+  readonly typography: ResolvedTypography;
+}
+
+export type MaterialRun = MaterialTextRun | MaterialPageFieldRun;
+
+/**
+ * An occurrence key: unique inside one render, opaque outside it.
+ *
+ * A declaration id repeats once a loop has run, so it cannot address one measured box. This key
+ * comes from a counter local to the render: it is never stored, never returned to the caller and
+ * never promised stable between two renders.
+ */
+export type OccurrenceKey = string;
+
 interface MaterialBase {
+  readonly key: OccurrenceKey;
   /** Id of the declaration this occurrence came from. Not unique once a loop has repeated it. */
   readonly nodeId: string;
   /**
@@ -57,6 +84,7 @@ export interface MaterialContainer extends MaterialBase {
 
 /** One cell per declared column, in column order. An unfilled column keeps an empty cell. */
 export interface MaterialCell {
+  readonly key: OccurrenceKey;
   readonly columnId: string;
   readonly children: readonly MaterialBlock[];
 }
@@ -80,8 +108,19 @@ export interface MaterialTable extends MaterialBase {
 export type MaterialBlock = MaterialText | MaterialImage | MaterialContainer | MaterialTable;
 
 /**
- * A whole document with no expression left to run: the sheet, its margins, its printable area and
- * the three vertical regions in paint order.
+ * One declared band, bound once, with the page domain that decides where it appears.
+ *
+ * The domain is kept beside the content rather than resolved at binding time: the same band is
+ * painted on several pages, and which pages those are is only known once the cuts exist.
+ */
+export interface MaterialPageBand {
+  readonly on: PageBandOccurrence;
+  readonly content: MaterialContainer;
+}
+
+/**
+ * A whole document with no expression left to run: the sheet, its margins, its printable area, the
+ * bands declared on each side and the root flow.
  *
  * Internal to the engine on purpose. It never enters from outside, is never stored and is never
  * exported as an integration payload, so it carries no Zod schema and no schema version.
@@ -90,7 +129,7 @@ export interface MaterialDocument {
   readonly sheet: Sheet;
   readonly margins: PageMargins;
   readonly printable: PrintableArea;
-  readonly header: readonly MaterialBlock[];
+  readonly headerBands: readonly MaterialPageBand[];
   readonly root: readonly MaterialBlock[];
-  readonly footer: readonly MaterialBlock[];
+  readonly footerBands: readonly MaterialPageBand[];
 }

@@ -1,10 +1,17 @@
+import { createServer } from 'node:http';
 import { inflateSync } from 'node:zlib';
 import { MAX_SHEET_MM, mmFromPt, type Sheet } from '@openview/core';
-import { DocumentRenderError, type PdfSourceDocument } from '@openview/engine';
+import {
+  DocumentRenderError,
+  type PdfLayoutMeasurement,
+  type PdfRenderSession,
+  type PdfSourceDocument,
+} from '@openview/engine';
 import puppeteer from 'puppeteer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHEET_TOLERANCE_PT } from '../capability.js';
-import { createPuppeteerPdfStrategy, PDF_OPTIONS } from '../puppeteer-pdf-strategy.js';
+import { createPuppeteerPdfStrategy } from '../puppeteer-pdf-strategy.js';
+import { PDF_OPTIONS } from '../session.js';
 import {
   CORRUPT_PNG,
   HOST_LAUNCH_OPTIONS,
@@ -12,8 +19,9 @@ import {
   inspectPdf,
   LOGO_PNG,
   pageOf,
-  sourceOf,
+  renderCapturing,
   TINY_PNG,
+  templateOf,
   text,
 } from './fixtures.js';
 
@@ -62,32 +70,72 @@ function paintedColours(bytes: Uint8Array): readonly string[] {
   return [...found];
 }
 
-async function refusalFrom(source: PdfSourceDocument): Promise<DocumentRenderError> {
-  const caught: unknown = await strategy.render(source).catch((error: unknown) => error);
+const sheetOf = (width = 60, height = 60): Sheet => ({ width, height });
+
+function sourceWith(html: string, sheet: Sheet = sheetOf()): PdfSourceDocument {
+  return { html, sheet, images: [] };
+}
+
+/** Opens a session, runs one thing through it, and closes it the way the pipeline does. */
+async function inSession<TResult>(
+  resources: { sheet: Sheet; images: PdfSourceDocument['images'] },
+  run: (session: PdfRenderSession) => Promise<TResult>,
+): Promise<TResult> {
+  const session = await strategy.open(resources);
+  try {
+    return await run(session);
+  } finally {
+    await session.close();
+  }
+}
+
+const measureOnly = async (source: PdfSourceDocument): Promise<PdfLayoutMeasurement> =>
+  await inSession(
+    { sheet: source.sheet, images: source.images },
+    async (session) => await session.measure(source),
+  );
+
+const printOnly = async (source: PdfSourceDocument): Promise<Uint8Array> =>
+  await inSession({ sheet: source.sheet, images: source.images }, async (session) => {
+    await session.measure(source);
+    return await session.print(source);
+  });
+
+async function refusalFrom(run: Promise<unknown>): Promise<DocumentRenderError> {
+  const caught: unknown = await run.catch((error: unknown) => error);
   if (caught instanceof DocumentRenderError) {
     return caught;
   }
   throw new Error(`expected a refusal, got ${String(caught)}`);
 }
 
-function sourceWith(html: string, sheet: Sheet = { width: 60, height: 60 }): PdfSourceDocument {
-  return { html, sheet, images: [] };
+/** A hand-written sequence of sheets, for markup the pipeline would not produce. */
+function rawPages(bodies: readonly string[], sheet = sheetOf()): string {
+  const pages = bodies
+    .map(
+      (body, index) => `<div class="ov-page" data-openview-page="${index + 1}">
+    <div class="ov-printable">
+      <div class="ov-band ov-top" data-openview-region="header"></div>
+      <div class="ov-flow" data-openview-region="root">${body}</div>
+      <div class="ov-band ov-bottom" data-openview-region="footer"></div>
+    </div></div>`,
+    )
+    .join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    @page{size:${sheet.width}mm ${sheet.height}mm;margin:0}
+    html,body{margin:0;padding:0}*{box-sizing:border-box}
+    .ov-page{position:relative;width:${sheet.width}mm;height:${sheet.height}mm;overflow:hidden;break-after:page}
+    .ov-page:last-child{break-after:auto}
+    .ov-printable{position:absolute;top:5mm;left:5mm;width:${sheet.width - 10}mm;height:${sheet.height - 10}mm;display:flex;flex-direction:column}
+    .ov-band{flex:0 0 auto;overflow:hidden;display:flex;flex-direction:column}
+    .ov-flow{flex:1 1 auto;min-height:0}
+    .ov-text{white-space:pre-wrap}
+    .ov-marker{display:inline-block;font-kerning:none;font-variant-ligatures:none;vertical-align:baseline}
+    .ov-image{display:block;width:100%;height:auto}
+  </style></head><body>${pages}</body></html>`;
 }
 
-/** A hand-written page, for a hostile document the pipeline would never produce. */
-function rawPage(body: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-    @page{size:60mm 60mm;margin:0}html,body{margin:0;padding:0}*{box-sizing:border-box}
-    .ov-page{position:relative;width:60mm;height:60mm;overflow:hidden}
-    .ov-printable{position:absolute;top:5mm;left:5mm;width:50mm;height:50mm;display:flex;flex-direction:column}
-    .ov-band{flex:0 0 auto}.ov-flow{flex:1 1 auto;min-height:0}
-    .ov-image{display:block;width:100%;height:auto}
-  </style></head><body><div class="ov-page"><div class="ov-printable">
-    <div class="ov-band" data-openview-region="header"></div>
-    <div class="ov-flow" data-openview-region="root">${body}</div>
-    <div class="ov-band" data-openview-region="footer"></div>
-  </div></div></body></html>`;
-}
+const rawPage = (body: string) => rawPages([body]);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -97,8 +145,8 @@ describe('printing a real document', () => {
   it(
     'produces a readable pdf of exactly one page',
     async () => {
-      const bytes = await strategy.render(
-        await sourceOf({ root: { type: 'container', id: 'root', children: [text('t', 'hello')] } }),
+      const { bytes } = await renderCapturing(
+        templateOf({ root: { type: 'container', id: 'root', children: [text('t', 'hello')] } }),
       );
       expect(Buffer.from(bytes.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
       expect((await inspectPdf(bytes)).pages).toBe(1);
@@ -113,16 +161,14 @@ describe('printing a real document', () => {
   ])(
     'honours %s declared by the template',
     async (_label, width, height) => {
-      const bytes = await strategy.render(
-        await sourceOf({
+      const { bytes } = await renderCapturing(
+        templateOf({
           page: pageOf(width, height),
           root: { type: 'container', id: 'root', children: [text('t', 'x')] },
         }),
       );
       const { pages, sizes } = await inspectPdf(bytes);
       expect(pages).toBe(1);
-      expect(sizes[0]?.width).toBeCloseTo(width * PT_PER_MM, 0);
-      expect(sizes[0]?.height).toBeCloseTo(height * PT_PER_MM, 0);
       expect(Math.abs((sizes[0]?.width ?? 0) - width * PT_PER_MM)).toBeLessThan(SHEET_TOLERANCE_PT);
       expect(Math.abs((sizes[0]?.height ?? 0) - height * PT_PER_MM)).toBeLessThan(
         SHEET_TOLERANCE_PT,
@@ -134,8 +180,8 @@ describe('printing a real document', () => {
   it(
     'prints the declared background rather than the default sheet of the browser',
     async () => {
-      const bytes = await strategy.render(
-        await sourceOf({
+      const { bytes } = await renderCapturing(
+        templateOf({
           page: pageOf(60, 60),
           root: {
             type: 'container',
@@ -168,8 +214,8 @@ describe('printing a real document', () => {
   it(
     'writes no header or footer of the browser, and records the metadata debt it does write',
     async () => {
-      const bytes = await strategy.render(
-        await sourceOf({ root: { type: 'container', id: 'root', children: [text('t', 'body')] } }),
+      const { bytes } = await renderCapturing(
+        templateOf({ root: { type: 'container', id: 'root', children: [text('t', 'body')] } }),
       );
       const raw = Buffer.from(bytes).toString('latin1');
       expect(raw).not.toContain('/Contents (about:blank)');
@@ -186,8 +232,8 @@ describe('printing a real document', () => {
   it(
     'decodes an embedded bitmap and keeps its intrinsic ratio',
     async () => {
-      const bytes = await strategy.render(
-        await sourceOf({
+      const { bytes } = await renderCapturing(
+        templateOf({
           page: pageOf(60, 60),
           root: {
             type: 'container',
@@ -202,10 +248,254 @@ describe('printing a real document', () => {
   );
 });
 
+describe('one explicit box prints as one page', () => {
+  it.each([
+    ['one sheet', 1, 60, 60],
+    ['two sheets', 2, 60, 60],
+    ['four sheets', 4, 210, 297],
+    ['three sheets of a custom size', 3, 123.45, 234.56],
+  ])(
+    'prints %s and adds no blank one after the last',
+    async (_label, count, width, height) => {
+      const sheet = sheetOf(width, height);
+      const bodies = Array.from({ length: count }, (_unused, index) => `<div>page ${index}</div>`);
+      const bytes = await printOnly({ html: rawPages(bodies, sheet), sheet, images: [] });
+      const { pages, sizes } = await inspectPdf(bytes);
+      expect(pages).toBe(count);
+      for (const size of sizes) {
+        expect(Math.abs(size.width - width * PT_PER_MM)).toBeLessThan(SHEET_TOLERANCE_PT);
+        expect(Math.abs(size.height - height * PT_PER_MM)).toBeLessThan(SHEET_TOLERANCE_PT);
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'measures every sheet of the sequence, not only the first',
+    async () => {
+      const sheet = sheetOf(60, 60);
+      const measurement = await measureOnly({
+        html: rawPages(['a', 'b', 'c'], sheet),
+        sheet,
+        images: [],
+      });
+      expect(measurement.pages).toHaveLength(3);
+      for (const page of measurement.pages) {
+        expect(page.page.width).toBeCloseTo(page.printable.width + 10 * (96 / 25.4), 0);
+        expect(page.regions.map((region) => region.region)).toStrictEqual([
+          'header',
+          'root',
+          'footer',
+        ]);
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
+describe('measuring in a session that is reused', () => {
+  it(
+    'returns the same heights for the same content, before and after another document',
+    async () => {
+      const stable = rawPage(
+        '<div data-openview-key="s" data-openview-node="s" class="ov-text">' +
+          '<span data-openview-run="0" style="font-family:sans-serif;font-size:3.5mm">measured twice</span></div>',
+      );
+      const heights = await inSession({ sheet: sheetOf(), images: [] }, async (session) => {
+        const first = await session.measure(sourceWith(stable));
+        await session.measure(sourceWith(rawPage('<div>something else entirely</div>')));
+        const again = await session.measure(sourceWith(stable));
+        return [first, again].map(
+          (measurement) => measurement.boxes.find((box) => box.key === 's')?.height ?? 0,
+        );
+      });
+      expect(heights[0]).toBeGreaterThan(0);
+      expect(Math.abs((heights[0] ?? 0) - (heights[1] ?? 0))).toBeLessThan(0.5);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'answers under exactly the keys the document annotated',
+    async () => {
+      const measurement = await measureOnly(
+        sourceWith(
+          rawPage('<div data-openview-key="a">one</div><div data-openview-key="b">two</div>'),
+        ),
+      );
+      expect(measurement.boxes.map((box) => box.key)).toStrictEqual(['a', 'b']);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses to measure once the session is closed',
+    async () => {
+      const session = await strategy.open({ sheet: sheetOf(), images: [] });
+      await session.close();
+      const refused = await refusalFrom(session.measure(sourceWith(rawPage('x'))));
+      expect(refused.code).toBe('layout-measurement-failed');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
+describe('visual lines come back as reversible cursors', () => {
+  const runsOf = (parts: readonly Part[]): string =>
+    parts
+      .map((part, index) =>
+        part.marker === true
+          ? `<span class="ov-marker" style="font-family:sans-serif;font-size:3.5mm;width:16px" data-openview-run="${index}">00</span>`
+          : `<span style="font-family:sans-serif;font-size:${part.size ?? '3.5mm'}" data-openview-run="${index}">${part.text ?? ''}</span>`,
+      )
+      .join('');
+
+  /** Concatenating the slices between the reported cursors must restore the runs exactly. */
+  const rebuild = (parts: readonly Part[], lines: PdfLayoutMeasurement['lines']): string => {
+    const length = (index: number): number =>
+      parts[index]?.marker === true ? 1 : (parts[index]?.text?.length ?? 0);
+    let from = { run: 0, offset: 0 };
+    let rebuilt = '';
+    for (const line of lines) {
+      for (let index = from.run; index <= line.run; index += 1) {
+        const start = index === from.run ? from.offset : 0;
+        const end = index === line.run ? line.offset : length(index);
+        if (end <= start) {
+          continue;
+        }
+        rebuilt +=
+          parts[index]?.marker === true ? '\u0001' : (parts[index]?.text ?? '').slice(start, end);
+      }
+      from = { run: line.run, offset: line.offset };
+    }
+    return rebuilt;
+  };
+
+  interface Part {
+    readonly text?: string;
+    readonly marker?: boolean;
+    readonly size?: string;
+  }
+
+  const CASES: readonly (readonly [string, readonly Part[], number])[] = [
+    ['one wrapped sentence', [{ text: 'The quick brown fox jumps over the lazy dog again.' }], 2],
+    ['leading and trailing spaces', [{ text: '   padded and trailing spaces follow this    ' }], 2],
+    ['a blank line from two newlines', [{ text: 'first\n\nthird line after a blank one' }], 3],
+    [
+      'a run of another size mid-line',
+      [
+        { text: 'small text then ' },
+        { text: 'BIG TEXT IN THE MIDDLE ', size: '6mm' },
+        { text: 'and small again to the end' },
+      ],
+      3,
+    ],
+    [
+      'combining marks, a surrogate pair and a zwj sequence',
+      [{ text: 'école nai\u0308ve 👩‍💻 with 👨‍👩‍👧 and 🇫🇷 over two lines' }],
+      2,
+    ],
+    [
+      'a marker between two literals',
+      [
+        { text: 'page ' },
+        { marker: true },
+        { text: ' of ' },
+        { marker: true },
+        { text: ' end of a foot long enough to wrap onto a second line' },
+      ],
+      2,
+    ],
+  ] as const;
+
+  it.each(CASES)(
+    'slices %s with nothing lost and nothing repeated',
+    async (_label, parts, expected) => {
+      const sheet = sheetOf(70, 60);
+      const html = rawPages(
+        [
+          `<div class="ov-text" style="padding:2mm 0 3mm 0" data-openview-key="t" data-openview-node="t">${runsOf(parts)}</div>`,
+        ],
+        sheet,
+      );
+      const measurement = await measureOnly(sourceWith(html, sheet));
+      const lines = measurement.lines.filter((line) => line.key === 't');
+      const original = parts
+        .map((part) => (part.marker === true ? '\u0001' : (part.text ?? '')))
+        .join('');
+      expect(rebuild(parts, lines)).toBe(original);
+      expect(lines).toHaveLength(expected);
+      expect(lines.map((line) => line.index)).toStrictEqual(lines.map((_line, index) => index));
+      /* The cursors never go backwards and the heights never shrink, which is what lets one
+         fragment start exactly where the one before it stopped. */
+      for (const [index, line] of lines.entries()) {
+        const previous = lines[index - 1];
+        if (previous === undefined) {
+          continue;
+        }
+        expect(line.height).toBeGreaterThanOrEqual(previous.height);
+        expect(line.run > previous.run || line.offset > previous.offset).toBe(true);
+      }
+      const box = measurement.boxes.find((entry) => entry.key === 't');
+      expect(lines.at(-1)?.height).toBeGreaterThan(0);
+      expect(lines.at(-1)?.height).toBeLessThanOrEqual(box?.height ?? 0);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'reports no line for a block with no run at all',
+    async () => {
+      const measurement = await measureOnly(
+        sourceWith(rawPage('<div class="ov-text" data-openview-key="empty"></div>')),
+      );
+      expect(measurement.lines).toStrictEqual([]);
+      expect(measurement.boxes.map((box) => box.key)).toStrictEqual(['empty']);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
+describe('the reserved width of a page marker', () => {
+  it.each([
+    ['sans-serif', '3.5mm'],
+    ['serif', '2.5mm'],
+  ])(
+    'bounds every value a document could show in %s at %s',
+    async (family, size) => {
+      const digits = Array.from(
+        { length: 10 },
+        (_unused, digit) =>
+          `<span class="ov-marker" style="font-family:${family};font-size:${size}" data-openview-key="d${digit}">${digit}</span>`,
+      ).join('');
+      const measured = await measureOnly(sourceWith(rawPage(digits)));
+      const widest = Math.max(...measured.boxes.map((box) => box.width));
+      expect(widest).toBeGreaterThan(0);
+
+      const reserve = widest * 3;
+      const values = [0, 1, 8, 9, 10, 11, 99, 100, 101, 120];
+      const cells = values
+        .map(
+          (value) =>
+            `<div class="ov-text" data-openview-key="v${value}"><span class="ov-marker" style="font-family:${family};font-size:${size};width:${reserve}px" data-openview-run="0">${value}</span></div>`,
+        )
+        .join('');
+      const shown = await measureOnly(sourceWith(rawPage(cells)));
+      const heights = new Set(shown.boxes.map((box) => Number(box.height.toFixed(2))));
+      /* 9 to 10 and 99 to 100 change the digits and nothing else: same height, same box. */
+      expect(heights.size).toBe(1);
+      for (const box of shown.boxes) {
+        expect(box.width).toBeGreaterThan(0);
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
 describe('capability refusals, raised before a browser exists', () => {
   it('refuses a sheet outside the range it was measured on', async () => {
     const refused = await refusalFrom(
-      sourceWith(rawPage(''), { width: MAX_SHEET_MM + 1, height: 100 }),
+      strategy.open({ sheet: { width: MAX_SHEET_MM + 1, height: 100 }, images: [] }),
     );
     expect(refused.code).toBe('adapter-capability-mismatch');
     expect(refused.details.limit).toBe(MAX_SHEET_MM);
@@ -220,11 +510,12 @@ describe('capability refusals, raised before a browser exists', () => {
     ['svg', 'data:image/svg+xml;base64,PHN2Zy8+'],
     ['an unlisted media type', 'data:image/gif;base64,R0lGODlh'],
   ])('refuses %s without loading anything', async (_label, src) => {
-    const refused = await refusalFrom({
-      html: rawPage(''),
-      sheet: { width: 60, height: 60 },
-      images: [{ nodeId: 'logo', path: ['root', 'children', 0], src }],
-    });
+    const refused = await refusalFrom(
+      strategy.open({
+        sheet: sheetOf(),
+        images: [{ nodeId: 'logo', path: ['root', 'children', 0], src }],
+      }),
+    );
     expect(refused.code).toBe('unsupported-image-source');
     expect(refused.details.nodeId).toBe('logo');
     expect(refused.message).not.toContain(src);
@@ -238,109 +529,64 @@ describe('capability refusals, raised before a browser exists', () => {
         path: [],
         src: `data:image/${type};base64,AAAA`,
       }));
-      /* Reaching the page is the assertion: the sources passed the capability gate. The refusal
-         that follows names the load, not the source. */
-      const refused = await refusalFrom({
-        html: rawPage(
-          `<div data-openview-node="png"><img class="ov-image" src="${CORRUPT_PNG}"></div>`,
-        ),
-        sheet: { width: 60, height: 60 },
-        images: accepted,
+      /* Opening at all is the assertion: the sources passed the capability gate. */
+      await inSession({ sheet: sheetOf(), images: accepted }, async (session) => {
+        const measured = await session.measure({
+          html: rawPage(''),
+          sheet: sheetOf(),
+          images: accepted,
+        });
+        expect(measured.pages).toHaveLength(1);
       });
-      expect(refused.code).toBe('image-load-failed');
     },
     CHROMIUM_TIMEOUT_MS,
   );
 });
 
-describe('refusals measured in the page', () => {
+describe('what the page reports about itself', () => {
   it(
-    'refuses an image that did not decode instead of printing a blank',
+    'reports an image that did not decode instead of leaving it look empty',
     async () => {
-      const refused = await refusalFrom({
+      const measurement = await measureOnly({
         html: rawPage(
           `<div data-openview-node="logo"><img class="ov-image" src="${CORRUPT_PNG}" alt="a logo"></div>`,
         ),
-        sheet: { width: 60, height: 60 },
+        sheet: sheetOf(),
         images: [{ nodeId: 'logo', path: [], src: CORRUPT_PNG }],
       });
-      expect(refused.code).toBe('image-load-failed');
-      expect(refused.details.nodeId).toBe('logo');
+      expect(measurement.images).toHaveLength(1);
+      expect(measurement.images[0]?.decoded).toBe(false);
+      expect(measurement.images[0]?.nodeId).toBe('logo');
     },
     CHROMIUM_TIMEOUT_MS,
   );
 
   it(
-    'refuses an image too tall for any page rather than scaling it',
+    'names a block that paints outside the sheet it belongs to',
     async () => {
-      const refused = await refusalFrom({
-        html: rawPage(
-          `<div data-openview-node="tall" style="width:200mm"><img class="ov-image" src="${TINY_PNG}"></div>`,
-        ),
-        sheet: { width: 60, height: 60 },
-        images: [{ nodeId: 'tall', path: [], src: TINY_PNG }],
-      });
-      expect(refused.code).toBe('oversized-atomic-resource');
-      expect(refused.details.nodeId).toBe('tall');
-    },
-    CHROMIUM_TIMEOUT_MS,
-  );
-
-  it(
-    'refuses a flow that does not fit, with nothing truncated',
-    async () => {
-      const long = Array.from({ length: 200 }, (_unused, index) => `<div>line ${index}</div>`).join(
-        '',
-      );
-      const refused = await refusalFrom(
-        sourceWith(rawPage(`<div data-openview-node="long">${long}</div>`)),
-      );
-      expect(refused.code).toBe('single-page-overflow');
-    },
-    CHROMIUM_TIMEOUT_MS,
-  );
-
-  it(
-    'refuses a band taller on its own than the printable area',
-    async () => {
-      const tall = Array.from({ length: 200 }, () => '<div>band</div>').join('');
-      const html = rawPage('').replace(
-        '<div class="ov-band" data-openview-region="header"></div>',
-        `<div class="ov-band" data-openview-region="header"><div data-openview-node="band">${tall}</div></div>`,
-      );
-      const refused = await refusalFrom(sourceWith(html));
-      expect(refused.code).toBe('single-page-overflow');
-      expect(refused.details.region).toBe('header');
-    },
-    CHROMIUM_TIMEOUT_MS,
-  );
-
-  it(
-    'refuses a block painting outside the sheet',
-    async () => {
-      const refused = await refusalFrom(
+      const measurement = await measureOnly(
         sourceWith(
           rawPage(
             '<div data-openview-node="wide" style="position:absolute;left:80mm;top:0;width:20mm;height:5mm"></div>',
           ),
         ),
       );
-      expect(refused.code).toBe('single-page-overflow');
-      expect(refused.details.nodeId).toBe('wide');
+      expect(measurement.escaping).toStrictEqual(['wide']);
     },
     CHROMIUM_TIMEOUT_MS,
   );
 
   it(
-    'never prints a second page for content that overflows',
+    'reports a region whose content reaches past the height it was given',
     async () => {
-      const long = Array.from({ length: 400 }, (_unused, index) => `<div>row ${index}</div>`).join(
+      const long = Array.from({ length: 60 }, (_unused, index) => `<div>line ${index}</div>`).join(
         '',
       );
-      const refused = await refusalFrom(
-        sourceWith(rawPage(`<div data-openview-node="l">${long}</div>`)),
+      const measurement = await measureOnly(
+        sourceWith(rawPage(`<div data-openview-node="long">${long}</div>`)),
       );
-      expect(refused.code).toBe('single-page-overflow');
+      const root = measurement.pages[0]?.regions.find((region) => region.region === 'root');
+      expect((root?.contentHeight ?? 0) > (root?.height ?? 0)).toBe(true);
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -348,34 +594,103 @@ describe('refusals measured in the page', () => {
 
 describe('the page is inert and offline', () => {
   it(
-    'runs no script the document carries',
+    'runs no script the document carries, on every load of the session',
     async () => {
-      const html = rawPage(
-        '<div data-openview-node="flag" style="width:10mm;height:5mm"></div>' +
-          '<script>document.querySelector(".ov-printable").style.height = "500mm";</script>',
+      const hostile = rawPage(
+        '<div data-openview-node="flag" data-openview-key="flag" style="width:10mm;height:5mm"></div>' +
+          '<script>document.querySelector("[data-openview-key=flag]").style.height = "50mm";</script>',
       );
-      /* If the script had run, the printable box would have overflowed the sheet and the render
-         would have been refused. */
-      const bytes = await strategy.render(sourceWith(html));
-      expect((await inspectPdf(bytes)).pages).toBe(1);
+      const heights = await inSession({ sheet: sheetOf(), images: [] }, async (session) => {
+        const first = await session.measure(sourceWith(hostile));
+        await session.measure(sourceWith(rawPage('<div>a different document</div>')));
+        const again = await session.measure(sourceWith(hostile));
+        return [first, again].map(
+          (measurement) => measurement.boxes.find((box) => box.key === 'flag')?.height ?? 0,
+        );
+      });
+      /* 5mm is 18.9 px; had the script run it would read 189. */
+      for (const height of heights) {
+        expect(height).toBeLessThan(30);
+      }
     },
     CHROMIUM_TIMEOUT_MS,
   );
 
   it(
-    'aborts a request a secondary resource tries to make',
+    'aborts a request to a host that is up, on every load of the session',
     async () => {
-      const html = rawPage(
-        '<div data-openview-node="i"><img class="ov-image" src="http://169.254.169.254/latest/meta-data"></div>',
-      );
-      const refused = await refusalFrom({
-        html,
-        sheet: { width: 60, height: 60 },
-        images: [],
+      /* A reachable origin, so a failed decode really means the request was stopped rather than
+         that the address happened to be dead. The server counts what reached it: nothing. */
+      const bitmap = Buffer.from(TINY_PNG.split(',')[1] ?? '', 'base64');
+      const reached: string[] = [];
+      const server = createServer((request, response) => {
+        reached.push(request.url ?? '');
+        response.writeHead(200, { 'content-type': 'image/png' });
+        response.end(bitmap);
       });
-      /* The request was aborted, so the image never decoded. That refusal IS the proof it did not
-         travel: a reachable resource would have printed. */
-      expect(refused.code).toBe('image-load-failed');
+      await new Promise<void>((resolve) => {
+        server.listen(0, '127.0.0.1', resolve);
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address !== null ? address.port : 0;
+      try {
+        expect(port).toBeGreaterThan(0);
+        /* The same server, reached directly, does answer: the fixture is not a dead address. */
+        expect((await fetch(`http://127.0.0.1:${port}/probe.png`)).status).toBe(200);
+        expect(reached).toStrictEqual(['/probe.png']);
+
+        const html = rawPage(
+          `<div data-openview-node="i"><img class="ov-image" src="http://127.0.0.1:${port}/logo.png"></div>`,
+        );
+        const decoded = await inSession({ sheet: sheetOf(), images: [] }, async (session) => {
+          const first = await session.measure(sourceWith(html));
+          await session.measure(sourceWith(rawPage('<div>elsewhere</div>')));
+          const again = await session.measure(sourceWith(html));
+          return [first, again].map((measurement) => measurement.images[0]?.decoded);
+        });
+        expect(decoded).toStrictEqual([false, false]);
+        /* Nothing but the direct probe ever reached the server, on either load. */
+        expect(reached).toStrictEqual(['/probe.png']);
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => {
+            resolve();
+          });
+        });
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'lets an embedded bitmap through, so the refusal above is a policy and not a failure',
+    async () => {
+      const measurement = await measureOnly({
+        html: rawPage(`<div data-openview-node="i"><img class="ov-image" src="${TINY_PNG}"></div>`),
+        sheet: sheetOf(),
+        images: [{ nodeId: 'i', path: [], src: TINY_PNG }],
+      });
+      expect(measurement.images[0]?.decoded).toBe(true);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses an image source the document smuggled past the resources it opened on',
+    async () => {
+      const refused = await refusalFrom(
+        inSession(
+          { sheet: sheetOf(), images: [] },
+          async (session) =>
+            await session.measure({
+              html: rawPage(''),
+              sheet: sheetOf(),
+              images: [{ nodeId: 'late', path: [], src: 'http://example.test/late.png' }],
+            }),
+        ),
+      );
+      expect(refused.code).toBe('unsupported-image-source');
+      expect(refused.details.nodeId).toBe('late');
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -383,7 +698,7 @@ describe('the page is inert and offline', () => {
 
 describe('resource lifetime', () => {
   it(
-    'closes the browser after a successful render',
+    'launches one browser for a whole render and closes it afterwards',
     async () => {
       const launched: { connected: boolean }[] = [];
       const seen: (readonly string[] | undefined)[] = [];
@@ -394,9 +709,11 @@ describe('resource lifetime', () => {
         launched.push(browser);
         return browser;
       });
-      await strategy.render(
-        await sourceOf({ root: { type: 'container', id: 'root', children: [text('t', 'x')] } }),
+      const { measured } = await renderCapturing(
+        templateOf({ root: { type: 'container', id: 'root', children: [text('t', 'x')] } }),
       );
+      /* Several measurements, one browser: the cuts and the print share one set of fonts. */
+      expect(measured.length).toBeGreaterThan(1);
       expect(launched).toHaveLength(1);
       expect(launched[0]?.connected).toBe(false);
       /* The launch arguments the caller asked for reach the browser, and the ones it did not ask
@@ -413,7 +730,7 @@ describe('resource lifetime', () => {
       return Promise.reject(new Error('this launch is observed, not performed'));
     });
     await createPuppeteerPdfStrategy()
-      .render(sourceWith(rawPage('')))
+      .open({ sheet: sheetOf(), images: [] })
       .catch(() => undefined);
     /* Exactly this, and nothing more: no `args`, so Chromium keeps its own sandbox, and no
        `executablePath`, so it keeps the build the install pinned. Dropping the sandbox is a
@@ -422,7 +739,7 @@ describe('resource lifetime', () => {
   });
 
   it(
-    'closes the browser after a refusal measured in the page',
+    'closes the browser after a refusal raised mid-render',
     async () => {
       const launched: { connected: boolean }[] = [];
       const launch = puppeteer.launch.bind(puppeteer);
@@ -432,10 +749,15 @@ describe('resource lifetime', () => {
         return browser;
       });
       await refusalFrom(
-        sourceWith(
-          rawPage(
-            `<div data-openview-node="tall" style="width:200mm"><img class="ov-image" src="${TINY_PNG}"></div>`,
-          ),
+        renderCapturing(
+          templateOf({
+            page: pageOf(60, 60),
+            root: {
+              type: 'container',
+              id: 'root',
+              children: [{ type: 'image', id: 'tall', src: CORRUPT_PNG }],
+            },
+          }),
         ),
       );
       expect(launched[0]?.connected).toBe(false);
@@ -445,11 +767,12 @@ describe('resource lifetime', () => {
 
   it('launches no browser at all when a capability refuses first', async () => {
     const spy = vi.spyOn(puppeteer, 'launch');
-    await refusalFrom({
-      html: rawPage(''),
-      sheet: { width: 60, height: 60 },
-      images: [{ nodeId: 'logo', path: [], src: 'http://example.test/a.png' }],
-    });
+    await refusalFrom(
+      strategy.open({
+        sheet: sheetOf(),
+        images: [{ nodeId: 'logo', path: [], src: 'http://example.test/a.png' }],
+      }),
+    );
     expect(spy).not.toHaveBeenCalled();
   });
 });
@@ -459,4 +782,27 @@ describe('unit conversion', () => {
     expect(mmFromPt(72)).toBeCloseTo(25.4, 12);
     expect(SHEET_TOLERANCE_PT).toBeGreaterThan(0.24);
   });
+
+  it(
+    'refuses an image too tall for the flow rather than scaling it',
+    async () => {
+      /* 120x40 across a 56 mm content width is 18.7 mm tall, on a flow 16 mm high. An image is
+         atomic: no page can hold it, and it is neither cut nor scaled down to fit. */
+      const refused = await refusalFrom(
+        renderCapturing(
+          templateOf({
+            page: pageOf(60, 20, 2),
+            root: {
+              type: 'container',
+              id: 'root',
+              children: [{ type: 'image', id: 'tall', src: LOGO_PNG, alt: 'a wide mark' }],
+            },
+          }),
+        ),
+      );
+      expect(refused.code).toBe('oversized-atomic-resource');
+      expect(refused.details.nodeId).toBe('tall');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
 });

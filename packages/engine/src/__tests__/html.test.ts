@@ -6,16 +6,19 @@ import {
   STANDARD_SHEETS_MM,
 } from '@openview/core';
 import { describe, expect, it } from 'vitest';
-import { materializeDocument } from '../document/materialize.js';
-import { buildHtmlTree } from '../html/build.js';
 import { columnWidths, documentCss } from '../html/css.js';
 import { cssFontFamily, cssString, escapeAttribute, escapeText } from '../html/escape.js';
-import { CONTENT_SECURITY_POLICY, serializeHtml } from '../html/serialize.js';
+import { CONTENT_SECURITY_POLICY } from '../html/serialize.js';
 import { resolveRowRules } from '../html/table-rules.js';
-import { SAMPLE_DATA, TINY_PNG, templateOf } from './fixtures.js';
+import { materializedOf, pagedHtmlOf, SAMPLE_DATA, TINY_PNG } from './fixtures.js';
 
 function htmlOf(overrides: Record<string, unknown>, data: EvaluationScope = SAMPLE_DATA): string {
-  return serializeHtml(buildHtmlTree(materializeDocument(templateOf(overrides), data)));
+  return pagedHtmlOf(overrides, data);
+}
+
+/** The stylesheet of the printed document, with no band reserved on either side. */
+function cssOf(overrides: Record<string, unknown> = {}): string {
+  return documentCss({ ...materializedOf(overrides, {}), headerReserve: 0, footerReserve: 0 });
 }
 
 const flow = (children: readonly Record<string, unknown>[]): Record<string, unknown> => ({
@@ -134,7 +137,7 @@ describe('the sheet and its printable area', () => {
       header: [],
       footer: [],
     };
-    const css = documentCss(materializeDocument(templateOf({ page }), {}));
+    const css = cssOf({ page });
     const printable = printableAreaOf(page);
     expect(css).toContain('@page{size:215.9mm 279.4mm;margin:0}');
     expect(css).toContain(`width:${printable.width}mm;height:${printable.height}mm`);
@@ -142,19 +145,14 @@ describe('the sheet and its printable area', () => {
   });
 
   it('declares no sheet of its own', () => {
-    const css = documentCss(
-      materializeDocument(
-        templateOf({
-          page: {
-            sheet: { width: 100, height: 100 },
-            margins: { top: 0, right: 0, bottom: 0, left: 0 },
-            header: [],
-            footer: [],
-          },
-        }),
-        {},
-      ),
-    );
+    const css = cssOf({
+      page: {
+        sheet: { width: 100, height: 100 },
+        margins: { top: 0, right: 0, bottom: 0, left: 0 },
+        header: [],
+        footer: [],
+      },
+    });
     expect(css).toContain('size:100mm 100mm');
     expect(css).not.toContain('210mm');
     expect(css).not.toContain('a4');
@@ -168,7 +166,7 @@ describe('the sheet and its printable area', () => {
   });
 
   it('forces exact print colours and leaves no browser margin', () => {
-    const css = documentCss(materializeDocument(templateOf(), {}));
+    const css = cssOf();
     expect(css).toContain('print-color-adjust:exact');
     expect(css).toContain('-webkit-print-color-adjust:exact');
     expect(css).toContain('html,body{margin:0;padding:0}');
@@ -279,7 +277,7 @@ describe('the box model', () => {
   });
 
   it('gives an image the full width of its parent and an automatic height', () => {
-    const css = documentCss(materializeDocument(templateOf(), {}));
+    const css = cssOf();
     expect(css).toContain('.ov-image{display:block;width:100%;height:auto}');
     const html = htmlOf(flow([{ type: 'image', id: 'i', src: TINY_PNG }]));
     expect(html).toContain(`<img class="ov-image" src="${TINY_PNG}">`);
@@ -410,8 +408,8 @@ describe('adjacent table rules', () => {
 
 describe('serialisation', () => {
   it('produces the same bytes twice for the same materialised document', () => {
-    const document = materializeDocument(templateOf(flow([literal('t', 'x')])), {});
-    expect(serializeHtml(buildHtmlTree(document))).toBe(serializeHtml(buildHtmlTree(document)));
+    const overrides = flow([literal('t', 'x')]);
+    expect(pagedHtmlOf(overrides, {})).toBe(pagedHtmlOf(overrides, {}));
   });
 
   it('writes attributes in a fixed order regardless of the construction site', () => {

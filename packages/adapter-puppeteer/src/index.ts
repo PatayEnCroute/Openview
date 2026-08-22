@@ -10,3 +10,5 @@ export { HONOURED_SHEET_MM, SHEET_TOLERANCE_PT } from './capability.js';
 export { ACCEPTED_IMAGE_PREFIXES } from './image-source.js';
 export type { PuppeteerPdfStrategyOptions } from './puppeteer-pdf-strategy.js';
 export { createPuppeteerPdfStrategy } from './puppeteer-pdf-strategy.js';
+export type { PuppeteerLaunchOptions } from './session.js';
+export { PDF_OPTIONS } from './session.js';

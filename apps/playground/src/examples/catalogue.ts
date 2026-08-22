@@ -5,6 +5,7 @@ import {
   factureVariante,
   renderData,
   renderDataCourt,
+  renderDataLong,
   sampleTemplate,
 } from './reference-invoice.js';
 
@@ -38,6 +39,11 @@ export const DATASETS: readonly CatalogueEntry<EvaluationScope>[] = [
     id: 'une-ligne',
     label: 'Une ligne, aucune remise, libellés en anglais',
     payload: renderDataCourt,
+  },
+  {
+    id: 'soixante-lignes',
+    label: 'Soixante lignes : le document sort paginé',
+    payload: renderDataLong,
   },
 ];
 

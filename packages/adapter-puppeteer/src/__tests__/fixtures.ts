@@ -3,8 +3,15 @@ import {
   type EvaluationScope,
   parseTemplate,
   STANDARD_SHEETS_MM,
+  type Template,
 } from '@openview/core';
-import { createPdfRenderPort, type PdfSourceDocument } from '@openview/engine';
+import {
+  createPdfRenderPort,
+  type PdfLayoutMeasurement,
+  type PdfRenderSession,
+  type PdfRenderStrategy,
+  type PdfSourceDocument,
+} from '@openview/engine';
 import { PDFDocument } from 'pdf-lib';
 import {
   createPuppeteerPdfStrategy,
@@ -51,41 +58,61 @@ const A4_PAGE = {
   footer: [],
 };
 
+/** A template built from the same overrides the engine fixtures use. */
+export function templateOf(overrides: Record<string, unknown> = {}): Template {
+  return parseTemplate({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    id: 'tpl_adapter',
+    name: 'Adapter fixture',
+    version: '1.0.0',
+    page: A4_PAGE,
+    root: { type: 'container', id: 'root', children: [] },
+    ...overrides,
+  });
+}
+
+/** What one render through a real browser produced, and what was handed to the printer. */
+export interface CapturedRender {
+  readonly bytes: Uint8Array;
+  readonly printed: PdfSourceDocument;
+  readonly measured: readonly PdfSourceDocument[];
+}
+
 /**
- * Builds the source document the strategy will receive, through the engine's public port.
+ * Renders through Chromium and keeps what the printer was handed.
  *
- * The html therefore is the html the pipeline really produces, rather than a hand-written page that
- * would prove the adapter works on markup nothing generates.
+ * The html is therefore the html the pipeline really produced after measuring in that same browser,
+ * rather than a hand-written page nothing generates.
  */
-export async function sourceOf(
-  overrides: Record<string, unknown> = {},
+export async function renderCapturing(
+  template: Template,
   data: EvaluationScope = {},
-): Promise<PdfSourceDocument> {
-  const calls: PdfSourceDocument[] = [];
-  const port = createPdfRenderPort({
+): Promise<CapturedRender> {
+  const inner = hostStrategy();
+  const measured: PdfSourceDocument[] = [];
+  let printed: PdfSourceDocument | undefined;
+  const strategy: PdfRenderStrategy = {
     format: 'pdf',
-    render(source: PdfSourceDocument): Promise<Uint8Array> {
-      calls.push(source);
-      return Promise.resolve(new Uint8Array());
+    async open(resources): Promise<PdfRenderSession> {
+      const session = await inner.open(resources);
+      return {
+        async measure(source: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
+          measured.push(source);
+          return await session.measure(source);
+        },
+        async print(source: PdfSourceDocument): Promise<Uint8Array> {
+          printed = source;
+          return await session.print(source);
+        },
+        close: () => session.close(),
+      };
     },
-  });
-  await port.render({
-    template: parseTemplate({
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      id: 'tpl_adapter',
-      name: 'Adapter fixture',
-      version: '1.0.0',
-      page: A4_PAGE,
-      root: { type: 'container', id: 'root', children: [] },
-      ...overrides,
-    }),
-    data,
-  });
-  const [source] = calls;
-  if (source === undefined) {
-    throw new Error('the pipeline produced no source document');
+  };
+  const result = await createPdfRenderPort(strategy).render({ template, data });
+  if (printed === undefined) {
+    throw new Error('the pipeline printed nothing');
   }
-  return source;
+  return { bytes: result.bytes, printed, measured };
 }
 
 /** A page setup with a declared sheet and no band. */

@@ -462,3 +462,44 @@ export const DATASETS = [
   { name: 'three rows', data: THREE_ROWS },
   { name: 'one row', data: ONE_ROW },
 ] as const;
+
+/**
+ * What each of the sixty lines is for, cycled so the recette reads like a document rather than a
+ * loop counter. The wording is this fixture's own, like every other name it uses.
+ */
+const WORK = [
+  'Measured survey of the north elevation and of its two return walls',
+  'Removal of the failed pointing between courses four and eleven, by hand',
+  'Repointing in a lime mortar matched to the original, struck flush',
+  'Supply and fitting of a lead saddle over the string course',
+  'Easing the two casement windows upstairs, with new brass fasteners',
+  'Taking down the loose chimney stack and setting the sound bricks aside',
+];
+
+/** Sixty rows, priced so that no two lines carry the same figures. */
+const sixtyRows = (): readonly Record<string, unknown>[] =>
+  Array.from({ length: 60 }, (_unused, index) => ({
+    sku: `${String(index + 1).padStart(3, '0')} - ${WORK[index % WORK.length] ?? ''}`,
+    units: 1 + (index % 4),
+    rate: 12.5 + (index % 7) * 3.25,
+    reduction: index % 5 === 0 ? 2 + (index % 3) : 0,
+  }));
+
+/**
+ * The acceptance dataset of the paginated recette: sixty lines on the same A4 model.
+ *
+ * Nothing about the number sixty is known to the engine or to this adapter. The lines are host data
+ * under this fixture's own key, and four sheets is what the measured flow happens to need.
+ */
+export const SIXTY_ROWS: EvaluationScope = {
+  render: { wording: 'long' },
+  order: {
+    reference: 20_260_016,
+    holder: 'longacre works',
+    issuedOn: '2026-03-02',
+    termDays: 60,
+    reductionRate: 7.5,
+    rows: sixtyRows(),
+  },
+  issuer: { notice: 'Retention of five per cent is released on practical completion.' },
+};

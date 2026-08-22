@@ -6,8 +6,9 @@ import {
   type TableColumn,
 } from '@openview/core';
 import { describe, expect, it } from 'vitest';
-import { bandOfTheOnlyPage } from '../document/bands.js';
+import { bandForRole, reachableOccurrences } from '../document/bands.js';
 import {
+  createKeySource,
   materializeBodyEntry,
   materializeDocument,
   materializeNode,
@@ -16,16 +17,30 @@ import { printableText } from '../document/printable.js';
 import type { MaterialBlock, MaterialTable, MaterialText } from '../document/types.js';
 import { DEFAULT_TYPOGRAPHY, resolveRunTypography } from '../document/typography.js';
 import { DocumentRenderError } from '../errors.js';
-import { SAMPLE_DATA, TINY_PNG, templateOf } from './fixtures.js';
+import { materializedOf, SAMPLE_DATA, TINY_PNG, templateOf } from './fixtures.js';
 
 const flow = (children: readonly Record<string, unknown>[]): Record<string, unknown> => ({
   root: { type: 'container', id: 'root', children },
 });
 
+/** The band domains a one-page document reaches, which is where binding always starts. */
+const ONE_PAGE = reachableOccurrences(1);
+
+/** Stands in for a band a test expects to exist, so a missing one fails on the text it printed. */
+const PLACEHOLDER: MaterialBlock = {
+  kind: 'text',
+  key: 'absent',
+  nodeId: 'absent',
+  path: [],
+  box: undefined,
+  keepTogether: false,
+  align: 'start',
+  runs: [],
+};
+
 /** The single materialised root container, which is what the root region always holds. */
 function rootBlocks(overrides: Record<string, unknown>, data: EvaluationScope = SAMPLE_DATA) {
-  const document = materializeDocument(templateOf(overrides), data);
-  const [container] = document.root;
+  const [container] = materializedOf(overrides, data).root;
   if (container?.kind !== 'container') {
     throw new Error('the root region is not a container');
   }
@@ -52,7 +67,9 @@ function refusalFrom(run: () => unknown): DocumentRenderError {
   throw new Error('the document was accepted');
 }
 
-const joined = (block: MaterialText): string => block.runs.map((run) => run.text).join('');
+/** What a text block would print, with a marker written as the field it names. */
+const joined = (block: MaterialText): string =>
+  block.runs.map((run) => (run.kind === 'text' ? run.text : `<${run.field}>`)).join('');
 
 describe('materialised document', () => {
   it('carries the declared sheet, margins and the printable area of core', () => {
@@ -65,17 +82,15 @@ describe('materialised document', () => {
       header: [],
       footer: [],
     };
-    const document = materializeDocument(templateOf({ page }), {});
+    const document = materializedOf({ page }, {});
     expect(document.sheet).toStrictEqual(page.sheet);
     expect(document.margins).toStrictEqual(page.margins);
     expect(document.printable).toStrictEqual(printableAreaOf(page));
   });
 
   it('keeps the root container so its own box still paints', () => {
-    const document = materializeDocument(
-      templateOf({
-        root: { type: 'container', id: 'root', box: { background: '#ffffff' }, children: [] },
-      }),
+    const document = materializedOf(
+      { root: { type: 'container', id: 'root', box: { background: '#ffffff' }, children: [] } },
       {},
     );
     expect(document.root).toHaveLength(1);
@@ -97,49 +112,49 @@ describe('single-page bands', () => {
     ['every', true],
     ['firstOnly', true],
     ['lastOnly', true],
-  ])('applies %s to the only page', (on, applies) => {
-    const document = materializeDocument(
-      templateOf({
+  ])('binds %s for the only page', (on, applies) => {
+    const document = materializedOf(
+      {
         page: {
           sheet: { ...STANDARD_SHEETS_MM.a4 },
           margins: { top: 10, right: 10, bottom: 10, left: 10 },
           header: [band(on, 'head')],
           footer: [],
         },
-      }),
+      },
       {},
     );
-    expect(document.header.length > 0).toBe(applies);
+    expect(document.headerBands.length > 0).toBe(applies);
   });
 
-  it.each([['exceptFirst'], ['exceptLast']])('does not apply %s to the only page', (on) => {
-    const document = materializeDocument(
-      templateOf({
+  it.each([['exceptFirst'], ['exceptLast']])('leaves %s unbound for the only page', (on) => {
+    const document = materializedOf(
+      {
         page: {
           sheet: { ...STANDARD_SHEETS_MM.a4 },
           margins: { top: 10, right: 10, bottom: 10, left: 10 },
           header: [],
           footer: [band(on, 'foot')],
         },
-      }),
+      },
       {},
     );
-    expect(document.footer).toStrictEqual([]);
+    expect(document.footerBands).toStrictEqual([]);
   });
 
   it('selects nothing from an empty side', () => {
-    expect(bandOfTheOnlyPage([])).toBeUndefined();
+    expect(bandForRole([], 'only')).toBeUndefined();
   });
 
-  it('renders both page markers as 1, in every region', () => {
+  it('keeps both page markers unresolved, in every region', () => {
     const markers = [
       { kind: 'literal', text: 'p ' },
       { kind: 'pageField', field: 'number' },
       { kind: 'literal', text: '/' },
       { kind: 'pageField', field: 'count' },
     ];
-    const document = materializeDocument(
-      templateOf({
+    const document = materializedOf(
+      {
         page: {
           sheet: { ...STANDARD_SHEETS_MM.a4 },
           margins: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -165,7 +180,7 @@ describe('single-page bands', () => {
           ],
         },
         ...flow([{ type: 'text', id: 'rt', content: markers }]),
-      }),
+      },
       {},
     );
     const regionText = (blocks: readonly MaterialBlock[]) => {
@@ -175,9 +190,14 @@ describe('single-page bands', () => {
       }
       return joined(textAt(container.children, 0));
     };
-    expect(regionText(document.header)).toBe('p 1/1');
-    expect(regionText(document.root)).toBe('p 1/1');
-    expect(regionText(document.footer)).toBe('p 1/1');
+    /* No digit anywhere: which page holds a marker is not known before the cuts exist. */
+    expect(regionText([document.headerBands[0]?.content ?? PLACEHOLDER])).toBe(
+      'p <number>/<count>',
+    );
+    expect(regionText(document.root)).toBe('p <number>/<count>');
+    expect(regionText([document.footerBands[0]?.content ?? PLACEHOLDER])).toBe(
+      'p <number>/<count>',
+    );
   });
 });
 
@@ -200,10 +220,10 @@ describe('one budget for the whole document', () => {
     const overrides = { page, ...flow([binding('rb')]) };
     /* Three bindings, one step each: two are affordable and the third is not. */
     expect(() =>
-      materializeDocument(templateOf(overrides), SAMPLE_DATA, { maxSteps: 3 }),
+      materializeDocument(templateOf(overrides), SAMPLE_DATA, ONE_PAGE, { maxSteps: 3 }),
     ).not.toThrow();
     const refused = refusalFrom(() =>
-      materializeDocument(templateOf(overrides), SAMPLE_DATA, { maxSteps: 2 }),
+      materializeDocument(templateOf(overrides), SAMPLE_DATA, ONE_PAGE, { maxSteps: 2 }),
     );
     expect(refused.code).toBe('expression-refused');
     expect(refused.details.region).toBe('footer');
@@ -271,20 +291,18 @@ describe('the printing policy of a visible binding', () => {
 
   it('points at the exact segment that failed', () => {
     const refused = refusalFrom(() =>
-      materializeDocument(
-        templateOf(
-          flow([
-            {
-              type: 'text',
-              id: 'mixed',
-              content: [
-                { kind: 'literal', text: 'ok ' },
-                { kind: 'binding', value: { kind: 'path', path: 'sample.label' } },
-                { kind: 'binding', value: { kind: 'path', path: 'sample.missingField' } },
-              ],
-            },
-          ]),
-        ),
+      materializedOf(
+        flow([
+          {
+            type: 'text',
+            id: 'mixed',
+            content: [
+              { kind: 'literal', text: 'ok ' },
+              { kind: 'binding', value: { kind: 'path', path: 'sample.label' } },
+              { kind: 'binding', value: { kind: 'path', path: 'sample.missingField' } },
+            ],
+          },
+        ]),
         SAMPLE_DATA,
       ),
     );
@@ -308,7 +326,7 @@ describe('the printing policy of a visible binding', () => {
         },
       ]),
     );
-    expect(joined(textAt(blocks, 0))).toBe('aacme1z');
+    expect(joined(textAt(blocks, 0))).toBe('aacme<number>z');
   });
 });
 
@@ -703,7 +721,7 @@ describe('tables', () => {
   it('does not mutate the declared template or its column array', () => {
     const template = templateOf(flow([table]));
     const before = structuredClone(template);
-    materializeDocument(template, SAMPLE_DATA);
+    materializeDocument(template, SAMPLE_DATA, ONE_PAGE);
     expect(template).toStrictEqual(before);
   });
 });
@@ -712,6 +730,7 @@ describe('exhaustive traversal', () => {
   const context = {
     scope: {},
     budget: createBudget(),
+    keys: createKeySource(),
     region: 'root' as const,
     column: undefined,
     path: [] as readonly (string | number)[],

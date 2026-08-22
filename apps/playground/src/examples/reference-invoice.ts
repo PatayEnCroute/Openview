@@ -749,3 +749,44 @@ export const renderDataCourt = {
   traitement: { effectueLe: '2026-04-02' },
   societe: { mentionsLegales: 'Règlement intégral attendu à l’échéance.' },
 };
+
+/** Ce que chaque ligne longue désigne, cyclé pour que la recette se lise comme un document. */
+const TRAVAUX = [
+  'Relevé mesuré de la façade nord et de ses deux retours',
+  'Dépose du rejointoiement défaillant des rangs quatre à onze',
+  'Rejointoiement au mortier de chaux assorti à l’original',
+  'Fourniture et pose d’une bavette plomb sur le bandeau',
+  'Réglage des deux fenêtres à battants de l’étage',
+  'Démontage de la souche instable et tri des briques saines',
+];
+
+/**
+ * Un TROISIÈME jeu de données, long : soixante lignes sous les mêmes clés.
+ *
+ * Rien du nombre soixante n'est connu du moteur ni de l'adaptateur. Le nombre de feuilles est
+ * celui que le flux mesuré demande, et il se voit dans le pied « page n / N ».
+ */
+export const renderDataLong = {
+  rendu: { langue: 'fr' },
+  commande: {
+    numero: 20_260_016,
+    client: 'longacre travaux',
+    dateEmission: '2026-03-02',
+    delaiPaiement: 60,
+    tauxRemise: 7.5,
+    lignes: Array.from({ length: 60 }, (_inutilise, index) => ({
+      sku: `${String(index + 1).padStart(3, '0')} - ${TRAVAUX[index % TRAVAUX.length] ?? ''}`,
+      quantite: 1 + (index % 4),
+      prixUnitaire: 12.5 + (index % 7) * 3.25,
+      discount: index % 5 === 0 ? 2 + (index % 3) : 0,
+    })),
+  },
+  arrondi: {
+    lignes: [
+      { sku: 'A-1', quantite: 2, prixUnitaire: 10 },
+      { sku: 'D-4', quantite: 17, prixUnitaire: 0.125 },
+    ],
+  },
+  traitement: { effectueLe: '2026-03-11' },
+  societe: { mentionsLegales: 'Retenue de garantie de cinq pour cent libérée à la réception.' },
+};

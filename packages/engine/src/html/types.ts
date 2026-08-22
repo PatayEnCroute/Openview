@@ -32,8 +32,14 @@ export interface HtmlAttributes {
   readonly alt?: string | undefined;
   /** Declaration id, for measurement selectors and for pointing a refusal at a node. */
   readonly 'data-openview-node'?: string | undefined;
+  /** Occurrence key, which is what a measurement answer is filed under. */
+  readonly 'data-openview-key'?: string | undefined;
+  /** Rank of a run inside its text block, so a line end can be read back as a cursor. */
+  readonly 'data-openview-run'?: string | undefined;
   /** Which of the three vertical regions a box belongs to. */
   readonly 'data-openview-region'?: string | undefined;
+  /** One-based rank of a page, chosen by the engine and never read from the data. */
+  readonly 'data-openview-page'?: string | undefined;
 }
 
 export interface HtmlElement {

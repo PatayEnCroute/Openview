@@ -34,7 +34,10 @@ const ATTRIBUTE_ORDER = [
   'src',
   'alt',
   'data-openview-node',
+  'data-openview-key',
+  'data-openview-run',
   'data-openview-region',
+  'data-openview-page',
 ] as const;
 
 function serializeElement(node: HtmlElement): string {

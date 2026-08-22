@@ -43,8 +43,12 @@ function collect(blocks: readonly MaterialBlock[], into: DocumentImage[]): void 
  */
 export function documentImages(document: MaterialDocument): readonly DocumentImage[] {
   const found: DocumentImage[] = [];
-  collect(document.header, found);
+  for (const band of document.headerBands) {
+    collect([band.content], found);
+  }
   collect(document.root, found);
-  collect(document.footer, found);
+  for (const band of document.footerBands) {
+    collect([band.content], found);
+  }
   return found;
 }
