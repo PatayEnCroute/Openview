@@ -1,6 +1,16 @@
 # Plan d'implémentation — `@openview/engine` lot E2 : le tableau déborde proprement
 
-> **Statut :** prêt à exécuter, non livré.
+> ## ⚠️ PÉRIMÉ — le lot est livré
+>
+> **Ce document ne fait plus foi.** L'[ADR 0013](../adr/0013-le-tableau-deborde-proprement.md)
+> le remplace : elle enregistre ce qui a été construit, les résultats des sept sondes Chromium et
+> les **cinq points sur lesquels l'exécution corrige ce plan** — notamment l'algorithme de curseurs
+> de lignes, que la sonde P3 a contredit, et la forme de `PdfLayoutMeasurement`. Lisez l'ADR, pas ce
+> plan.
+>
+> Conservé tel quel comme trace de la décision d'exécution.
+>
+> **Statut :** livré le 2026-08-22.
 >
 > **Baseline relevée le 2026-08-21 :** E1 est livré et fait foi par l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md).
 > `@openview/engine` valide, matérialise, construit un HTML fermé et délègue l'impression à

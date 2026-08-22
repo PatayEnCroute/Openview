@@ -12,7 +12,7 @@ import {
   type ImageNode,
   type LoopNode,
   type PageBand,
-  type PageField,
+  type PageBandOccurrence,
   printableAreaOf,
   resolveTextAlign,
   type TableColumn,
@@ -27,15 +27,17 @@ import {
   visitSegment,
 } from '@openview/core';
 import { type DocumentRegion, refusal, refusalOf } from '../errors.js';
-import { bandOfTheOnlyPage } from './bands.js';
 import { printableText } from './printable.js';
 import type {
   MaterialBlock,
   MaterialCell,
+  MaterialContainer,
   MaterialDocument,
+  MaterialPageBand,
   MaterialRow,
   MaterialRun,
   MaterialText,
+  OccurrenceKey,
   ResolvedTypography,
 } from './types.js';
 import { resolveRunTypography } from './typography.js';
@@ -43,21 +45,34 @@ import { resolveRunTypography } from './typography.js';
 const EXPRESSION_REFUSED =
   'A formula of this template could not be evaluated against the supplied data. Read `details.diagnostics` for the operand or the bound that stopped it.';
 
-/**
- * Both page markers on a document of one page. It is page one, and there is one page.
- */
-const THE_ONLY_PAGE: Readonly<Record<PageField, string>> = {
-  number: '1',
-  count: '1',
-};
-
 /** Alignment used when neither the block nor its column declares one. */
 const DEFAULT_ALIGN = 'start';
+
+/**
+ * Hands out one key per measurable occurrence of a single render.
+ *
+ * A counter, not a clock and not a random source: the same template and the same data produce the
+ * same keys twice, which is what lets a measurement be replayed and compared.
+ */
+export interface KeySource {
+  next(): OccurrenceKey;
+}
+
+export function createKeySource(): KeySource {
+  let issued = 0;
+  return {
+    next(): OccurrenceKey {
+      issued += 1;
+      return `o${issued}`;
+    },
+  };
+}
 
 /** Everything a traversal step needs beyond the node itself. Internal to this package. */
 export interface MaterializeContext {
   readonly scope: EvaluationScope;
   readonly budget: EvaluationBudget;
+  readonly keys: KeySource;
   readonly region: DocumentRegion;
   /** Alignment of the enclosing table column, which a block alignment overrides. */
   readonly column: TableColumnAlignment | undefined;
@@ -104,8 +119,13 @@ function runOf(
     resolveRunTypography(run, block.typography);
   const at = [...context.path, 'content', index];
   return visitSegment<MaterialRun>(segment, {
-    literal: (literal) => ({ text: literal.text, typography: complete(literal.typography) }),
+    literal: (literal) => ({
+      kind: 'text',
+      text: literal.text,
+      typography: complete(literal.typography),
+    }),
     binding: (binding) => ({
+      kind: 'text',
       text: printableText(
         within(block.id, { ...context, path: at }, () =>
           evaluateExpression(binding.value, context.scope, { budget: context.budget }),
@@ -114,8 +134,11 @@ function runOf(
       ),
       typography: complete(binding.typography),
     }),
+    /* No digits here: which page holds this run is decided by the cuts, and the cuts are decided
+       after binding. The marker travels as itself and page composition writes its value. */
     pageField: (field) => ({
-      text: THE_ONLY_PAGE[field.field],
+      kind: 'pageField',
+      field: field.field,
       typography: complete(field.typography),
     }),
   });
@@ -124,6 +147,7 @@ function runOf(
 function materializeText(node: TextNode, context: Context): MaterialText {
   return {
     kind: 'text',
+    key: context.keys.next(),
     nodeId: node.id,
     path: context.path,
     box: node.box,
@@ -136,6 +160,7 @@ function materializeText(node: TextNode, context: Context): MaterialText {
 function materializeImage(node: ImageNode, context: Context): MaterialBlock {
   return {
     kind: 'image',
+    key: context.keys.next(),
     nodeId: node.id,
     path: context.path,
     box: node.box,
@@ -182,6 +207,7 @@ function materializeCell(
 ): MaterialCell {
   const declared = row.cells.find((candidate) => candidate.columnId === column.id);
   return {
+    key: context.keys.next(),
     columnId: column.id,
     children:
       declared === undefined
@@ -200,6 +226,7 @@ function materializeRow(
   context: Context,
 ): MaterialRow {
   return {
+    key: context.keys.next(),
     nodeId: row.id,
     path: context.path,
     box: row.box,
@@ -248,6 +275,7 @@ export function materializeBodyEntry(
 }
 
 function materializeTable(node: TableNode, context: Context): MaterialBlock {
+  const key = context.keys.next();
   const section = (name: 'header' | 'body' | 'footer', index: number): Context => ({
     ...context,
     column: undefined,
@@ -255,6 +283,7 @@ function materializeTable(node: TableNode, context: Context): MaterialBlock {
   });
   return {
     kind: 'table',
+    key,
     nodeId: node.id,
     path: context.path,
     box: node.box,
@@ -286,6 +315,7 @@ export function materializeNode(node: DocumentNode, context: Context): readonly 
     container: (container) => [
       {
         kind: 'container',
+        key: context.keys.next(),
         nodeId: container.id,
         path: context.path,
         box: container.box,
@@ -301,56 +331,136 @@ export function materializeNode(node: DocumentNode, context: Context): readonly 
   });
 }
 
-function materializeBand(
-  band: PageBand | undefined,
+function bandContainer(
+  band: PageBand,
   region: DocumentRegion,
-  context: Omit<Context, 'region' | 'path' | 'column'>,
-): readonly MaterialBlock[] {
-  if (band === undefined) {
-    return [];
-  }
-  return materializeNode(band.content, {
+  context: Context,
+): MaterialContainer {
+  const [content] = materializeNode(band.content, {
     ...context,
     region,
     column: undefined,
-    path: ['page', region, 'content'],
+    path: ['page', region, band.on, 'content'],
   });
+  if (content === undefined || content.kind !== 'container') {
+    throw refusal(
+      'A page band did not materialise into a container, which is the only shape a band declares.',
+      'template-refused',
+      { nodeId: band.content.id, region },
+    );
+  }
+  return content;
+}
+
+/**
+ * Binds the bands of one side whose domain can still be reached, and only those.
+ *
+ * A band the run of pages never reaches is not evaluated: an `exceptFirst` footer of a document that
+ * turns out to hold one page is painted nowhere, and a formula it carries must not run at all.
+ */
+export function materializeBands(
+  bands: readonly PageBand[],
+  reachable: ReadonlySet<PageBandOccurrence>,
+  region: DocumentRegion,
+  context: Context,
+): readonly MaterialPageBand[] {
+  return bands
+    .filter((band) => reachable.has(band.on))
+    .map((band) => ({ on: band.on, content: bandContainer(band, region, context) }));
+}
+
+/** What one materialisation carries beyond the document, so a later pass can widen it. */
+export interface MaterializedDocument {
+  readonly document: MaterialDocument;
+  readonly budget: EvaluationBudget;
+  readonly keys: KeySource;
+  /** The domains whose bands are already bound, so a second pass binds only the new ones. */
+  readonly bound: ReadonlySet<PageBandOccurrence>;
 }
 
 /**
  * Turns a validated template and the host's data into a document with no expression left to run.
  *
- * One budget is created here and threaded through the applicable header band, the root flow and
- * the applicable footer band, in that order: a bound spent by a band is a bound the flow no longer
- * has, which is what makes the ceiling a property of the document rather than of a position in it.
+ * One budget is created here and threaded through the applicable bands and the root flow: a bound
+ * spent by a band is a bound the flow no longer has, which is what makes the ceiling a property of
+ * the document rather than of a position in it.
+ *
+ * @param reachable the band domains the caller knows can appear, widened at most once by
+ * {@link extendBands} when a document paginated as one page turns out to need several
  */
 export function materializeDocument(
   template: Template,
   data: EvaluationScope,
+  reachable: ReadonlySet<PageBandOccurrence>,
   evaluationLimits?: Partial<EvaluationLimits>,
-): MaterialDocument {
+): MaterializedDocument {
   const budget = createBudget(evaluationLimits);
-  const header = materializeBand(bandOfTheOnlyPage(template.page.header), 'header', {
-    scope: data,
-    budget,
+  const keys = createKeySource();
+  const shared = { scope: data, budget, keys, column: undefined, path: [] };
+  const headerBands = materializeBands(template.page.header, reachable, 'header', {
+    ...shared,
+    region: 'header',
   });
   const root = materializeNode(template.root, {
-    scope: data,
-    budget,
+    ...shared,
     region: 'root',
-    column: undefined,
     path: ['root'],
   });
-  const footer = materializeBand(bandOfTheOnlyPage(template.page.footer), 'footer', {
-    scope: data,
-    budget,
+  const footerBands = materializeBands(template.page.footer, reachable, 'footer', {
+    ...shared,
+    region: 'footer',
   });
   return {
-    sheet: template.page.sheet,
-    margins: template.page.margins,
-    printable: printableAreaOf(template.page),
-    header,
-    root,
-    footer,
+    budget,
+    keys,
+    bound: new Set(reachable),
+    document: {
+      sheet: template.page.sheet,
+      margins: template.page.margins,
+      printable: printableAreaOf(template.page),
+      headerBands,
+      root,
+      footerBands,
+    },
+  };
+}
+
+/**
+ * Binds the bands a widened domain set adds, on the same budget and the same key counter.
+ *
+ * The flow is never rebound: an occurrence is evaluated once per render whatever the page count, so
+ * only the domains that were unreachable a moment ago are visited here.
+ */
+export function extendBands(
+  template: Template,
+  data: EvaluationScope,
+  previous: MaterializedDocument,
+  reachable: ReadonlySet<PageBandOccurrence>,
+): MaterializedDocument {
+  const added = new Set([...reachable].filter((occurrence) => !previous.bound.has(occurrence)));
+  const shared = {
+    scope: data,
+    budget: previous.budget,
+    keys: previous.keys,
+    column: undefined,
+    path: [],
+  };
+  const header = materializeBands(template.page.header, added, 'header', {
+    ...shared,
+    region: 'header',
+  });
+  const footer = materializeBands(template.page.footer, added, 'footer', {
+    ...shared,
+    region: 'footer',
+  });
+  return {
+    budget: previous.budget,
+    keys: previous.keys,
+    bound: new Set([...previous.bound, ...added]),
+    document: {
+      ...previous.document,
+      headerBands: [...previous.document.headerBands, ...header],
+      footerBands: [...previous.document.footerBands, ...footer],
+    },
   };
 }

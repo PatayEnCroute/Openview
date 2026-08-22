@@ -20,7 +20,9 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
   'unsupported-image-source',
   'image-load-failed',
   'oversized-atomic-resource',
-  'single-page-overflow',
+  'page-band-overflow',
+  'pagination-impossible',
+  'layout-measurement-failed',
   'pdf-export-failed',
   'adapter-capability-mismatch',
 ] as const;
@@ -47,6 +49,8 @@ export interface DocumentRenderErrorDetails {
   readonly region?: DocumentRegion | undefined;
   /** A declared bound the render exceeded, in the unit of that bound. */
   readonly limit?: number | undefined;
+  /** One-based rank of the page being composed, when the refusal happened on a known one. */
+  readonly pageNumber?: number | undefined;
   /** Structured diagnostics, when the underlying refusal came from `@openview/core`. */
   readonly diagnostics?: readonly OpenviewDiagnostic[] | undefined;
 }

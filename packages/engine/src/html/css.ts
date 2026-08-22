@@ -4,10 +4,13 @@ import {
   type BoxSpacing,
   type BoxStyle,
   mmFromPt,
+  type PageMargins,
+  type PrintableArea,
+  type Sheet,
   type TableColumn,
   type TextAlignment,
 } from '@openview/core';
-import type { MaterialDocument, ResolvedTypography } from '../document/types.js';
+import type { ResolvedTypography } from '../document/types.js';
 import { cssFontFamily } from './escape.js';
 
 /** Class names the engine puts on the boxes it builds. */
@@ -15,12 +18,15 @@ export const CSS_CLASSES = {
   page: 'ov-page',
   printable: 'ov-printable',
   band: 'ov-band',
+  headerSlot: 'ov-top',
+  footerSlot: 'ov-bottom',
   flow: 'ov-flow',
   text: 'ov-text',
   image: 'ov-image',
   container: 'ov-container',
   table: 'ov-table',
   cell: 'ov-cell',
+  marker: 'ov-marker',
 } as const;
 
 /**
@@ -37,6 +43,8 @@ function cssNumber(value: number): string {
 
 const mm = (value: number): string => `${cssNumber(value)}mm`;
 
+const px = (value: number): string => `${cssNumber(value)}px`;
+
 /** Percentage of the table's content width a column takes, from its weight alone. */
 export function columnWidths(columns: readonly TableColumn[]): readonly string[] {
   let total = 0;
@@ -46,30 +54,78 @@ export function columnWidths(columns: readonly TableColumn[]): readonly string[]
   return columns.map((column) => `${cssNumber((column.width / total) * 100)}%`);
 }
 
+/** The geometry every sheet of one document shares. */
+export interface PageGeometry {
+  readonly sheet: Sheet;
+  readonly margins: PageMargins;
+  readonly printable: PrintableArea;
+  /** Height of the top slot on every page, in millimetres. */
+  readonly headerReserve: number;
+  readonly footerReserve: number;
+}
+
+const COMMON = [
+  'html,body{margin:0;padding:0}',
+  'html{print-color-adjust:exact;-webkit-print-color-adjust:exact}',
+  '*{box-sizing:border-box}',
+  `.${CSS_CLASSES.text}{white-space:pre-wrap}`,
+  `.${CSS_CLASSES.image}{display:block;width:100%;height:auto}`,
+  `.${CSS_CLASSES.table}{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}`,
+  `.${CSS_CLASSES.cell}{padding:0;vertical-align:top}`,
+  /* Kerning off and no ligature, so the width of a marker is the sum of its digit advances and the
+     reserve measured on one digit is a real bound. */
+  `.${CSS_CLASSES.marker}{display:inline-block;font-kerning:none;font-variant-ligatures:none;overflow:hidden;vertical-align:baseline}`,
+];
+
 /**
- * The document stylesheet. Every value in it comes from the validated page setup or is a literal,
- * so no text of the template ever enters a style block.
+ * The stylesheet of the printed document: several sheets, each with three slots of fixed height.
  *
- * `overflow: hidden` on the sheet is a last barrier against a second page, never the guard: the
- * adapter measures and refuses before printing.
+ * Every value comes from the validated page setup or from a measurement, so no text of the template
+ * ever enters a style block. `break-after` on every sheet but the last is what makes one box print
+ * as one page and adds no blank one after the end.
+ *
+ * `overflow: hidden` stays a last barrier against a page that grew, never the guard: the session
+ * measures the whole sequence and refuses before anything is printed.
  */
-export function documentCss(document: MaterialDocument): string {
-  const { sheet, margins, printable } = document;
+export function documentCss(geometry: PageGeometry): string {
+  const { sheet, margins, printable, headerReserve, footerReserve } = geometry;
   return [
     `@page{size:${mm(sheet.width)} ${mm(sheet.height)};margin:0}`,
-    'html,body{margin:0;padding:0}',
-    'html{print-color-adjust:exact;-webkit-print-color-adjust:exact}',
-    '*{box-sizing:border-box}',
-    `.${CSS_CLASSES.page}{position:relative;width:${mm(sheet.width)};height:${mm(sheet.height)};overflow:hidden}`,
+    ...COMMON,
+    `.${CSS_CLASSES.page}{position:relative;width:${mm(sheet.width)};height:${mm(sheet.height)};overflow:hidden;break-after:page}`,
+    `.${CSS_CLASSES.page}:last-child{break-after:auto}`,
     `.${CSS_CLASSES.printable}{position:absolute;top:${mm(margins.top)};left:${mm(margins.left)};` +
       `width:${mm(printable.width)};height:${mm(printable.height)};display:flex;flex-direction:column}`,
-    `.${CSS_CLASSES.band}{flex:0 0 auto}`,
+    `.${CSS_CLASSES.band}{flex:0 0 auto;overflow:hidden;display:flex;flex-direction:column}`,
+    `.${CSS_CLASSES.headerSlot}{height:${mm(headerReserve)};justify-content:flex-start}`,
+    `.${CSS_CLASSES.footerSlot}{height:${mm(footerReserve)};justify-content:flex-end}`,
     `.${CSS_CLASSES.flow}{flex:1 1 auto;min-height:0}`,
-    `.${CSS_CLASSES.text}{white-space:pre-wrap}`,
-    `.${CSS_CLASSES.image}{display:block;width:100%;height:auto}`,
-    `.${CSS_CLASSES.table}{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}`,
-    `.${CSS_CLASSES.cell}{padding:0;vertical-align:top}`,
   ].join('');
+}
+
+/**
+ * The stylesheet of a probe: the same widths, and no height anywhere.
+ *
+ * A probe exists to be measured, so nothing in it may clip or stretch a box. The sheet width and
+ * the printable width are the real ones, which is what makes a measured line break the line break
+ * the printed page will have.
+ */
+export function probeCss(geometry: Omit<PageGeometry, 'headerReserve' | 'footerReserve'>): string {
+  const { sheet, margins, printable } = geometry;
+  return [
+    `@page{size:${mm(sheet.width)} ${mm(sheet.height)};margin:0}`,
+    ...COMMON,
+    `.${CSS_CLASSES.page}{position:relative;width:${mm(sheet.width)};height:auto;overflow:visible}`,
+    `.${CSS_CLASSES.printable}{position:relative;margin:0 0 0 ${mm(margins.left)};` +
+      `width:${mm(printable.width)};height:auto}`,
+    `.${CSS_CLASSES.band}{overflow:visible}`,
+    `.${CSS_CLASSES.flow}{min-height:0}`,
+  ].join('');
+}
+
+/** Width one page marker reserves, whatever digits it ends up showing. */
+export function markerCss(typography: ResolvedTypography, width: number): string {
+  return `${runCss(typography)};width:${px(width)}`;
 }
 
 /**

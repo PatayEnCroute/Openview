@@ -1,32 +1,90 @@
-import { type BoxBorder, kindOf } from '@openview/core';
+import { type BoxBorder, kindOf, type PageField } from '@openview/core';
+import type { MaterialRun, ResolvedTypography } from '../document/types.js';
 import type {
-  MaterialBlock,
-  MaterialCell,
-  MaterialDocument,
-  MaterialRow,
-  MaterialTable,
-} from '../document/types.js';
-import type { DocumentRegion } from '../errors.js';
-import { boxCss, CSS_CLASSES, columnWidths, documentCss, runCss, textCss } from './css.js';
+  CellFragment,
+  MarkerReserve,
+  MaterialFragment,
+  RowFragment,
+  TableFragment,
+} from '../pagination/types.js';
+import { boxCss, CSS_CLASSES, columnWidths, markerCss, runCss, textCss } from './css.js';
 import { type RowRules, resolveRowRules } from './table-rules.js';
-import type { HtmlAttributes, HtmlElement, HtmlElementName, HtmlNode, HtmlTree } from './types.js';
+import type { HtmlAttributes, HtmlElement, HtmlElementName, HtmlNode } from './types.js';
 
 const NO_RULES: RowRules = { top: undefined, right: undefined, bottom: undefined, left: undefined };
 
-const element = (
+/** The rank of the page being painted, once the cuts have decided it. */
+export interface PageValues {
+  readonly number: number;
+  readonly count: number;
+}
+
+/**
+ * What a paint pass needs beyond the fragments: the reserved marker widths, the page values when
+ * they exist, and whether occurrence keys are annotated.
+ *
+ * Keys belong to a probe alone. Two fragments of one block share their source key, so annotating
+ * them on a paginated document would file two boxes under one name.
+ */
+export interface PaintContext {
+  readonly markers: MarkerReserve;
+  /** `undefined` on a probe, which shows a placeholder of the reserved width instead. */
+  readonly page: PageValues | undefined;
+  readonly keyed: boolean;
+}
+
+export const element = (
   name: HtmlElementName,
   attributes: HtmlAttributes,
   children: readonly HtmlNode[] = [],
 ): HtmlElement => ({ kind: 'element', name, attributes, children });
 
-const characters = (text: string): HtmlNode => ({ kind: 'text', text });
+export const characters = (text: string): HtmlNode => ({ kind: 'text', text });
+
+const keyAttribute = (key: string, context: PaintContext): HtmlAttributes =>
+  context.keyed ? { 'data-openview-key': key } : {};
+
+const runAttribute = (index: number, context: PaintContext): HtmlAttributes =>
+  context.keyed ? { 'data-openview-run': String(index) } : {};
+
+/** What a marker prints: the real rank once it is known, a placeholder of the same width before. */
+function markerText(field: PageField, context: PaintContext): string {
+  if (context.page === undefined) {
+    return '0'.repeat(context.markers.digits);
+  }
+  return String(field === 'number' ? context.page.number : context.page.count);
+}
+
+/**
+ * One run: a span of bound characters, or a page marker in a box of the reserved width.
+ *
+ * The marker box is as wide as the widest value the document could ever show, so the digits that
+ * land in it cannot move a line break and cannot change where the page was cut.
+ */
+function buildRun(run: MaterialRun, index: number, context: PaintContext): HtmlElement {
+  if (run.kind === 'pageField') {
+    return element(
+      'span',
+      {
+        class: CSS_CLASSES.marker,
+        style: markerCss(run.typography, context.markers.widthOf(run.typography)),
+        ...runAttribute(index, context),
+      },
+      [characters(markerText(run.field, context))],
+    );
+  }
+  return element('span', { style: runCss(run.typography), ...runAttribute(index, context) }, [
+    characters(run.text),
+  ]);
+}
 
 function buildCell(
-  cell: MaterialCell,
-  row: MaterialRow,
+  cell: CellFragment,
+  row: RowFragment,
   rules: RowRules,
   index: number,
   columns: number,
+  context: PaintContext,
 ): HtmlElement {
   /* Left and right belong to the row, so only its outermost cells may paint them; painting them on
      every cell would draw a rule on each column boundary the template never declared. */
@@ -38,26 +96,35 @@ function buildCell(
   };
   return element(
     'td',
-    { class: CSS_CLASSES.cell, style: boxCss(row.box, edges) },
-    cell.children.map(buildBlock),
+    {
+      class: CSS_CLASSES.cell,
+      style: boxCss(row.source.box, edges),
+      ...keyAttribute(cell.source.key, context),
+    },
+    cell.children.map((child) => buildFragment(child, context)),
   );
 }
 
-function buildRow(row: MaterialRow, rules: RowRules): HtmlElement {
+function buildRow(row: RowFragment, rules: RowRules, context: PaintContext): HtmlElement {
   return element(
     'tr',
-    { 'data-openview-node': row.nodeId },
-    row.cells.map((cell, index) => buildCell(cell, row, rules, index, row.cells.length)),
+    { 'data-openview-node': row.source.nodeId, ...keyAttribute(row.source.key, context) },
+    row.cells.map((cell, index) => buildCell(cell, row, rules, index, row.cells.length, context)),
   );
 }
 
-function buildTable(table: MaterialTable): HtmlElement {
-  /* One ordered sequence across the three sections: the boundary between the last header row and
-     the first body row is a boundary like any other. */
-  const rows = [...table.header, ...table.body, ...table.footer];
+/**
+ * One fragment of a table: its declared header repeated in front, then the rows it carries.
+ *
+ * The rules are resolved on the sequence of this fragment alone. A boundary that used to sit
+ * between two rows is a boundary with the page edge once they are on different sheets, so a shadow
+ * computed before the cut is never carried over.
+ */
+function buildTable(table: TableFragment, context: PaintContext): HtmlElement {
+  const rows = [...table.header, ...table.rows];
   const rules = resolveRowRules(
-    rows.map((row) => row.box?.border),
-    table.box?.border,
+    rows.map((row) => row.source.box?.border),
+    table.source.box?.border,
   );
   const section = (name: 'thead' | 'tbody' | 'tfoot', from: number, count: number): HtmlElement =>
     element(
@@ -65,47 +132,52 @@ function buildTable(table: MaterialTable): HtmlElement {
       {},
       rows
         .slice(from, from + count)
-        .map((row, index) => buildRow(row, rules[from + index] ?? NO_RULES)),
+        .map((row, index) => buildRow(row, rules[from + index] ?? NO_RULES, context)),
     );
-  const headerCount = table.header.length;
-  const bodyCount = table.body.length;
+  const header = table.header.length;
+  const body = table.footerFrom;
   return element(
     'table',
     {
       class: CSS_CLASSES.table,
-      style: boxCss(table.box),
-      'data-openview-node': table.nodeId,
+      style: boxCss(table.source.box),
+      'data-openview-node': table.source.nodeId,
+      ...keyAttribute(table.source.key, context),
     },
     [
       element(
         'colgroup',
         {},
-        columnWidths(table.columns).map((width) => element('col', { style: `width:${width}` })),
+        columnWidths(table.source.columns).map((width) =>
+          element('col', { style: `width:${width}` }),
+        ),
       ),
-      section('thead', 0, headerCount),
-      section('tbody', headerCount, bodyCount),
-      section('tfoot', headerCount + bodyCount, table.footer.length),
+      section('thead', 0, header),
+      section('tbody', header, body),
+      section('tfoot', header + body, table.rows.length - body),
     ],
   );
 }
 
 /**
- * One box per materialised block. The element names come from the closed vocabulary and the
- * attributes from this function, so no value of the template can become markup.
+ * One box per fragment. The element names come from the closed vocabulary and the attributes from
+ * this function, so no value of the template can become markup.
+ *
+ * A cut box is painted closed: its background, its padding and its rules are repeated on every page
+ * it spans, rather than left open behind a page edge.
  */
-function buildBlock(block: MaterialBlock): HtmlElement {
-  switch (block.kind) {
+export function buildFragment(fragment: MaterialFragment, context: PaintContext): HtmlElement {
+  switch (fragment.kind) {
     case 'text':
       return element(
         'div',
         {
           class: CSS_CLASSES.text,
-          style: textCss(block.align, block.box),
-          'data-openview-node': block.nodeId,
+          style: textCss(fragment.source.align, fragment.source.box),
+          'data-openview-node': fragment.source.nodeId,
+          ...keyAttribute(fragment.source.key, context),
         },
-        block.runs.map((run) =>
-          element('span', { style: runCss(run.typography) }, [characters(run.text)]),
-        ),
+        fragment.runs.map((run, index) => buildRun(run, index, context)),
       );
     case 'image':
       /* The wrapper carries the box so that `width: 100%` on the image means the content width of
@@ -114,61 +186,46 @@ function buildBlock(block: MaterialBlock): HtmlElement {
         'div',
         {
           class: CSS_CLASSES.container,
-          style: boxCss(block.box),
-          'data-openview-node': block.nodeId,
+          style: boxCss(fragment.source.box),
+          'data-openview-node': fragment.source.nodeId,
+          ...keyAttribute(fragment.source.key, context),
         },
-        [element('img', { class: CSS_CLASSES.image, src: block.src, alt: block.alt })],
+        [
+          element('img', {
+            class: CSS_CLASSES.image,
+            src: fragment.source.src,
+            alt: fragment.source.alt,
+          }),
+        ],
       );
     case 'container':
       return element(
         'div',
         {
           class: CSS_CLASSES.container,
-          style: boxCss(block.box),
-          'data-openview-node': block.nodeId,
+          style: boxCss(fragment.source.box),
+          'data-openview-node': fragment.source.nodeId,
+          ...keyAttribute(fragment.source.key, context),
         },
-        block.children.map(buildBlock),
+        fragment.children.map((child) => buildFragment(child, context)),
       );
     case 'table':
-      return buildTable(block);
+      return buildTable(fragment, context);
     default: {
       /* `kindOf` reads the discriminant and nothing else: a message must not be able to carry the
          text a block holds. */
-      const exhaustive: never = block;
-      throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
+      const exhaustive: never = fragment;
+      throw new TypeError(`Unhandled fragment: ${kindOf(exhaustive, 'kind')}`);
     }
   }
 }
 
-function buildRegion(
-  blocks: readonly MaterialBlock[],
-  region: DocumentRegion,
-  className: string,
-): HtmlElement {
-  return element(
-    'div',
-    { class: className, 'data-openview-region': region },
-    blocks.map(buildBlock),
-  );
-}
-
-/**
- * Builds the sheet, its printable area and the three vertical regions.
- *
- * The regions are emitted even when empty: the adapter measures them by selector, and a missing box
- * would make an absent band indistinguishable from an unmeasured one.
- */
-export function buildHtmlTree(document: MaterialDocument): HtmlTree {
-  return {
-    css: documentCss(document),
-    body: [
-      element('div', { class: CSS_CLASSES.page }, [
-        element('div', { class: CSS_CLASSES.printable }, [
-          buildRegion(document.header, 'header', CSS_CLASSES.band),
-          buildRegion(document.root, 'root', CSS_CLASSES.flow),
-          buildRegion(document.footer, 'footer', CSS_CLASSES.band),
-        ]),
-      ]),
-    ],
-  };
+/** A typography signature: everything that changes the advance width of a digit. */
+export function typographySignature(typography: ResolvedTypography): string {
+  return [
+    typography.family,
+    String(typography.sizePt),
+    typography.bold ? 'b' : 'n',
+    typography.italic ? 'i' : 'n',
+  ].join(' ');
 }
