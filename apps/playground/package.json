@@ -9,9 +9,10 @@
     "build": "vite build",
     "clean": "node ../../tools/clean.mjs",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit && tsc -p tsconfig.dev.json"
   },
   "dependencies": {
+    "@openview/adapter-puppeteer": "workspace:*",
     "@openview/core": "workspace:*",
     "@openview/designer": "workspace:*",
     "@openview/engine": "workspace:*",
@@ -20,6 +21,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.5",

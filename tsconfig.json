@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/designer" },
+    { "path": "./packages/adapter-puppeteer" },
     { "path": "./packages/engine" },
     { "path": "./packages/viewer" },
     { "path": "./apps/playground" }

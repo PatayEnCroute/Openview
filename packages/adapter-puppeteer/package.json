@@ -1,0 +1,51 @@
+{
+  "name": "@openview/adapter-puppeteer",
+  "version": "0.1.0",
+  "description": "Adaptateur Chromium (Puppeteer) de la stratégie PDF d'Openview",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PatayEnCroute/Openview.git",
+    "directory": "packages/adapter-puppeteer"
+  },
+  "homepage": "https://github.com/PatayEnCroute/Openview#readme",
+  "bugs": {
+    "url": "https://github.com/PatayEnCroute/Openview/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "node ../../tools/clean.mjs",
+    "type-check": "tsc -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@openview/core": "workspace:*",
+    "@openview/engine": "workspace:*",
+    "puppeteer": "25.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "pdf-lib": "1.17.1"
+  }
+}
