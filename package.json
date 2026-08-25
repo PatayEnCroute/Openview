@@ -22,11 +22,11 @@
     "type-check": "turbo run type-check && tsc -p tsconfig.tooling.json"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.8",
-    "@vitest/coverage-v8": "^4.1.10",
-    "turbo": "^2.10.10",
+    "@biomejs/biome": "2.5.10",
+    "@vitest/coverage-v8": "^4.1.11",
+    "turbo": "^2.10.11",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@11.21.0"
 }
