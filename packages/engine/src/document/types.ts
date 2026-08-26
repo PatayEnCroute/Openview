@@ -2,6 +2,7 @@ import type {
   BoxStyle,
   Color,
   PageBandOccurrence,
+  PageLayerPlane,
   PageMargins,
   PrintableArea,
   RoundMode,
@@ -148,11 +149,37 @@ export interface MaterialTable extends MaterialBase {
   readonly footer: readonly MaterialRow[];
 }
 
+/** One zone of a materialised grid, with its spans resolved to at least one track. */
+export interface MaterialGridItem {
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan: number;
+  readonly columnSpan: number;
+  readonly content: MaterialContainer;
+}
+
+/**
+ * A grid that survived data binding: declared tracks, a vertical step in millimetres, and one
+ * bound container per zone. Atomic for pagination -- it is placed whole, deferred whole or refused.
+ */
+export interface MaterialGrid extends MaterialBase {
+  readonly kind: 'grid';
+  readonly columns: number;
+  readonly rows: number;
+  readonly step: number;
+  readonly items: readonly MaterialGridItem[];
+}
+
 /**
  * A block that survived data binding. Loops and conditions have no counterpart here: a loop became
  * its ordered occurrences, and a false condition became nothing at all.
  */
-export type MaterialBlock = MaterialText | MaterialImage | MaterialContainer | MaterialTable;
+export type MaterialBlock =
+  | MaterialText
+  | MaterialImage
+  | MaterialContainer
+  | MaterialTable
+  | MaterialGrid;
 
 /**
  * One declared band, bound once, with the page domain that decides where it appears.
@@ -166,8 +193,20 @@ export interface MaterialPageBand {
 }
 
 /**
+ * One declared page layer, bound once per render and painted identically on every page.
+ *
+ * The markers of its content stay unresolved until composition, so each page writes its own rank
+ * into the same materialised layer without re-running any expression.
+ */
+export interface MaterialPageLayer {
+  readonly plane: PageLayerPlane;
+  readonly opacity: number | undefined;
+  readonly content: MaterialContainer;
+}
+
+/**
  * A whole document with no expression left to run: the sheet, its margins, its printable area, the
- * bands declared on each side and the root flow.
+ * bands declared on each side, the page layers of each plane and the root flow.
  *
  * Internal to the engine on purpose. It never enters from outside, is never stored and is never
  * exported as an integration payload, so it carries no Zod schema and no schema version.
@@ -176,7 +215,9 @@ export interface MaterialDocument {
   readonly sheet: Sheet;
   readonly margins: PageMargins;
   readonly printable: PrintableArea;
+  readonly backgroundLayers: readonly MaterialPageLayer[];
   readonly headerBands: readonly MaterialPageBand[];
   readonly root: readonly MaterialBlock[];
   readonly footerBands: readonly MaterialPageBand[];
+  readonly foregroundLayers: readonly MaterialPageLayer[];
 }

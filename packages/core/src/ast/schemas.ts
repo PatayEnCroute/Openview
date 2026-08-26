@@ -1,4 +1,4 @@
-import { z } from 'zod/v4';
+﻿import { z } from 'zod/v4';
 import {
   aliasSchema,
   ExpressionSchema,
@@ -6,6 +6,7 @@ import {
   ROUND_MODES,
   RoundingPositionSchema,
 } from '../expression/expression.js';
+import { MAX_SHEET_MM } from '../page/types.js';
 import { BoxStyleSchema, TypographySchema } from '../style/style.js';
 import {
   COLUMN_WIDTH_TYPE_MESSAGE,
@@ -15,8 +16,11 @@ import {
 import {
   type BlockNode,
   type DocumentNode,
+  type GridNode,
   MAX_COLUMN_WIDTH,
+  MAX_GRID_TRACKS,
   MIN_COLUMN_WIDTH,
+  MIN_GRID_TRACKS,
   PAGE_FIELDS,
   type PageField,
   TABLE_COLUMN_ALIGNMENTS,
@@ -147,6 +151,7 @@ function blockMembers() {
     LoopNodeSchema,
     ConditionNodeSchema,
     TableNodeSchema,
+    GridNodeSchema,
   ] as const;
 }
 
@@ -335,3 +340,124 @@ export const TableNodeSchema = z
     box: boxField,
   })
   .check(z.superRefine(checkTableWiring));
+
+const gridTrackCountSchema = z
+  .number()
+  .int('A grid axis declares a whole number of tracks')
+  .min(MIN_GRID_TRACKS, `A grid declares at least ${MIN_GRID_TRACKS} track on each axis`)
+  .max(MAX_GRID_TRACKS, `A grid declares at most ${MAX_GRID_TRACKS} tracks on each axis`);
+
+const gridCoordinateSchema = z
+  .number()
+  .int('A grid coordinate is a whole track number')
+  .min(1, 'A grid coordinate starts at 1');
+
+const gridSpanSchema = z
+  .number()
+  .int('A grid span is a whole number of tracks')
+  .min(2, 'A span of one is the absence of the field; omit it')
+  .optional();
+
+const gridStepSchema = z
+  .number()
+  .gt(0, 'A grid step is strictly positive')
+  .max(MAX_SHEET_MM, `A grid step is at most ${MAX_SHEET_MM} mm`);
+
+export const GridItemSchema = z.object({
+  row: gridCoordinateSchema,
+  column: gridCoordinateSchema,
+  rowSpan: gridSpanSchema,
+  columnSpan: gridSpanSchema,
+  content: ContainerNodeSchema,
+});
+
+/** Whether a coordinate passed its own local bounds, so the cross-check must not cascade on it. */
+function isCoordinate(value: number): boolean {
+  return Number.isInteger(value) && value >= 1;
+}
+
+/** Whether a span passed its own local bounds: absent, or a whole number of at least two tracks. */
+function isSpan(value: number | undefined): boolean {
+  return value === undefined || (Number.isInteger(value) && value >= 2);
+}
+
+/**
+ * Refuses zones that leave the grid and zones that share a coordinate.
+ *
+ * Occupancy uses `(row - 1) * columns + column - 1`: both axes are bounded by
+ * {@link MAX_GRID_TRACKS}, so no key exceeds 999999 and no two coordinates collide. A zone found
+ * overlapping stops its own scan at the first shared cell, so a hostile pile of zones cannot turn
+ * the check quadratic.
+ */
+function checkGridZones(grid: GridNode, ctx: z.RefinementCtx): void {
+  const { rows, columns } = grid;
+  const axisIsSound = (value: number): boolean =>
+    Number.isInteger(value) && value >= MIN_GRID_TRACKS && value <= MAX_GRID_TRACKS;
+  if (!axisIsSound(rows) || !axisIsSound(columns)) {
+    return;
+  }
+  const occupied = new Set<number>();
+  for (const [index, item] of grid.items.entries()) {
+    if (
+      !isCoordinate(item.row) ||
+      !isCoordinate(item.column) ||
+      !isSpan(item.rowSpan) ||
+      !isSpan(item.columnSpan)
+    ) {
+      continue;
+    }
+    const rowSpan = item.rowSpan ?? 1;
+    const columnSpan = item.columnSpan ?? 1;
+    if (item.row + rowSpan - 1 > rows) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['items', index, 'row'],
+        message:
+          'This zone reaches past the last row of the grid. Lower its row or its rowSpan, or declare more rows.',
+      });
+      continue;
+    }
+    if (item.column + columnSpan - 1 > columns) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['items', index, 'column'],
+        message:
+          'This zone reaches past the last column of the grid. Lower its column or its columnSpan, or declare more columns.',
+      });
+      continue;
+    }
+    let collided = false;
+    for (let row = item.row; row < item.row + rowSpan && !collided; row += 1) {
+      for (let column = item.column; column < item.column + columnSpan; column += 1) {
+        const key = (row - 1) * columns + column - 1;
+        if (occupied.has(key)) {
+          collided = true;
+          break;
+        }
+        occupied.add(key);
+      }
+    }
+    if (collided) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['items', index],
+        message:
+          'This zone shares a coordinate with an earlier zone of the grid. Two zones never overlap; depth belongs to page layers.',
+      });
+    }
+  }
+}
+
+/** Zod schema for grid nodes with cross-validation of zone bounds and overlap. */
+export const GridNodeSchema = z
+  .object({
+    type: z.literal('grid'),
+    id: nodeIdSchema,
+    keepTogether: keepTogetherField,
+    columns: gridTrackCountSchema,
+    rows: gridTrackCountSchema,
+    step: gridStepSchema,
+    items: z.array(GridItemSchema),
+    box: boxField,
+  })
+  .check(z.superRefine(checkGridZones));

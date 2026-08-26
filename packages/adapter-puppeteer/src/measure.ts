@@ -214,6 +214,46 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     }
   }
 
+  /* A grid zone is never clipped, so content past its content box is visible only here. Compared
+     on both axes against the wrapper's content box; only the zone container's id travels back. */
+  const overflowingGridItems: string[] = [];
+  for (const wrapper of document.querySelectorAll('[data-openview-grid-item]')) {
+    const style = getComputedStyle(wrapper);
+    const rect = wrapper.getBoundingClientRect();
+    const content = {
+      left:
+        rect.left + Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth),
+      top: rect.top + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.borderTopWidth),
+      right:
+        rect.right -
+        Number.parseFloat(style.paddingRight) -
+        Number.parseFloat(style.borderRightWidth),
+      bottom:
+        rect.bottom -
+        Number.parseFloat(style.paddingBottom) -
+        Number.parseFloat(style.borderBottomWidth),
+    };
+    let escapes = false;
+    for (const descendant of wrapper.querySelectorAll('*')) {
+      const box = descendant.getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) {
+        continue;
+      }
+      if (
+        box.left < content.left - tolerance ||
+        box.top < content.top - tolerance ||
+        box.right > content.right + tolerance ||
+        box.bottom > content.bottom + tolerance
+      ) {
+        escapes = true;
+        break;
+      }
+    }
+    if (escapes) {
+      overflowingGridItems.push(wrapper.getAttribute('data-openview-grid-item') ?? '');
+    }
+  }
+
   /* A marker box is a fixed width with `overflow: hidden`, so a value one character too wide is
      invisible in the paint and visible only here. Counted, never read: the digits are render data. */
   let clippedMarkerCount = 0;
@@ -223,5 +263,5 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     }
   }
 
-  return { pages, boxes, lines, images, escaping, clippedMarkerCount };
+  return { pages, boxes, lines, images, escaping, overflowingGridItems, clippedMarkerCount };
 }

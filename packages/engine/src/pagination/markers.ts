@@ -51,6 +51,11 @@ function collectBlocks(blocks: readonly MaterialBlock[], into: Map<string, Marke
         collectRows(block.body, into);
         collectRows(block.footer, into);
         break;
+      case 'grid':
+        for (const item of block.items) {
+          collectBlocks([item.content], into);
+        }
+        break;
       default: {
         const exhaustive: never = block;
         throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
@@ -62,12 +67,18 @@ function collectBlocks(blocks: readonly MaterialBlock[], into: Map<string, Marke
 /** Every distinct typography a page marker of this document is painted in. */
 export function markerSignatures(document: MaterialDocument): ReadonlyMap<string, MarkerSignature> {
   const found = new Map<string, MarkerSignature>();
+  for (const layer of document.backgroundLayers) {
+    collectBlocks([layer.content], found);
+  }
   for (const band of document.headerBands) {
     collectBlocks([band.content], found);
   }
   collectBlocks(document.root, found);
   for (const band of document.footerBands) {
     collectBlocks([band.content], found);
+  }
+  for (const layer of document.foregroundLayers) {
+    collectBlocks([layer.content], found);
   }
   return found;
 }

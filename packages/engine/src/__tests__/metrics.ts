@@ -108,6 +108,15 @@ function blockHeight(block: MaterialBlock, grid: GridLayout, into: Map<string, n
       height = padding + stacked;
       break;
     }
+    case 'grid': {
+      /* Fully declared: rows times step, whatever the zone contents measure. The contents are
+         still walked so their own boxes have heights when a test reads them. */
+      for (const item of block.items) {
+        blockHeight(item.content, grid, into);
+      }
+      height = padding + block.rows * block.step * grid.pxPerMm;
+      break;
+    }
     default: {
       const exhaustive: never = block;
       throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
@@ -136,6 +145,9 @@ export function gridMetrics(
       collectLines(block, grid, lines);
     }
   };
+  for (const layer of [...document.backgroundLayers, ...document.foregroundLayers]) {
+    walk([layer.content]);
+  }
   for (const band of document.headerBands) {
     walk([band.content]);
   }
@@ -179,6 +191,11 @@ function collectLines(
             collectLines(child, grid, into);
           }
         }
+      }
+      break;
+    case 'grid':
+      for (const item of block.items) {
+        collectLines(item.content, grid, into);
       }
       break;
     default: {

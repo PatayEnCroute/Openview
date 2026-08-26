@@ -67,6 +67,13 @@ export function validateMeasurement(
     refuse();
   }
 
+  if (
+    !Array.isArray(measurement.overflowingGridItems) ||
+    measurement.overflowingGridItems.some((id) => typeof id !== 'string')
+  ) {
+    refuse({ limit: 0 });
+  }
+
   const heights = new Map<OccurrenceKey, number>();
   for (const box of measurement.boxes) {
     if (!expected.has(box.key) || heights.has(box.key)) {

@@ -1,4 +1,4 @@
-import { refusal } from '../errors.js';
+﻿import { refusal } from '../errors.js';
 import type { PdfLayoutMeasurement } from '../strategy/pdf.js';
 import type { PaginatedDocument } from './types.js';
 import { TOLERANCE_PX } from './validate-measurement.js';
@@ -17,6 +17,9 @@ const IMAGE_FAILED =
 
 const PAINTS_OUTSIDE =
   'A block paints outside the sheet it belongs to. Read `details.nodeId` for the declaration it came from.';
+
+const GRID_CONTENT_OVERFLOWS =
+  'The content of a grid zone reaches past the zone the model declared for it. A zone is never clipped and never resized, so the document is refused. Read `details.nodeId` for the zone container.';
 
 const MARKER_CLIPPED =
   'A page marker holds more than the width reserved for it, so the printed document would show a truncated figure. Read `details.limit` for how many markers are involved; what they read is deliberately not reported.';
@@ -55,6 +58,13 @@ export function verifyLayout(
   const [escaped] = measurement.escaping;
   if (escaped !== undefined) {
     throw refusal(PAINTS_OUTSIDE, 'layout-measurement-failed', { nodeId: escaped });
+  }
+
+  /* A refusal, not an overflow to settle: no cut of the flow shrinks the content of a zone, and a
+     grid is atomic anyway. */
+  const [overflowingZone] = measurement.overflowingGridItems;
+  if (overflowingZone !== undefined) {
+    throw refusal(GRID_CONTENT_OVERFLOWS, 'grid-content-overflow', { nodeId: overflowingZone });
   }
 
   /* A refusal, not an overflow to settle: no cut of the flow makes a marker narrower, and the

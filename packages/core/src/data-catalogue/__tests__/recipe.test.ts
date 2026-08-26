@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTemplate } from '../../template/migrate.js';
+import { parseTemplate, TEMPLATE_MIGRATIONS } from '../../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
 import { checkTemplateDataCompatibility } from '../compatibility.js';
 import { listDataCatalogueEntries } from '../list.js';
@@ -194,7 +194,13 @@ describe('the mechanism owes nothing to the words the host chose', () => {
 });
 
 describe('C10 stores nothing in the document', () => {
-  it('leaves the current stored version alone', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+  it('registered no migration step of its own', () => {
+    // The catalogue lives on the host side, so C10 changed no stored shape. Asserted on the chain
+    // rather than on the current version, which later lots keep moving: no step's migration is
+    // owned by the catalogue, and the 8 -> 9 seam is immediately followed by the C11 stamp.
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(9);
+    expect(TEMPLATE_MIGRATIONS.filter((step) => step.from === 9)).toHaveLength(
+      CURRENT_SCHEMA_VERSION > 9 ? 1 : 0,
+    );
   });
 });

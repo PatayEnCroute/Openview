@@ -1,4 +1,4 @@
-import { z } from 'zod/v4';
+﻿import { z } from 'zod/v4';
 import {
   markAsProgrammingFault,
   TemplateMigrationError,
@@ -98,6 +98,15 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      * contributions in silence, or is refused on an unknown discriminator with no version named.
      */
     migrate: (input) => ({ ...input, schemaVersion: 9 }),
+  },
+  {
+    from: 9,
+    to: 10,
+    /**
+     * Stamp only. A v9 document declared exactly "no grid and no page layer", which is what it
+     * already said; adding empty structures would invent a second canonical spelling of absence.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 10 }),
   },
 ];
 

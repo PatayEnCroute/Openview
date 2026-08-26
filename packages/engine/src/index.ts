@@ -9,11 +9,17 @@
 
 export type { DocumentImage } from './document/images.js';
 export type {
+  DocumentArea,
   DocumentRegion,
   DocumentRenderErrorCode,
   DocumentRenderErrorDetails,
 } from './errors.js';
-export { DOCUMENT_REGIONS, DOCUMENT_RENDER_ERROR_CODES, DocumentRenderError } from './errors.js';
+export {
+  DOCUMENT_AREAS,
+  DOCUMENT_REGIONS,
+  DOCUMENT_RENDER_ERROR_CODES,
+  DocumentRenderError,
+} from './errors.js';
 export { createPdfRenderPort, PDF_CONTENT_TYPE } from './pipeline/render-pdf.js';
 export type {
   BoxMeasurement,

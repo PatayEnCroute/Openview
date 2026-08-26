@@ -4,6 +4,7 @@ import type {
   ConditionNode,
   ContainerNode,
   DocumentNode,
+  GridNode,
   ImageNode,
   LoopNode,
   TableNode,
@@ -26,6 +27,7 @@ export interface NodeVisitor<TResult> {
   readonly loop: (node: LoopNode) => TResult;
   readonly condition: (node: ConditionNode) => TResult;
   readonly table: (node: TableNode) => TResult;
+  readonly grid: (node: GridNode) => TResult;
   readonly tableRowGroup: (node: TableRowGroupNode) => TResult;
   readonly tableRow: (node: TableRowNode) => TResult;
 }
@@ -47,6 +49,8 @@ export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TRes
       return visitor.condition(node);
     case 'table':
       return visitor.table(node);
+    case 'grid':
+      return visitor.grid(node);
     case 'tableRowGroup':
       return visitor.tableRowGroup(node);
     case 'tableRow':
@@ -67,6 +71,7 @@ export function childrenOf(node: DocumentNode): readonly DocumentNode[] {
     loop: (loop) => loop.children,
     condition: (condition) => condition.children,
     table: (table) => [...table.header, ...table.body, ...table.footer],
+    grid: (grid) => grid.items.map((item) => item.content),
     tableRowGroup: (group) => group.rows,
     tableRow: (row) => row.cells.flatMap((cell) => cell.children),
   });
@@ -140,6 +145,8 @@ const READS_VISITOR: NodeVisitor<NodeReads> = {
   loop: (loop) => ({ reads: [loop.each], binds: loop.as }),
   condition: (condition) => ({ reads: [condition.when], binds: undefined }),
   table: () => NO_READS,
+  /* Grid positions are numbers of the layout, never data reads: only the zone contents read. */
+  grid: () => NO_READS,
   tableRowGroup: (group) => ({ reads: [group.each], binds: group.as }),
   /* A contribution is read in the row's own scope, so its paths belong to the row and not to the
      group that repeats it: an alias bound above still masks them. */

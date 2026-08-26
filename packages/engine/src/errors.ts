@@ -22,6 +22,7 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
   'oversized-atomic-resource',
   'page-band-overflow',
   'page-report-refused',
+  'grid-content-overflow',
   'pagination-impossible',
   'layout-measurement-failed',
   'pdf-export-failed',
@@ -36,6 +37,16 @@ export const DOCUMENT_REGIONS = ['header', 'root', 'footer'] as const;
 export type DocumentRegion = (typeof DOCUMENT_REGIONS)[number];
 
 /**
+ * The five areas a declaration can be materialised in, in paint order.
+ *
+ * Wider than {@link DOCUMENT_REGIONS} on purpose: layers are painted behind or in front of the
+ * page, out of the flow, and the measurement port keeps reporting the three vertical regions only.
+ */
+export const DOCUMENT_AREAS = ['background', 'header', 'root', 'footer', 'foreground'] as const;
+
+export type DocumentArea = (typeof DOCUMENT_AREAS)[number];
+
+/**
  * Location and shape facts attached to a refusal. Every field is safe to log: none of them can
  * hold a bound value, an image source, a serialised template or the render data.
  */
@@ -46,8 +57,8 @@ export interface DocumentRenderErrorDetails {
   readonly path?: readonly (string | number)[] | undefined;
   /** Closed category of an unusable value, from the core value-type vocabulary. */
   readonly actualType?: ExpressionValueType | undefined;
-  /** Which vertical region of the page was being built. */
-  readonly region?: DocumentRegion | undefined;
+  /** Which area of the page was being built. */
+  readonly region?: DocumentArea | undefined;
   /** A declared bound the render exceeded, in the unit of that bound. */
   readonly limit?: number | undefined;
   /** One-based rank of the page being composed, when the refusal happened on a known one. */

@@ -12,6 +12,7 @@ import {
   type DocumentNode,
   DocumentNodeSchema,
   type DocumentNodeType,
+  GridNodeSchema,
   type ImageNode,
   ImageNodeSchema,
   type LoopNode,
@@ -654,6 +655,15 @@ const MARKED_NODES: Readonly<Record<DocumentNodeType, unknown>> = {
     body: [],
     footer: [],
   },
+  grid: {
+    type: 'grid',
+    id: 'n',
+    keepTogether: true,
+    columns: 12,
+    rows: 8,
+    step: 4,
+    items: [{ row: 1, column: 1, content: { type: 'container', id: 'z', children: [] } }],
+  },
   tableRow: { type: 'tableRow', id: 'n', keepTogether: true, cells: [] },
   tableRowGroup: {
     type: 'tableRowGroup',
@@ -679,6 +689,7 @@ const PARSE_BY_KIND: Readonly<Record<DocumentNodeType, (raw: unknown) => Documen
   loop: (raw) => LoopNodeSchema.parse(raw),
   condition: (raw) => ConditionNodeSchema.parse(raw),
   table: (raw) => TableNodeSchema.parse(raw),
+  grid: (raw) => GridNodeSchema.parse(raw),
   tableRow: (raw) => TableRowNodeSchema.parse(raw),
   tableRowGroup: (raw) => TableRowGroupNodeSchema.parse(raw),
 };

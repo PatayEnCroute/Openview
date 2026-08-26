@@ -1,6 +1,7 @@
-import type { MaterialPageReport, OccurrenceKey } from '../document/types.js';
+﻿import type { MaterialPageReport, OccurrenceKey } from '../document/types.js';
 import { refusal } from '../errors.js';
 import type { CellFragment, MaterialFragment, TableFragment } from './types.js';
+import { wholeFragment } from './whole.js';
 
 const NOT_FINITE =
   'The contributions a page carries forward add up to something that is not a finite number, so no page report can be written from them. Read `details.pageNumber` for the page involved; the values themselves are deliberately not repeated.';
@@ -49,6 +50,11 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
       }
       if (fragment.kind === 'table') {
         table(fragment);
+      }
+      if (fragment.kind === 'grid') {
+        /* A grid is atomic, so every zone -- and every contributing row inside one -- finishes on
+           the page that holds the grid. */
+        walk(fragment.source.items.map((item) => wholeFragment(item.content)));
       }
     }
   }

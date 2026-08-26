@@ -1,5 +1,9 @@
 # Plan d'implémentation — lot C11 : grille, colonnes et calques
 
+> **⚠️ PÉRIMÉ depuis le 2026-08-26.** Le lot est livré ; c'est
+> l'[ADR 0016](../adr/0016-grille-colonnes-et-calques.md) qui fait foi, et elle corrige ce plan
+> sur les points nommés à son § « Ce que l'exécution a corrigé du plan ».
+>
 > **Document d'implémentation.** Il ferme le périmètre, le contrat persistant, les invariants de
 > mise en page, la consommation par le moteur, les mesures navigateur, les tests et l'ordre
 > d'exécution de C11. Une fois le lot livré, son ADR d'exécution fera foi et ce plan sera marqué

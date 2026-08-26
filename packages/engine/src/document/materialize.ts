@@ -9,10 +9,13 @@ import {
   evaluateExpression,
   evaluatePredicate,
   evaluateSequence,
+  type GridNode,
   type ImageNode,
   type LoopNode,
   type PageBand,
   type PageBandOccurrence,
+  type PageLayer,
+  type PageLayerPlane,
   printableAreaOf,
   resolveTextAlign,
   type TableColumn,
@@ -28,14 +31,16 @@ import {
   visitNode,
   visitSegment,
 } from '@openview/core';
-import { type DocumentRegion, refusal, refusalOf } from '../errors.js';
+import { type DocumentArea, type DocumentRegion, refusal, refusalOf } from '../errors.js';
 import { printableText } from './printable.js';
 import type {
   MaterialBlock,
   MaterialCell,
   MaterialContainer,
   MaterialDocument,
+  MaterialGrid,
   MaterialPageBand,
+  MaterialPageLayer,
   MaterialPageReport,
   MaterialRow,
   MaterialRowGroupOccurrence,
@@ -54,6 +59,9 @@ const CONTRIBUTION_NOT_A_NUMBER =
 
 const CONTRIBUTION_IN_A_BAND =
   'A row inside a page band declares a contribution to the page report. A band is painted on every page its domain names, so the occurrence it would be counted on does not exist. Read `details.nodeId` for the row.';
+
+const CONTRIBUTION_IN_A_LAYER =
+  'A row inside a page layer declares a contribution to the page report. A layer is repeated identically on every page, so the occurrence it would be counted on does not exist. Read `details.nodeId` for the row.';
 
 /** Alignment used when neither the block nor its column declares one. */
 const DEFAULT_ALIGN = 'start';
@@ -96,7 +104,7 @@ export interface MaterializeContext {
   readonly scope: EvaluationScope;
   readonly budget: EvaluationBudget;
   readonly keys: KeySource;
-  readonly region: DocumentRegion;
+  readonly region: DocumentArea;
   /** Alignment of the enclosing table column, which a block alignment overrides. */
   readonly column: TableColumnAlignment | undefined;
   readonly path: readonly (string | number)[];
@@ -301,11 +309,16 @@ function contributionOf(
     return undefined;
   }
   if (context.region !== 'root') {
-    throw refusal(CONTRIBUTION_IN_A_BAND, 'page-report-refused', {
-      nodeId: row.id,
-      path: context.path,
-      region: context.region,
-    });
+    const inLayer = context.region === 'background' || context.region === 'foreground';
+    throw refusal(
+      inLayer ? CONTRIBUTION_IN_A_LAYER : CONTRIBUTION_IN_A_BAND,
+      'page-report-refused',
+      {
+        nodeId: row.id,
+        path: context.path,
+        region: context.region,
+      },
+    );
   }
   const at = [...context.path, 'pageReport', 'value'];
   const raw = within(row.id, { ...context, path: at }, () =>
@@ -411,6 +424,7 @@ export function materializeBodyEntry(
     loop: rejectAsRow,
     condition: rejectAsRow,
     table: rejectAsRow,
+    grid: rejectAsRow,
   });
 }
 
@@ -457,6 +471,44 @@ function materializeTable(node: TableNode, context: Context): MaterialBlock {
 }
 
 /**
+ * One zone of a grid: its resolved spans and its bound container, in the grid's own scope.
+ *
+ * The container comes back from the block traversal, so loops and conditions inside a zone behave
+ * exactly as they do anywhere else in the flow.
+ */
+function materializeGrid(node: GridNode, context: Context): MaterialGrid {
+  return {
+    kind: 'grid',
+    key: context.keys.next(),
+    nodeId: node.id,
+    path: context.path,
+    box: node.box,
+    keepTogether: node.keepTogether === true,
+    columns: node.columns,
+    rows: node.rows,
+    step: node.step,
+    items: node.items.map((item, index) => {
+      const at = [...context.path, 'items', index, 'content'];
+      const [content] = materializeNode(item.content, { ...context, path: at });
+      if (content === undefined || content.kind !== 'container') {
+        throw refusal(
+          'A grid zone did not materialise into a container, which is the only shape a zone declares.',
+          'template-refused',
+          { nodeId: item.content.id, path: at, region: context.region },
+        );
+      }
+      return {
+        row: item.row,
+        column: item.column,
+        rowSpan: item.rowSpan ?? 1,
+        columnSpan: item.columnSpan ?? 1,
+        content,
+      };
+    }),
+  };
+}
+
+/**
  * First exhaustive traversal site: what a block flow may hold. A ninth node kind breaks the
  * compilation here and in {@link materializeBodyEntry}, and nowhere else.
  *
@@ -481,6 +533,7 @@ export function materializeNode(node: DocumentNode, context: Context): readonly 
     loop: (loop) => materializeLoop(loop, context),
     condition: (condition) => materializeCondition(condition, context),
     table: (table) => [materializeTable(table, context)],
+    grid: (grid) => [materializeGrid(grid, context)],
     tableRow: rejectAsBlock,
     tableRowGroup: rejectAsBlock,
   });
@@ -524,6 +577,39 @@ export function materializeBands(
     .map((band) => ({ on: band.on, content: bandContainer(band, region, context) }));
 }
 
+/**
+ * Binds the layers of one plane, once per render, in the stored back-to-front order.
+ *
+ * One evaluation whatever the page count: the same materialised content is painted on every page,
+ * and its markers receive each page's values at composition without re-running the model.
+ */
+function materializeLayers(
+  layers: readonly PageLayer[] | undefined,
+  plane: PageLayerPlane,
+  context: Context,
+): readonly MaterialPageLayer[] {
+  return (layers ?? [])
+    .map((layer, index) => ({ layer, index }))
+    .filter(({ layer }) => layer.plane === plane)
+    .map(({ layer, index }) => {
+      const at = ['page', 'layers', index, 'content'];
+      const [content] = materializeNode(layer.content, {
+        ...context,
+        region: plane,
+        column: undefined,
+        path: at,
+      });
+      if (content === undefined || content.kind !== 'container') {
+        throw refusal(
+          'A page layer did not materialise into a container, which is the only shape a layer declares.',
+          'template-refused',
+          { nodeId: layer.content.id, region: plane },
+        );
+      }
+      return { plane, opacity: layer.opacity, content };
+    });
+}
+
 /** What one materialisation carries beyond the document, so a later pass can widen it. */
 export interface MaterializedDocument {
   readonly document: MaterialDocument;
@@ -552,6 +638,12 @@ export function materializeDocument(
   const budget = createBudget(evaluationLimits);
   const keys = createKeySource();
   const shared = { scope: data, budget, keys, column: undefined, path: [] };
+  /* Evaluation follows paint order and never varies per page: background layers, top bands, flow,
+     bottom bands, foreground layers. The order stays observable when a budget stops it. */
+  const backgroundLayers = materializeLayers(template.page.layers, 'background', {
+    ...shared,
+    region: 'background',
+  });
   const headerBands = materializeBands(template.page.header, reachable, 'header', {
     ...shared,
     region: 'header',
@@ -565,6 +657,10 @@ export function materializeDocument(
     ...shared,
     region: 'footer',
   });
+  const foregroundLayers = materializeLayers(template.page.layers, 'foreground', {
+    ...shared,
+    region: 'foreground',
+  });
   return {
     budget,
     keys,
@@ -573,9 +669,11 @@ export function materializeDocument(
       sheet: template.page.sheet,
       margins: template.page.margins,
       printable: printableAreaOf(template.page),
+      backgroundLayers,
       headerBands,
       root,
       footerBands,
+      foregroundLayers,
     },
   };
 }

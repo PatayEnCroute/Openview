@@ -12,13 +12,13 @@ import { PresentationTableSchema } from '../presentation/presentation.js';
  * document either strips the unknown field with no error at all, or refuses it with a message
  * naming no version and offering no remedy.
  *
- * Version 9 adds one optional field, `pageReport`, to a table row, and widens the page-marker
- * union with a `report` field carrying its own rounding. Both classes of change need the bump: the
- * first is stripped in silence by an older build, the second is refused by it with no version named.
+ * Version 10 widens the block union with a `grid` node and adds one optional field, `layers`, to
+ * the page setup. Both classes of change need the bump: the widened union is refused by an older
+ * build with no version named, and the optional field is stripped by it in silence.
  *
  * @see docs/adr/0009-les-blocs-insecables.md
  */
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /**
  * Zod schema for validating a complete document template at CURRENT_SCHEMA_VERSION.

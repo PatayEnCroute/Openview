@@ -61,6 +61,7 @@ describe('visitNode', () => {
         loop: (n) => `loop:${n.each.kind}`,
         condition: (n) => `condition:${n.when.kind}`,
         table: (n) => `table:${n.columns.length}`,
+        grid: (n) => `grid:${n.columns}x${n.rows}`,
         tableRowGroup: (n) => `tableRowGroup:${n.as}`,
         tableRow: (n) => `tableRow:${n.cells.length}`,
       });
@@ -90,6 +91,7 @@ describe('visitNode', () => {
         loop: () => 'x',
         condition: () => 'x',
         table: () => 'x',
+        grid: () => 'x',
         tableRowGroup: () => 'x',
         tableRow: () => 'x',
       }),

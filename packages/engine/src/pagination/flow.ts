@@ -1,4 +1,4 @@
-import { kindOf } from '@openview/core';
+﻿import { kindOf } from '@openview/core';
 import type { MaterialBlock } from '../document/types.js';
 import { refusal } from '../errors.js';
 import { decideKeepTogether } from './keep-together.js';
@@ -20,6 +20,9 @@ const MISMATCHED_CURSOR =
 
 const IMAGE_TOO_TALL =
   'An image is taller than the flow a page can offer once its bands are reserved, so no page can hold it. An image is atomic: it is not cut and not scaled down to fit.';
+
+const GRID_TOO_TALL =
+  'A grid is taller than the flow a page can offer once its bands are reserved, so no page can hold it. A grid is atomic: it is not cut between its rows and not scaled down to fit.';
 
 const NO_ROOM_INSIDE =
   'A container holds content and is left no height to print it in, once the bands of the page and its own padding have taken theirs. Read `details.nodeId` for the declaration.';
@@ -170,6 +173,21 @@ function placeBlock(
       return placed === undefined
         ? undefined
         : { fragment: placed.fragment, height: placed.height, remaining: placed.remaining };
+    }
+    case 'grid': {
+      /* Atomic like an image: whole in the rest of the page, whole on a fresh one, or refused.
+         No cursor variant exists for it, so no page can ever hold half of it. */
+      const height = metrics.height(block.key);
+      if (height > fresh) {
+        throw refusal(GRID_TOO_TALL, 'oversized-atomic-resource', {
+          nodeId: block.nodeId,
+          path: block.path,
+        });
+      }
+      if (height > available) {
+        return undefined;
+      }
+      return { fragment: wholeFragment(block), height, remaining: undefined };
     }
     default: {
       const exhaustive: never = block;

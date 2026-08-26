@@ -39,6 +39,33 @@ describe('migrateToCurrent', () => {
     expect(migrateToCurrent(validTemplate)).toStrictEqual(validTemplate);
   });
 
+  it('stamps a hand-made v9 already carrying a grid and layers without touching either', () => {
+    // The version guard reads the stamp, never the content: a document stamped 9 that already
+    // carries the version 10 capabilities comes out stamped current with both intact.
+    const early = {
+      ...validTemplate,
+      schemaVersion: 9,
+      page: {
+        ...validTemplate.page,
+        layers: [
+          { plane: 'background', content: { type: 'container', id: 'paper', children: [] } },
+        ],
+      },
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [{ type: 'grid', id: 'g', columns: 2, rows: 2, step: 5, items: [] }],
+      },
+    };
+
+    const migrated = migrateToCurrent(early);
+
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const { schemaVersion: _stamped, ...restOfMigrated } = migrated;
+    const { schemaVersion: _stored, ...restOfStored } = early;
+    expect(restOfMigrated).toStrictEqual(restOfStored);
+  });
+
   it('refuses a document written by a newer release', () => {
     expect(() =>
       migrateToCurrent({ ...validTemplate, schemaVersion: CURRENT_SCHEMA_VERSION + 1 }),

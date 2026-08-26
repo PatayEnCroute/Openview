@@ -1,4 +1,4 @@
-import type { DocumentNode } from '../ast/nodes.js';
+﻿import type { DocumentNode } from '../ast/nodes.js';
 import { type NodeVisitor, visitNode, visitSegment } from '../ast/visitor.js';
 import type { DataCompatibilityDiagnostic } from '../diagnostics/types.js';
 import {
@@ -30,7 +30,7 @@ const SHADOWS_ROOT_MESSAGE =
 const SHADOWS_ALIAS_MESSAGE =
   'This alias carries the name of an alias already in scope and masks it. The innermost binding wins, so the outer item is unreachable here.';
 
-/** What one call found, in the order the traversal produced it: flow first, then header, then footer. */
+/** What one call found, in traversal order: flow, then header, then footer, then page layers. */
 export interface TemplateDataCompatibility {
   readonly compatible: boolean;
   readonly reads: readonly TemplateDataRead[];
@@ -504,6 +504,15 @@ const SHAPE: NodeVisitor<NodeShape> = {
       ...node.footer.map((row, index) => ({ node: row, at: ['footer', index] })),
     ],
   }),
+  /* Grid positions are layout numbers, never readings; each zone resumes from the grid's scope. */
+  grid: (node) => ({
+    readings: [],
+    binding: NO_BINDING,
+    children: node.items.map((item, index) => ({
+      node: item.content,
+      at: ['items', index, 'content'],
+    })),
+  }),
   tableRowGroup: (node) => ({
     readings: [],
     binding: { source: node.each, alias: node.as, at: ['each'] },
@@ -606,6 +615,10 @@ export function checkTemplateDataCompatibility(
   analyseNode(analysis, template.root, ['root']);
   analyseBands(analysis, template.page.header, 'header');
   analyseBands(analysis, template.page.footer, 'footer');
+  /* After the positions C10 published, so the historic order of reads is preserved. */
+  for (const [index, layer] of (template.page.layers ?? []).entries()) {
+    analyseNode(analysis, layer.content, ['page', 'layers', index, 'content']);
+  }
 
   return {
     compatible: analysis.diagnostics.length === 0,

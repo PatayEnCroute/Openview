@@ -489,6 +489,101 @@ const v9 = {
   },
 };
 
+/**
+ * A grid heading of three aligned zones -- one spanning two rows -- and two page layers: an opaque
+ * paper background behind the pages and a stamped image in front of them.
+ */
+const v10 = {
+  schemaVersion: 10,
+  id: 'tpl_v10',
+  name: 'Historical model',
+  version: '1.0.0',
+  page: {
+    sheet: { width: 210, height: 297 },
+    margins: { top: 15, right: 15, bottom: 15, left: 15 },
+    header: [],
+    footer: [],
+    layers: [
+      {
+        plane: 'background',
+        content: {
+          type: 'container',
+          id: 'paper',
+          box: { background: '#fdfaf2' },
+          children: [],
+        },
+      },
+      {
+        plane: 'foreground',
+        opacity: 0.85,
+        content: {
+          type: 'container',
+          id: 'stamp',
+          children: [{ type: 'image', id: 'stamp-image', src: 'stamp.png' }],
+        },
+      },
+    ],
+  },
+  root: {
+    type: 'container',
+    id: 'root',
+    children: [
+      {
+        type: 'grid',
+        id: 'heading',
+        columns: 12,
+        rows: 8,
+        step: 4,
+        items: [
+          {
+            row: 1,
+            column: 1,
+            rowSpan: 2,
+            columnSpan: 3,
+            content: {
+              type: 'container',
+              id: 'zone-logo',
+              children: [{ type: 'image', id: 'logo', src: 'logo.png' }],
+            },
+          },
+          {
+            row: 1,
+            column: 4,
+            columnSpan: 5,
+            content: {
+              type: 'container',
+              id: 'zone-address',
+              children: [
+                {
+                  type: 'text',
+                  id: 'address',
+                  content: [{ kind: 'binding', value: { kind: 'path', path: 'payload.address' } }],
+                },
+              ],
+            },
+          },
+          {
+            row: 1,
+            column: 9,
+            columnSpan: 4,
+            content: {
+              type: 'container',
+              id: 'zone-reference',
+              children: [
+                {
+                  type: 'text',
+                  id: 'reference',
+                  content: [{ kind: 'literal', text: 'REF-001' }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
 /** One historical document and its compatibility expectations. */
 export interface HistoricalFixture {
   /** The stored version this document was written under. */
@@ -511,6 +606,7 @@ const APPEARANCE = ['box', 'typography', 'align'];
 const WRITINGS = 'presentations';
 const FRAGMENTATION = 'keepTogether';
 const ACCOUNTING = 'pageReport';
+const LAYOUT = 'grid';
 
 /**
  * The closed matrix: one witness per stored version, ordered from the oldest.
@@ -523,53 +619,59 @@ export const HISTORICAL_FIXTURES: readonly HistoricalFixture[] = [
     version: 1,
     document: V1_DOCUMENT,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
+    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 2,
     document: v2,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, 'round', ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
+    futureTokens: [...TABLE, 'round', ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 3,
     document: v3,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
+    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 4,
     document: v4,
     receivesCompatibilityPage: true,
-    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
+    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 5,
     document: v5,
     receivesCompatibilityPage: false,
-    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
+    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 6,
     document: v6,
     receivesCompatibilityPage: false,
-    futureTokens: [WRITINGS, FRAGMENTATION, ACCOUNTING],
+    futureTokens: [WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 7,
     document: v7,
     receivesCompatibilityPage: false,
-    futureTokens: [FRAGMENTATION, ACCOUNTING],
+    futureTokens: [FRAGMENTATION, ACCOUNTING, LAYOUT],
   },
   {
     version: 8,
     document: v8,
     receivesCompatibilityPage: false,
-    futureTokens: [ACCOUNTING],
+    futureTokens: [ACCOUNTING, LAYOUT],
   },
   {
     version: 9,
     document: v9,
+    receivesCompatibilityPage: false,
+    futureTokens: [LAYOUT],
+  },
+  {
+    version: 10,
+    document: v10,
     receivesCompatibilityPage: false,
     futureTokens: [],
   },

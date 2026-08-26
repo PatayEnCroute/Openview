@@ -104,6 +104,9 @@ export function paginate(
     sheet: document.sheet,
     margins: document.margins,
     printable: document.printable,
+    /* Carried through untouched: layers reserve nothing, so the cuts above never read them. */
+    backgroundLayers: document.backgroundLayers,
+    foregroundLayers: document.foregroundLayers,
     headerReserve: reserves.header / metrics.pxPerMm,
     footerReserve: reserves.footer / metrics.pxPerMm,
   };

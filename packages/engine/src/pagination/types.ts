@@ -3,8 +3,10 @@ import type {
   MaterialBlock,
   MaterialCell,
   MaterialContainer,
+  MaterialGrid,
   MaterialImage,
   MaterialPageFieldRun,
+  MaterialPageLayer,
   MaterialRow,
   MaterialRun,
   MaterialTable,
@@ -41,6 +43,12 @@ export interface ImageFragment {
   readonly source: MaterialImage;
 }
 
+/** A grid is atomic: placed whole, deferred whole, or refused. Never cut between its rows. */
+export interface GridFragment {
+  readonly kind: 'grid';
+  readonly source: MaterialGrid;
+}
+
 export interface ContainerFragment {
   readonly kind: 'container';
   readonly source: MaterialContainer;
@@ -74,7 +82,12 @@ export interface TableFragment {
   readonly edge: FragmentEdge;
 }
 
-export type MaterialFragment = TextFragment | ImageFragment | ContainerFragment | TableFragment;
+export type MaterialFragment =
+  | TextFragment
+  | ImageFragment
+  | ContainerFragment
+  | TableFragment
+  | GridFragment;
 
 /** Progress through a vertical sequence of blocks. Spent when `index` reaches the sequence length. */
 export interface FlowCursor {
@@ -139,6 +152,10 @@ export interface PaginatedDocument {
   /** Height reserved for the top band on every page, in millimetres. */
   readonly headerReserve: number;
   readonly footerReserve: number;
+  /** Painted identically behind every page, in stored order; they reserve no height anywhere. */
+  readonly backgroundLayers: readonly MaterialPageLayer[];
+  /** Painted identically in front of every page, in stored order. */
+  readonly foregroundLayers: readonly MaterialPageLayer[];
   readonly pages: readonly MaterialPage[];
   readonly markers: MarkerReserve;
 }

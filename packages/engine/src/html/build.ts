@@ -3,12 +3,23 @@ import type { MaterialPageFieldRun, MaterialRun, ResolvedTypography } from '../d
 import { CANONICAL_NUMBER_MAX_CHARS } from '../pagination/markers.js';
 import type {
   CellFragment,
+  GridFragment,
   MarkerReserve,
   MaterialFragment,
   RowFragment,
   TableFragment,
 } from '../pagination/types.js';
-import { boxCss, CSS_CLASSES, columnWidths, markerCss, runCss, textCss } from './css.js';
+import { wholeFragment } from '../pagination/whole.js';
+import {
+  boxCss,
+  CSS_CLASSES,
+  columnWidths,
+  gridCss,
+  gridItemCss,
+  markerCss,
+  runCss,
+  textCss,
+} from './css.js';
 import { type RowRules, resolveRowRules } from './table-rules.js';
 import type { HtmlAttributes, HtmlElement, HtmlElementName, HtmlNode } from './types.js';
 
@@ -184,6 +195,37 @@ function buildTable(table: TableFragment, context: PaintContext): HtmlElement {
 }
 
 /**
+ * One grid: its tracks from validated numbers, one positioned wrapper per zone, and each zone's
+ * container built whole -- a grid is atomic, so no zone is ever a partial fragment.
+ *
+ * The wrapper carries a closed attribute naming the zone's container, which is what the layout
+ * session measures overflow against; no `overflow: hidden` hides an escape from it.
+ */
+function buildGrid(grid: GridFragment, context: PaintContext): HtmlElement {
+  const source = grid.source;
+  return element(
+    'div',
+    {
+      class: CSS_CLASSES.grid,
+      style: gridCss(source.columns, source.rows, source.step, source.box),
+      'data-openview-node': source.nodeId,
+      ...keyAttribute(source.key, context),
+    },
+    source.items.map((item) =>
+      element(
+        'div',
+        {
+          class: CSS_CLASSES.gridItem,
+          style: gridItemCss(item.row, item.column, item.rowSpan, item.columnSpan),
+          'data-openview-grid-item': item.content.nodeId,
+        },
+        [buildFragment(wholeFragment(item.content), context)],
+      ),
+    ),
+  );
+}
+
+/**
  * One box per fragment. The element names come from the closed vocabulary and the attributes from
  * this function, so no value of the template can become markup.
  *
@@ -235,6 +277,8 @@ export function buildFragment(fragment: MaterialFragment, context: PaintContext)
       );
     case 'table':
       return buildTable(fragment, context);
+    case 'grid':
+      return buildGrid(fragment, context);
     default: {
       /* `kindOf` reads the discriminant and nothing else: a message must not be able to carry the
          text a block holds. */

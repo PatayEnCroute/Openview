@@ -31,12 +31,32 @@ export interface PageBand {
   readonly content: ContainerNode;
 }
 
-/** Global page layout configuration: sheet size, margins, and page bands. */
+/** The two planes a page layer can be painted on, behind or in front of the paged content. */
+export const PAGE_LAYER_PLANES = ['background', 'foreground'] as const;
+
+export type PageLayerPlane = (typeof PAGE_LAYER_PLANES)[number];
+
+/**
+ * One page layer: painted on every page, stretched to the whole sheet, out of the flow.
+ *
+ * Within a plane, the stored order is the back-to-front order. The content carries the layer's
+ * identity, exactly as a band's content does; `opacity` applies to the whole layer and is strictly
+ * between 0 and 1 -- absence means opaque.
+ */
+export interface PageLayer {
+  readonly plane: PageLayerPlane;
+  readonly opacity?: number | undefined;
+  readonly content: ContainerNode;
+}
+
+/** Global page layout configuration: sheet size, margins, page bands, and page layers. */
 export interface PageSetup {
   readonly sheet: Sheet;
   readonly margins: PageMargins;
   readonly header: readonly PageBand[];
   readonly footer: readonly PageBand[];
+  /** Absent means no layer; an empty list is refused so absence has one spelling. */
+  readonly layers?: readonly PageLayer[] | undefined;
 }
 
 /** Usable printable area dimensions in millimeters. */

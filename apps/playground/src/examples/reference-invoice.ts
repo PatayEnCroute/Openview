@@ -505,17 +505,166 @@ export const factureAvecApparence = (a: Apparence): Template =>
           },
         },
       ],
+      // Les CALQUES — lot C11. Répétés à l'identique sur toutes les pages, hors flux : ils ne
+      // réservent aucune hauteur et ne déplacent aucune coupure. Dans un plan, l'ordre du tableau
+      // est l'ordre arrière → avant ; l'opacité porte sur le calque ENTIER, jamais sur `Color`.
+      layers: [
+        {
+          plane: 'background',
+          content: {
+            type: 'container',
+            id: 'papier',
+            box: { background: '#fdfaf2' },
+            children: [],
+          },
+        },
+        {
+          plane: 'background',
+          opacity: 0.12,
+          content: {
+            type: 'container',
+            id: 'filigrane',
+            children: [
+              {
+                type: 'grid',
+                id: 'filigrane-grille',
+                columns: 3,
+                rows: 3,
+                step: 99,
+                items: [
+                  {
+                    row: 2,
+                    column: 2,
+                    content: {
+                      type: 'container',
+                      id: 'filigrane-zone',
+                      children: [
+                        {
+                          type: 'text',
+                          id: 'filigrane-texte',
+                          align: 'center',
+                          typography: { ...a.titre, sizePt: 26 },
+                          content: [{ kind: 'literal', text: 'DUPLICATA' }],
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          plane: 'foreground',
+          opacity: 0.85,
+          content: {
+            type: 'container',
+            id: 'cachet',
+            children: [
+              {
+                type: 'grid',
+                id: 'cachet-grille',
+                columns: 3,
+                rows: 3,
+                step: 99,
+                items: [
+                  {
+                    row: 3,
+                    column: 3,
+                    content: {
+                      type: 'container',
+                      id: 'cachet-zone',
+                      children: [
+                        { type: 'image', id: 'cachet-image', src: LOGO_PNG, alt: 'cachet' },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
     },
     root: {
       type: 'container',
       id: 'root',
       box: siNonVide(a.cadre),
       children: [
+        // L'en-tête sur une GRILLE — lot C11. Douze colonnes parce que 3, 4 et 5 la divisent
+        // proprement POUR CE MODÈLE ; le moteur ne réserve ni ce nombre, ni aucun vocabulaire.
+        // La largeur d'une colonne dérive du parent, seul le pas vertical est déclaré, et le
+        // contenu d'une zone ne redimensionne AUCUNE piste : un débordement mesuré est un refus.
         {
-          type: 'text',
-          id: 'title',
-          typography: a.titre,
-          content: [{ kind: 'binding', value: titre }],
+          type: 'grid',
+          id: 'en-tete',
+          columns: 12,
+          rows: 6,
+          step: 4,
+          items: [
+            {
+              row: 1,
+              column: 1,
+              rowSpan: 4,
+              columnSpan: 3,
+              content: {
+                type: 'container',
+                id: 'zone-marque',
+                children: [
+                  {
+                    type: 'image',
+                    id: 'marque-grille',
+                    src: LOGO_PNG,
+                    alt: 'marque de l’émetteur',
+                  },
+                ],
+              },
+            },
+            {
+              row: 1,
+              column: 4,
+              rowSpan: 2,
+              columnSpan: 5,
+              content: {
+                type: 'container',
+                id: 'zone-titre',
+                children: [
+                  {
+                    type: 'text',
+                    id: 'title',
+                    typography: { ...a.corps, bold: true },
+                    content: [{ kind: 'binding', value: titre }],
+                  },
+                ],
+              },
+            },
+            {
+              row: 1,
+              column: 9,
+              rowSpan: 2,
+              columnSpan: 4,
+              content: {
+                type: 'container',
+                id: 'zone-reference',
+                children: [
+                  {
+                    type: 'text',
+                    id: 'reference-grille',
+                    typography: a.corps,
+                    align: 'end',
+                    content: [
+                      { kind: 'literal', text: 'Commande ' },
+                      {
+                        kind: 'binding',
+                        value: { kind: 'path', path: 'commande.numero' },
+                        typography: a.accent,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
         },
         // Les cinq identifiants de colonne ci-dessous — `sku`, `quantite`, `prixUnitaire`,
         // `montant`, `remise` — appellent le même avertissement que les noms de champs plus

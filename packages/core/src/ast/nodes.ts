@@ -6,6 +6,8 @@ export {
   ConditionNodeSchema,
   ContainerNodeSchema,
   DocumentNodeSchema,
+  GridItemSchema,
+  GridNodeSchema,
   ImageNodeSchema,
   LoopNodeSchema,
   PageReportContributionSchema,
@@ -30,6 +32,8 @@ export type {
   ContainerNode,
   DocumentNode,
   DocumentNodeType,
+  GridItem,
+  GridNode,
   ImageNode,
   LoopNode,
   PageField,
@@ -52,7 +56,9 @@ export type {
 } from './types.js';
 export {
   MAX_COLUMN_WIDTH,
+  MAX_GRID_TRACKS,
   MIN_COLUMN_WIDTH,
+  MIN_GRID_TRACKS,
   PAGE_FIELDS,
   TABLE_COLUMN_ALIGNMENTS,
   TEXT_ALIGNMENTS,

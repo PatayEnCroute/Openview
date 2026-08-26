@@ -28,6 +28,7 @@ import {
   type OpenviewDiagnostic,
   type PageBand,
   type PageBandOccurrence,
+  type PageLayerPlane,
   type PageSetup,
   type Presentation,
   type PrintableExpression,
@@ -538,6 +539,32 @@ function Bloc({
         ),
       ),
     table: (tableau) => <Tableau tableau={tableau} scope={scope} budget={budget} />,
+    // Les pistes viennent des NOMBRES validés du contrat : colonnes égales en fractions,
+    // lignes au pas déclaré. Le contenu d'une zone ne redimensionne aucune piste.
+    grid: (grille) => (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${grille.columns}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${grille.rows}, ${grille.step * PX_PAR_MM}px)`,
+          ...styleCssDe(grille.box, undefined),
+        }}
+      >
+        {avecCle(grille.items, (item) => item.content.id).map(({ cle, item }) => (
+          <div
+            key={cle}
+            style={{
+              gridRow: `${item.row} / span ${item.rowSpan ?? 1}`,
+              gridColumn: `${item.column} / span ${item.columnSpan ?? 1}`,
+              minWidth: 0,
+              minHeight: 0,
+            }}
+          >
+            <Bloc bloc={item.content} scope={scope} budget={budget} />
+          </div>
+        ))}
+      </div>
+    ),
     tableRow: (ligne) => <div>[ligne {ligne.id} hors d'un tableau]</div>,
     tableRowGroup: (groupe) => <div>[groupe {groupe.id} hors d'un tableau]</div>,
   });
@@ -674,6 +701,7 @@ function texteDeBloc(block: BlockNode, scope: EvaluationScope, budget: Evaluatio
       evaluatePredicate(condition.when, scope, { budget }) ? descendre(condition.children) : '',
     loop: (boucle) => `[loop ${boucle.as} non mis en page par cette démonstration]`,
     table: (imbrique) => `[tableau imbriqué ${imbrique.id} non mis en page ici]`,
+    grid: (grille) => descendre(grille.items.map((item) => item.content)),
     tableRow: (ligne) => `[ligne ${ligne.id} hors d'un tableau]`,
     tableRowGroup: (groupe) => `[groupe ${groupe.id} hors d'un tableau]`,
   });
@@ -1331,6 +1359,35 @@ const feuilleStyle = {
   boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
 } as const;
 
+/** Un calque dessiné sur la feuille à l'échelle : sa clé, son libellé et sa boîte pleine feuille. */
+interface CalqueDessine {
+  readonly cle: string;
+  readonly libelle: string;
+  readonly style: CSSProperties;
+}
+
+/**
+ * Les calques d'un plan, dessinés pleine feuille dans l'ordre stocké — l'ordre EST la profondeur.
+ *
+ * Ce qui est peint vient du document validé : le fond du conteneur du calque et l'opacité du calque
+ * entier. Rien n'est inventé ; un calque sans fond reste une boîte transparente étiquetée.
+ */
+function calquesDe(plan: PageLayerPlane): readonly CalqueDessine[] {
+  return (pageModele.layers ?? [])
+    .filter((calque) => calque.plane === plan)
+    .map((calque, index) => ({
+      cle: `${plan}-${index}`,
+      libelle: `${calque.content.id}${calque.opacity === undefined ? '' : ` (opacité ${calque.opacity})`}`,
+      style: {
+        position: 'absolute',
+        inset: 0,
+        background: calque.content.box?.background,
+        opacity: calque.opacity,
+        pointerEvents: 'none',
+      },
+    }));
+}
+
 /**
  * La zone imprimable, positionnée par les marges et DIMENSIONNÉE par `printableAreaOf`.
  *
@@ -1596,7 +1653,15 @@ export default function App() {
       </p>
       <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <div style={feuilleStyle}>
+          {/* Les calques ARRIÈRE, dessinés pleine feuille SOUS la zone imprimable — lot C11. Ce
+              qui est peint vient du document validé : fond du conteneur et opacité du calque. */}
+          {calquesDe('background').map((calque) => (
+            <div key={calque.cle} style={calque.style} title={calque.libelle} />
+          ))}
           <div style={zoneImprimableStyle} />
+          {calquesDe('foreground').map((calque) => (
+            <div key={calque.cle} style={calque.style} title={calque.libelle} />
+          ))}
         </div>
         <div style={{ flex: '1 1 20rem' }}>
           <p style={{ marginTop: 0 }}>
@@ -1620,6 +1685,18 @@ export default function App() {
           {bandesBas.map((bande) => (
             <div key={bande.cle} style={bandeStyle}>
               <em>{bande.occurrence}</em> — {bande.texte}
+            </div>
+          ))}
+          <p>
+            <strong>Calques</strong> — répétés sur toutes les pages, hors flux (lot C11)
+          </p>
+          {(pageModele.layers ?? []).map((calque, index) => (
+            <div key={`calque-${calque.content.id}`} style={bandeStyle}>
+              <em>
+                {calque.plane === 'background' ? 'arrière-plan' : 'avant-plan'} #{index + 1}
+              </em>{' '}
+              — <code>{calque.content.id}</code>
+              {calque.opacity === undefined ? '' : ` — opacité ${calque.opacity}`}
             </div>
           ))}
         </div>

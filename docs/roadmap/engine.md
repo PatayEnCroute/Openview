@@ -29,6 +29,13 @@ Le jalon **J2 est atteint**. Le jalon **J3 ne l'est pas encore** : il exige auss
 français/euros puis anglais/dollars, propriété d'**E4**. Écritures, déterminisme, corpus
 figé et durcissement restent devant.
 
+Depuis le lot **C11** ([ADR 0016](../adr/0016-grille-colonnes-et-calques.md)), le moteur
+rend aussi les **grilles** (atomiques à la pagination, un contenu de zone qui déborde est
+refusé après mesure — `grid-content-overflow` — jamais rogné) et les **calques de page**
+(peints pleine feuille sur chaque page, hors flux : les coupures sont prouvées identiques
+avec et sans calques). Le contrat du port de mesure a gagné une observation,
+`overflowingGridItems`, que l'adaptateur Puppeteer fournit.
+
 Voir l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md),
 l'[ADR 0013](../adr/0013-le-tableau-deborde-proprement.md) et
 l'[ADR 0014](../adr/0014-les-exigences-comptables.md) pour ce que les trois lots ont

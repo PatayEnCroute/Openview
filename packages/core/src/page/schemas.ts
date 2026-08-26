@@ -1,9 +1,10 @@
-import { z } from 'zod/v4';
+﻿import { z } from 'zod/v4';
 import { ContainerNodeSchema } from '../ast/nodes.js';
 import {
   MAX_SHEET_MM,
   MIN_SHEET_MM,
   PAGE_BAND_OCCURRENCES,
+  PAGE_LAYER_PLANES,
   type PageBand,
   type PageBandOccurrence,
   type PageSetup,
@@ -77,6 +78,27 @@ export const PageBandsSchema = z
   .max(MAX_BANDS_PER_SIDE, 'A side carries at most two bands.')
   .check(z.superRefine(checkBandsCannotOverlap));
 
+export const PageLayerSchema = z.object({
+  plane: z.enum(PAGE_LAYER_PLANES),
+  opacity: z
+    .number()
+    .gt(
+      0,
+      'An opacity of 0 stores an invisible layer; remove the layer or guard it with a condition',
+    )
+    .lt(1, 'An opacity of 1 duplicates the absence of the field; omit it')
+    .optional(),
+  content: ContainerNodeSchema,
+});
+
+/**
+ * Zod schema for the page layer list. Non-empty on purpose: an absent field already says
+ * "no layer", and a second spelling of that fact would have to be normalised everywhere.
+ */
+export const PageLayersSchema = z
+  .array(PageLayerSchema)
+  .min(1, 'A page layer list is non-empty; omit the field to declare no layer');
+
 /**
  * Zod schema for PageSetup validating positive printable dimensions on both axes.
  */
@@ -86,6 +108,7 @@ export const PageSetupSchema = z
     margins: PageMarginsSchema,
     header: PageBandsSchema,
     footer: PageBandsSchema,
+    layers: PageLayersSchema.optional(),
   })
   .check(
     z.superRefine((page, ctx) => {
