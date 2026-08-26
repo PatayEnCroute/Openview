@@ -1,7 +1,8 @@
 import type { ExpressionErrorSite } from '../../errors.js';
 import { createBudget, type EvaluationBudget } from '../limits.js';
 import type { Expression } from '../types.js';
-import { kindOf, valueTypeOf } from '../value-type.js';
+import { valueTypeOf } from '../value-type.js';
+import { type ExpressionVisitor, visitExpression } from '../visitor.js';
 import {
   type AttributedEvaluationOptions,
   describe,
@@ -27,6 +28,82 @@ function evalWithin(
 ): unknown {
   return evaluateWithin(expression, at, scope, budget, evaluateExpression);
 }
+
+/** What every evaluation branch needs: the data in scope, and the shared budget. */
+interface EvaluationContext {
+  readonly scope: EvaluationScope;
+  readonly budget: EvaluationBudget;
+}
+
+const EVALUATION_VISITOR: ExpressionVisitor<unknown, EvaluationContext> = {
+  literal: (expression) => expression.value,
+  path: (expression, { scope }) => resolvePath(expression.path, scope),
+  arithmetic: (expression, { scope, budget }) =>
+    evaluateArithmetic(
+      expression.op,
+      evalWithin(expression.left, ['left'], scope, budget),
+      evalWithin(expression.right, ['right'], scope, budget),
+      'arithmetic',
+    ),
+  percentOf: (expression, { scope, budget }) =>
+    evaluatePercentOf(
+      evalWithin(expression.base, ['base'], scope, budget),
+      evalWithin(expression.rate, ['rate'], scope, budget),
+      'percentOf',
+    ),
+  round: (expression, { scope, budget }) =>
+    evaluateRound(
+      evalWithin(expression.value, ['value'], scope, budget),
+      expression.decimals,
+      expression.mode,
+    ),
+  concat: (expression, { scope, budget }) =>
+    evaluateConcat(expression.parts, scope, budget, evalWithin),
+  text: (expression, { scope, budget }) =>
+    evaluateText(evalWithin(expression.value, ['value'], scope, budget), budget),
+  textCase: (expression, { scope, budget }) =>
+    evaluateTextCase(evalWithin(expression.text, ['text'], scope, budget), expression.op, budget),
+  dateAdd: (expression, { scope, budget }) =>
+    evaluateDateAdd(
+      evalWithin(expression.date, ['date'], scope, budget),
+      evalWithin(expression.days, ['days'], scope, budget),
+    ),
+  dateDiff: (expression, { scope, budget }) =>
+    evaluateDateDiff(
+      evalWithin(expression.from, ['from'], scope, budget),
+      evalWithin(expression.to, ['to'], scope, budget),
+    ),
+  endOfMonth: (expression, { scope, budget }) =>
+    evaluateEndOfMonth(evalWithin(expression.date, ['date'], scope, budget)),
+  aggregate: (expression, { scope, budget }) =>
+    evaluateAggregate(expression, scope, budget, evaluateExpression, evaluateSequence),
+  count: (expression, { scope, budget }) =>
+    evaluateCount(expression.source, scope, budget, evaluateSequence),
+  filter: (expression, { scope, budget }) =>
+    evaluateFilter(expression, scope, budget, evaluatePredicate, evaluateSequence),
+  if: (expression, { scope, budget }) =>
+    evaluateIf(
+      evalWithin(expression.when, ['when'], scope, budget),
+      expression.whenTrue,
+      expression.whenFalse,
+      scope,
+      budget,
+      evalWithin,
+    ),
+  compare: (expression, { scope, budget }) =>
+    evaluateCompare(
+      expression.op,
+      evalWithin(expression.left, ['left'], scope, budget),
+      evalWithin(expression.right, ['right'], scope, budget),
+      'compare',
+    ),
+  logical: (expression, { scope, budget }) =>
+    evaluateLogical(expression.op, expression.operands, scope, budget, evalWithin),
+  not: (expression, { scope, budget }) =>
+    evaluateNot(evalWithin(expression.operand, ['operand'], scope, budget)),
+  isEmpty: (expression, { scope, budget }) =>
+    evaluateIsEmpty(evalWithin(expression.operand, ['operand'], scope, budget)),
+};
 
 /**
  * Evaluates an algebraic expression against an evaluation scope and budget.
@@ -62,85 +139,7 @@ export function evaluateExpression(
   }
 
   try {
-    switch (expression.kind) {
-      case 'literal':
-        return expression.value;
-      case 'path':
-        return resolvePath(expression.path, scope);
-      case 'arithmetic':
-        return evaluateArithmetic(
-          expression.op,
-          evalWithin(expression.left, ['left'], scope, budget),
-          evalWithin(expression.right, ['right'], scope, budget),
-          'arithmetic',
-        );
-      case 'percentOf':
-        return evaluatePercentOf(
-          evalWithin(expression.base, ['base'], scope, budget),
-          evalWithin(expression.rate, ['rate'], scope, budget),
-          'percentOf',
-        );
-      case 'round':
-        return evaluateRound(
-          evalWithin(expression.value, ['value'], scope, budget),
-          expression.decimals,
-          expression.mode,
-        );
-      case 'concat':
-        return evaluateConcat(expression.parts, scope, budget, evalWithin);
-      case 'text':
-        return evaluateText(evalWithin(expression.value, ['value'], scope, budget), budget);
-      case 'textCase':
-        return evaluateTextCase(
-          evalWithin(expression.text, ['text'], scope, budget),
-          expression.op,
-          budget,
-        );
-      case 'dateAdd':
-        return evaluateDateAdd(
-          evalWithin(expression.date, ['date'], scope, budget),
-          evalWithin(expression.days, ['days'], scope, budget),
-        );
-      case 'dateDiff':
-        return evaluateDateDiff(
-          evalWithin(expression.from, ['from'], scope, budget),
-          evalWithin(expression.to, ['to'], scope, budget),
-        );
-      case 'endOfMonth':
-        return evaluateEndOfMonth(evalWithin(expression.date, ['date'], scope, budget));
-      case 'aggregate':
-        return evaluateAggregate(expression, scope, budget, evaluateExpression, evaluateSequence);
-      case 'count':
-        return evaluateCount(expression.source, scope, budget, evaluateSequence);
-      case 'filter':
-        return evaluateFilter(expression, scope, budget, evaluatePredicate, evaluateSequence);
-      case 'if':
-        return evaluateIf(
-          evalWithin(expression.when, ['when'], scope, budget),
-          expression.whenTrue,
-          expression.whenFalse,
-          scope,
-          budget,
-          evalWithin,
-        );
-      case 'compare':
-        return evaluateCompare(
-          expression.op,
-          evalWithin(expression.left, ['left'], scope, budget),
-          evalWithin(expression.right, ['right'], scope, budget),
-          'compare',
-        );
-      case 'logical':
-        return evaluateLogical(expression.op, expression.operands, scope, budget, evalWithin);
-      case 'not':
-        return evaluateNot(evalWithin(expression.operand, ['operand'], scope, budget));
-      case 'isEmpty':
-        return evaluateIsEmpty(evalWithin(expression.operand, ['operand'], scope, budget));
-      default: {
-        const exhaustive: never = expression;
-        throw new TypeError(`Unhandled expression: ${kindOf(exhaustive, 'kind')}`);
-      }
-    }
+    return visitExpression(expression, EVALUATION_VISITOR, { scope, budget });
   } finally {
     budget.leave();
   }

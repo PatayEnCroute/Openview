@@ -72,8 +72,47 @@ export {
 } from './ast/visitor.js';
 
 export type {
+  DataCatalogue,
+  DataCatalogueEntry,
+  DataExpectation,
+  DataField,
+  DataListType,
+  DataObjectType,
+  DataReadStatus,
+  DataScalarKind,
+  DataScalarType,
+  DataScopeWarning,
+  DataScopeWarningCode,
+  DataType,
+  DataTypeKind,
+  TemplateDataCompatibility,
+  TemplateDataRead,
+} from './data-catalogue/data-catalogue.js';
+export {
+  acceptedKindsOf,
+  checkTemplateDataCompatibility,
+  DATA_EXPECTATIONS,
+  DATA_READ_STATUSES,
+  DATA_SCALAR_KINDS,
+  DATA_SCOPE_WARNING_CODES,
+  DataBooleanTypeSchema,
+  DataCatalogueSchema,
+  DataCivilDateTypeSchema,
+  DataFieldSchema,
+  DataListTypeSchema,
+  DataNumberTypeSchema,
+  DataObjectTypeSchema,
+  DataStringTypeSchema,
+  DataTypeSchema,
+  listDataCatalogueEntries,
+  MAX_DATA_LABEL_LENGTH,
+} from './data-catalogue/data-catalogue.js';
+
+export type {
   ConfigurationDiagnostic,
   ConfigurationDiagnosticCode,
+  DataCompatibilityCode,
+  DataCompatibilityDiagnostic,
   DiagnosticContext,
   DiagnosticSource,
   ExpressionEvaluationDiagnostic,
@@ -86,6 +125,7 @@ export type {
 } from './diagnostics/diagnostics.js';
 export {
   CONFIGURATION_DIAGNOSTIC_CODES,
+  DATA_COMPATIBILITY_CODES,
   DIAGNOSTIC_SOURCES,
   diagnosticOfPresentationRefusal,
   diagnosticsOf,

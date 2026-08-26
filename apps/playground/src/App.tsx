@@ -3,9 +3,11 @@ import {
   type BorderEdge,
   type BoxStyle,
   CURRENT_SCHEMA_VERSION,
+  checkTemplateDataCompatibility,
   childScope,
   collectTemplateDataPaths,
   createBudget,
+  type DataCatalogueEntry,
   type DiagnosticContext,
   type DocumentNode,
   diagnosticOfPresentationRefusal,
@@ -19,6 +21,7 @@ import {
   formatDate,
   formatDecimal,
   formatMoney,
+  listDataCatalogueEntries,
   MAX_ROUND_DECIMALS,
   MIN_ROUND_DECIMALS,
   mmFromPt,
@@ -51,6 +54,7 @@ import {
   walk,
 } from '@openview/core';
 import type { CSSProperties, ReactNode } from 'react';
+import { catalogueFacture, catalogueSansPrix, catalogueValide } from './examples/data-catalogue.js';
 
 // Exercises the core contract end to end: recursive parsing, Visitor traversal,
 // static path analysis, expression evaluation, loop scoping, the C1 algebra and the
@@ -188,6 +192,18 @@ const nodeIds = racines.flatMap((racine) =>
  * clé, et le pied s'imprimerait vide.
  */
 const dataPaths = collectTemplateDataPaths(sampleTemplate);
+
+/**
+ * Le lot C10 vu de l'hôte : les libellés proposables, et la compatibilité du modèle.
+ *
+ * Trois faits sont calculés ici et JAMAIS écrits en dur plus bas — le catalogue complet
+ * accepte la facture, la variante privée du prix unitaire la refuse à l'emplacement exact
+ * de chaque lecture, et aucun jeu de données n'entre dans l'appel : `renderData` n'est
+ * mentionné nulle part dans ce bloc.
+ */
+const champsDeclares: readonly DataCatalogueEntry[] = listDataCatalogueEntries(catalogueFacture);
+const compatibiliteComplete = checkTemplateDataCompatibility(sampleTemplate, catalogueFacture);
+const compatibiliteSansPrix = checkTemplateDataCompatibility(sampleTemplate, catalogueSansPrix);
 
 // Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de groupe, la
 // condition sur le nœud de condition. Les expressions déclarées plus haut ne servent qu'à
@@ -1507,6 +1523,64 @@ export default function App() {
           </li>
         ))}
       </ul>
+
+      <h2>Le catalogue de l'intégrateur (C10)</h2>
+      <p>
+        La section précédente dit ce que le modèle <em>lit</em>. Celle-ci dit ce que l'application
+        hôte <em>déclare lisible</em>, avec ses libellés métier —{' '}
+        <strong>{champsDeclares.length}</strong> champs, dans l'ordre que l'hôte a choisi, rendu par{' '}
+        <code>listDataCatalogueEntries</code>. Le catalogue vit dans{' '}
+        <code>apps/playground/src/examples/data-catalogue.ts</code> : aucune de ces clés et aucun de
+        ces libellés n'existe dans <code>packages/</code>. Sa validation à la frontière est jouée
+        une fois au chargement —{' '}
+        <strong>
+          {catalogueValide ? 'catalogue accepté' : 'CATALOGUE REFUSÉ, ce qui est un défaut'}
+        </strong>
+        .
+      </p>
+      <p>
+        <strong>Cette carte n'est pas le sélecteur de champs.</strong> Elle montre le critère de
+        recette du lot ; l'interface d'insertion appartient au Designer (D1/D4), qui n'existe pas
+        encore. Et rien ici ne reçoit de jeu de données :{' '}
+        <code>checkTemplateDataCompatibility</code> prend un modèle et une déclaration, point.
+      </p>
+      <ul>
+        {champsDeclares.map((entree) => (
+          <li key={entree.keyPath.join('.')}>
+            {entree.labelPath.join(' › ')} — <code>{entree.keyPath.join('.')}</code>{' '}
+            <em>({entree.type.kind})</em>
+          </li>
+        ))}
+      </ul>
+      <p>
+        Avec le catalogue complet, la facture de référence est{' '}
+        <strong>
+          {compatibiliteComplete.compatible ? 'compatible' : 'INCOMPATIBLE, ce qui est un défaut'}
+        </strong>{' '}
+        : <strong>{compatibiliteComplete.reads.length}</strong> lectures localisées,{' '}
+        <strong>{compatibiliteComplete.diagnostics.length}</strong> refus.
+      </p>
+      <p>
+        On retire alors <code>prixUnitaire</code> des lignes de commande, et{' '}
+        <strong>rien d'autre</strong>. Le modèle ne bouge pas ; ce sont les{' '}
+        <strong>{compatibiliteSansPrix.diagnostics.length}</strong> occurrences qui le lisent qui
+        deviennent incompatibles, chacune à sa position. Le chemin fautif reste dans{' '}
+        <code>dataPath</code> et n'entre jamais dans la phrase : c'est un nom que l'hôte a choisi,
+        et c'est l'hôte qui l'échappe.
+      </p>
+      {compatibiliteSansPrix.diagnostics.map((refus) => (
+        <div key={`${refus.code}-${refus.path.join('.')}`} style={refusalStyle}>
+          <code>{refus.code}</code> · <code>{refus.dataPath}</code> ·{' '}
+          <code>{refus.path.join(' › ')}</code>
+          <br />
+          {refus.message}
+        </div>
+      ))}
+      <p>
+        Les lectures suspendues valent d'être vues : si l'on remplaçait la liste par un objet, la
+        source recevrait <strong>un</strong> refus et ses descendants le statut <code>blocked</code>{' '}
+        — pas dix symptômes pour une seule cause.
+      </p>
 
       <h2>La page : une feuille, des marges, et ce qui se répète</h2>
       <p>

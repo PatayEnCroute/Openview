@@ -1,5 +1,5 @@
 import type { Expression } from './types.js';
-import { kindOf } from './value-type.js';
+import { type ExpressionVisitor, visitExpression } from './visitor.js';
 
 /**
  * Returns the first segment of a dotted path.
@@ -15,89 +15,97 @@ function withAlias(aliases: ReadonlySet<string>, alias: string): ReadonlySet<str
   return new Set(aliases).add(alias);
 }
 
-function collectPaths(
-  expression: Expression,
-  aliases: ReadonlySet<string>,
-  into: Set<string>,
-): void {
-  switch (expression.kind) {
-    case 'literal':
-      break;
-    case 'path':
-      if (!aliases.has(rootSegment(expression.path))) {
-        into.add(expression.path);
-      }
-      break;
-    case 'compare':
-    case 'arithmetic':
-      collectPaths(expression.left, aliases, into);
-      collectPaths(expression.right, aliases, into);
-      break;
-    case 'percentOf':
-      collectPaths(expression.base, aliases, into);
-      collectPaths(expression.rate, aliases, into);
-      break;
-    case 'if':
-      collectPaths(expression.when, aliases, into);
-      collectPaths(expression.whenTrue, aliases, into);
-      collectPaths(expression.whenFalse, aliases, into);
-      break;
-    case 'count':
-      collectPaths(expression.source, aliases, into);
-      break;
-    case 'aggregate':
-      collectPaths(expression.source, aliases, into);
-      collectPaths(expression.value, withAlias(aliases, expression.as), into);
-      break;
-    case 'filter':
-      collectPaths(expression.source, aliases, into);
-      collectPaths(expression.where, withAlias(aliases, expression.as), into);
-      break;
-    case 'concat':
-      for (const part of expression.parts) {
-        collectPaths(part, aliases, into);
-      }
-      break;
-    case 'text':
-      collectPaths(expression.value, aliases, into);
-      break;
-    case 'round':
-      collectPaths(expression.value, aliases, into);
-      break;
-    case 'textCase':
-      collectPaths(expression.text, aliases, into);
-      break;
-    case 'dateAdd':
-      collectPaths(expression.date, aliases, into);
-      collectPaths(expression.days, aliases, into);
-      break;
-    case 'dateDiff':
-      collectPaths(expression.from, aliases, into);
-      collectPaths(expression.to, aliases, into);
-      break;
-    case 'endOfMonth':
-      collectPaths(expression.date, aliases, into);
-      break;
-    case 'logical':
-      for (const operand of expression.operands) {
-        collectPaths(operand, aliases, into);
-      }
-      break;
-    case 'not':
-    case 'isEmpty':
-      collectPaths(expression.operand, aliases, into);
-      break;
-    default: {
-      const exhaustive: never = expression;
-      throw new TypeError(`Unhandled expression: ${kindOf(exhaustive, 'kind')}`);
-    }
-  }
+/** The alias names masked at this depth, and the accumulator every branch adds to. */
+interface PathCollectionContext {
+  readonly aliases: ReadonlySet<string>;
+  readonly into: Set<string>;
 }
+
+function collectPaths(expression: Expression, context: PathCollectionContext): void {
+  visitExpression(expression, PATH_VISITOR, context);
+}
+
+function boundIn(context: PathCollectionContext, alias: string): PathCollectionContext {
+  return { aliases: withAlias(context.aliases, alias), into: context.into };
+}
+
+const PATH_VISITOR: ExpressionVisitor<void, PathCollectionContext> = {
+  literal: () => undefined,
+  path: (expression, { aliases, into }) => {
+    if (!aliases.has(rootSegment(expression.path))) {
+      into.add(expression.path);
+    }
+  },
+  compare: (expression, context) => {
+    collectPaths(expression.left, context);
+    collectPaths(expression.right, context);
+  },
+  arithmetic: (expression, context) => {
+    collectPaths(expression.left, context);
+    collectPaths(expression.right, context);
+  },
+  percentOf: (expression, context) => {
+    collectPaths(expression.base, context);
+    collectPaths(expression.rate, context);
+  },
+  if: (expression, context) => {
+    collectPaths(expression.when, context);
+    collectPaths(expression.whenTrue, context);
+    collectPaths(expression.whenFalse, context);
+  },
+  count: (expression, context) => {
+    collectPaths(expression.source, context);
+  },
+  aggregate: (expression, context) => {
+    collectPaths(expression.source, context);
+    collectPaths(expression.value, boundIn(context, expression.as));
+  },
+  filter: (expression, context) => {
+    collectPaths(expression.source, context);
+    collectPaths(expression.where, boundIn(context, expression.as));
+  },
+  concat: (expression, context) => {
+    for (const part of expression.parts) {
+      collectPaths(part, context);
+    }
+  },
+  text: (expression, context) => {
+    collectPaths(expression.value, context);
+  },
+  round: (expression, context) => {
+    collectPaths(expression.value, context);
+  },
+  textCase: (expression, context) => {
+    collectPaths(expression.text, context);
+  },
+  dateAdd: (expression, context) => {
+    collectPaths(expression.date, context);
+    collectPaths(expression.days, context);
+  },
+  dateDiff: (expression, context) => {
+    collectPaths(expression.from, context);
+    collectPaths(expression.to, context);
+  },
+  endOfMonth: (expression, context) => {
+    collectPaths(expression.date, context);
+  },
+  logical: (expression, context) => {
+    for (const operand of expression.operands) {
+      collectPaths(operand, context);
+    }
+  },
+  not: (expression, context) => {
+    collectPaths(expression.operand, context);
+  },
+  isEmpty: (expression, context) => {
+    collectPaths(expression.operand, context);
+  },
+};
 
 /**
  * Collects all external data paths read by an expression tree into a Set.
  */
 export function pathsOf(expression: Expression, into: Set<string> = new Set()): Set<string> {
-  collectPaths(expression, NO_ALIASES, into);
+  collectPaths(expression, { aliases: NO_ALIASES, into });
   return into;
 }

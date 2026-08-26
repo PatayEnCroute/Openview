@@ -80,3 +80,5 @@ export {
   ROUND_MODES,
   TEXT_CASE_OPERATORS,
 } from './types.js';
+export type { ExpressionVisitor } from './visitor.js';
+export { visitExpression } from './visitor.js';

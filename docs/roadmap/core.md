@@ -29,6 +29,15 @@ non plus décrire une **page** (format, marges, en-tête répété), un **tablea
 colonnes, ni la moindre **apparence** — pas une police, pas un filet, pas une couleur.
 Ces quatre manques sont le contenu de la vague 1.
 
+> ✅ **Vague 1 close le 2026-08-21**, et **C10 livré le 2026-08-26** — le contrat sait
+> désormais confronter un modèle au **catalogue déclaré par l'application hôte** :
+> libellés proposables dans l'ordre de l'hôte, et chaque lecture localisée dans sa
+> portée exacte. Il reste **C11** pour finir la vague 2.
+>
+> ⚠️ **C10 a été livré sans que J3 soit atteint** — E4 et la relecture par un gestionnaire
+> restent dus. L'écart et sa contrepartie sont nommés en tête de
+> l'[ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md).
+
 ---
 
 ## Règle d'arbitrage : la capacité est à nous, la responsabilité est à l'intégrateur
@@ -436,7 +445,8 @@ sa conversion, dans le même mouvement. Repoussée, elle ne se fait jamais.
 > doit suivre est écrit dans l'ADR, pas dispersé dans les plans C1 à C9.
 
 > 🏁 **Vague 1 close le 2026-08-21**, sans version 9 et sans moteur. Les neuf lots C1 à C9 ont livré
-> le contrat de modèle ; la suite appartient à la vague E et, pour C10, au jalon J3.
+> le contrat de modèle ; la suite appartient à la vague E et, pour C10, au jalon J3 — **que C10 n'a
+> pas attendu**, voir l'[ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md).
 
 ---
 
@@ -454,6 +464,32 @@ un modèle donné, si toutes ses données existent — et à lister les libellé
 proposables à l'utilisateur.
 
 **Poids :** M — **Dépend de :** J3 atteint
+
+> ✅ **Livré le 2026-08-26** par l'[ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md),
+> qui fait foi. Le catalogue est un contrat **hôte transitoire** — il n'entre pas dans le modèle,
+> `CURRENT_SCHEMA_VERSION` reste **9** — récursif, ordonné, et vide-possible. Quatre natures
+> terminales (`string`, `number`, `boolean`, `civil-date`), un objet, une liste ; deux clés sœurs
+> identiques sont refusées **à la position de la seconde**. `listDataCatalogueEntries()` rend les
+> libellés dans l'ordre de l'hôte ; `checkTemplateDataCompatibility(template, catalogue)` rend
+> **une entrée par occurrence** — flux puis en-tête puis pied — avec sa position, son `nodeId`,
+> l'attente de son site et un statut parmi `available`, `undeclared`, `incompatible`, `blocked`.
+>
+> **Les trois dettes des ADR 0001 à 0003 tombent ensemble** : le typage des lectures, les lectures
+> par élément (`ligne.montant` est vérifié contre le type d'élément de sa liste source), et l'alias
+> qui masque une racine — désormais un avertissement localisé, jamais un refus, parce que la
+> sémantique runtime est définie.
+>
+> **Ce que le lot refuse, et qui délimite la brique :** aucun schéma pour `RenderRequest.data`,
+> aucune validation d'instance, aucune inférence depuis un exemple, aucun nom de métier en
+> production. La fonction ne prend **pas** de jeu de données, et son arité est épinglée.
+>
+> **Ce qu'il a coûté à l'algèbre :** le troisième parcours d'expressions rend le Visitor
+> obligatoire, comme [AGENTS.md §3.B](../../AGENTS.md) l'annonçait. L'évaluateur et `pathsOf()`
+> passent désormais par un dispatcher unique, sans changement de comportement.
+>
+> ⚠️ **Livré hors gate.** Le plan gelait le lot jusqu'à J3, qui n'est pas atteint. Ce que le gate
+> protégeait — la table d'attentes — a été vérifié garde par garde contre le runtime livré ; il
+> reste dû de la relire quand E4 sortira.
 
 ### C11. Grille, colonnes et calques
 

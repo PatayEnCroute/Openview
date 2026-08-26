@@ -7,6 +7,8 @@ export { diagnosticOfPresentationRefusal, diagnosticsOf } from './diagnose.js';
 export type {
   ConfigurationDiagnostic,
   ConfigurationDiagnosticCode,
+  DataCompatibilityCode,
+  DataCompatibilityDiagnostic,
   DiagnosticContext,
   DiagnosticSource,
   ExpressionEvaluationDiagnostic,
@@ -19,6 +21,7 @@ export type {
 } from './types.js';
 export {
   CONFIGURATION_DIAGNOSTIC_CODES,
+  DATA_COMPATIBILITY_CODES,
   DIAGNOSTIC_SOURCES,
   TEMPLATE_VALIDATION_CODES,
 } from './types.js';
