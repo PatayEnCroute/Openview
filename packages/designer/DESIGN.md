@@ -109,6 +109,10 @@ Openview Designer est un studio visuel d'édition de **modèles** de documents �
 
 Les champs manipulables dans l'éditeur sont ceux du **catalogue déclaré par l'application hôte**. Le Designer n'en propose aucun par défaut et n'en réserve aucun : il affiche les libellés que l'intégrateur a déclarés, dans le vocabulaire de son métier.
 
+> ✅ **Le contrat existe depuis le lot C10** ([ADR 0015](../../docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md)). `OpenviewDesignerProps.dataCatalogue` porte un `DataCatalogue` typé — plus un `Record<string, unknown>` — et reste **facultatif** : son absence équivaut à un catalogue vide, jamais à une invitation à deviner les champs depuis un jeu de données. `listDataCatalogueEntries()` rend les libellés à plat, **dans l'ordre de l'hôte**, ce qui est l'ordre du sélecteur ; `checkTemplateDataCompatibility()` rend une lecture localisée par occurrence, avec sa position dans le modèle et son `nodeId`, de quoi souligner deux endroits fautifs plutôt qu'un chemin dédupliqué.
+>
+> **Ce qui reste à ce paquet :** l'interface. C10 livre le contrat, pas le sélecteur (D1/D4) ni la barre de formule (D7). Une obligation en découle et elle est facile à manquer : la prop doit être parsée par `DataCatalogueSchema.safeParse()` **une seule fois à la réception**, jamais à chaque rendu React.
+
 ### Principes Clés
 1. **Économie de moyens & Prévention de la fatigue visuelle** :
    - Fond neutre Slate (`#F8FAFC` en clair, `#020617` en sombre).

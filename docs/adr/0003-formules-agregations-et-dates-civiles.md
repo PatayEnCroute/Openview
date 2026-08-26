@@ -933,10 +933,16 @@ locale ou le fuseau de la machine** ne l'est pas, et c'est désormais outillé.
 **La politique de la valeur absente à l'impression** — question 2 de l'ADR 0001, toujours à
 l'étape 2. C1 la respecte scrupuleusement : il *propage* l'absence, il n'en décide rien.
 
-**Les lectures par élément, et l'alias masquant une clé racine.** Les deux questions laissées
-ouvertes par l'ADR 0002 sont inchangées, et C1 ajoute **deux sites** au second (`aggregate.as`,
-`filter.as`) sans changer la règle. La sortie qui les résoudrait est la même : chaque lecture
-associée à la portée dont elle dépend. `nodeReads` en reste la matière première.
+**Les lectures par élément, et l'alias masquant une clé racine.** ✅ **Tranchées le 2026-08-26 par
+l'[ADR 0015](0015-le-catalogue-de-donnees-de-l-integrateur.md).** Les deux questions laissées
+ouvertes par l'ADR 0002 étaient inchangées ici, et C1 leur ajoutait **deux sites** (`aggregate.as`,
+`filter.as`) sans changer la règle. La sortie annoncée — chaque lecture associée à la portée dont
+elle dépend — est celle que C10 livre, et les quatre sites d'alias y partagent une pile lexicale
+unique : une source d'agrégation ou de filtre lie l'élément pour son seul corps, et le dépilement
+est fait à la sortie exacte de la portée. Une conséquence vaut d'être notée ici : le troisième
+parcours d'expressions a rendu le Visitor obligatoire, ce qui **atteint le seuil de retrait** que
+l'[ADR 0004](0004-les-arrondis-declares-par-le-modele.md) décision 11 avait écrit pour son
+amendement.
 
 **La traçabilité du calcul** (« d'où vient ce montant ? ») reste hors v1, comme l'écrit
 `core.md`. Elle est notée ici parce que la charge d'erreur de la décision 7 — un `site` et un

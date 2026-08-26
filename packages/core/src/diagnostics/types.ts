@@ -1,3 +1,4 @@
+import type { DataTypeKind } from '../data-catalogue/types.js';
 import type {
   ExpressionErrorSite,
   LimitErrorCode,
@@ -16,6 +17,7 @@ export const DIAGNOSTIC_SOURCES = [
   'expression-evaluation',
   'presentation-resolution',
   'configuration',
+  'data-compatibility',
 ] as const;
 
 export type DiagnosticSource = (typeof DIAGNOSTIC_SOURCES)[number];
@@ -121,6 +123,36 @@ export interface ConfigurationDiagnostic extends DiagnosticBase {
   readonly code: ConfigurationDiagnosticCode;
 }
 
+/** Ways a model and a host catalogue can disagree. */
+export const DATA_COMPATIBILITY_CODES = ['undeclared-data-path', 'incompatible-data-kind'] as const;
+
+export type DataCompatibilityCode = (typeof DATA_COMPATIBILITY_CODES)[number];
+
+interface DataCompatibilityDiagnosticBase extends DiagnosticBase {
+  readonly source: 'data-compatibility';
+  /**
+   * The path as the expression spells it. Structured and never interpolated into `message`: it is
+   * a name the host chose, and a host application escapes it itself.
+   */
+  readonly dataPath: string;
+}
+
+/**
+ * A model measured against a declaration, never against a render.
+ *
+ * `undeclared-data-path` says the catalogue describes no such field; it says nothing about a value
+ * being absent from one dataset, which stays the renderer's policy.
+ */
+export type DataCompatibilityDiagnostic =
+  | (DataCompatibilityDiagnosticBase & {
+      readonly code: 'undeclared-data-path';
+    })
+  | (DataCompatibilityDiagnosticBase & {
+      readonly code: 'incompatible-data-kind';
+      readonly expectedKinds: readonly DataTypeKind[];
+      readonly actualKind: DataTypeKind;
+    });
+
 /** Every refusal `@openview/core` can name, as one discriminated union. */
 export type OpenviewDiagnostic =
   | TemplateValidationDiagnostic
@@ -128,4 +160,5 @@ export type OpenviewDiagnostic =
   | TemplateShapeDiagnostic
   | ExpressionEvaluationDiagnostic
   | PresentationResolutionDiagnostic
-  | ConfigurationDiagnostic;
+  | ConfigurationDiagnostic
+  | DataCompatibilityDiagnostic;

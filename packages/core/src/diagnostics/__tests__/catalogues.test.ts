@@ -3,6 +3,8 @@ import * as core from '../../index.js';
 import {
   CONFIGURATION_DIAGNOSTIC_CODES,
   type ConfigurationDiagnosticCode,
+  DATA_COMPATIBILITY_CODES,
+  type DataCompatibilityCode,
   DIAGNOSTIC_SOURCES,
   type DiagnosticSource,
   EXPRESSION_ERROR_CODES,
@@ -22,7 +24,7 @@ import {
  * `Record`. Adding a member without a scenario stops compiling; removing one stops compiling too.
  */
 describe('the diagnostic catalogues', () => {
-  it('names six families', () => {
+  it('names seven families', () => {
     const covered: Readonly<Record<DiagnosticSource, true>> = {
       'template-validation': true,
       'template-migration': true,
@@ -30,8 +32,17 @@ describe('the diagnostic catalogues', () => {
       'expression-evaluation': true,
       'presentation-resolution': true,
       configuration: true,
+      'data-compatibility': true,
     };
     expect([...DIAGNOSTIC_SOURCES].sort()).toEqual(Object.keys(covered).sort());
+  });
+
+  it('names two data compatibility codes', () => {
+    const covered: Readonly<Record<DataCompatibilityCode, true>> = {
+      'undeclared-data-path': true,
+      'incompatible-data-kind': true,
+    };
+    expect([...DATA_COMPATIBILITY_CODES].sort()).toEqual(Object.keys(covered).sort());
   });
 
   it('names six validation codes', () => {
@@ -113,6 +124,7 @@ describe('the public surface of the diagnostic façade', () => {
       'DIAGNOSTIC_SOURCES',
       'TEMPLATE_VALIDATION_CODES',
       'CONFIGURATION_DIAGNOSTIC_CODES',
+      'DATA_COMPATIBILITY_CODES',
       'TEMPLATE_MIGRATION_ERROR_CODES',
       'PRESENTATION_REFUSALS',
     ]) {

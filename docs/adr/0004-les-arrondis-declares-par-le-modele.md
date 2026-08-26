@@ -738,6 +738,27 @@ soit un parcours oublié, soit le troisième parcours qui retire l'amendement.
 **Réversible**, et son coût de réouverture est faible — précisément parce que les deux `never`
 garantissent que les deux `switch` sont complets.
 
+> 🏁 **Seuil atteint le 2026-08-26 : l'amendement est retiré.** Le lot C10
+> ([ADR 0015](0015-le-catalogue-de-donnees-de-l-integrateur.md)) a apporté le troisième parcours
+> d'expressions — l'analyse des attentes et des portées — et le Visitor est devenu le patron de
+> l'algèbre, comme [AGENTS.md §3.B](../../AGENTS.md) le prescrivait hors amendement.
+>
+> **La sonde a fait son travail, et son résultat mérite d'être lu exactement.**
+> `grep -rn "case 'round':" packages/core/src | wc -l` rend désormais **1** et non 2 : les deux
+> `switch` n'ont pas été rejoints par un troisième, ils ont été **remplacés** par un dispatcher
+> unique. Toute valeur autre que 2 devait alerter ; c'est le cas, et l'événement est bien celui
+> que la clause de retrait décrivait.
+>
+> **Rien n'est cédé de ce que l'amendement protégeait.** `visitExpression()` garde son
+> `const exhaustive: never`, et le type du visiteur est un **type mappé sur `ExpressionKind`** :
+> un kind ajouté à l'union fait échouer la compilation de *chaque* visiteur, pas seulement du
+> dispatcher. La garantie à la porte 2 est donc conservée, et même élargie — c'est ce qui rendait
+> le retrait indolore, et c'est pourquoi il n'a demandé aucun arbitrage.
+>
+> **Ce qui n'a pas été fait, et pourquoi :** le paragraphe d'AGENTS.md §3.B qui porte l'amendement
+> n'a **pas** été réécrit. §7 réserve ce fichier à un mandat explicite, et l'amendement s'éteint
+> par sa propre clause plutôt que par une suppression. La correction du texte reste due.
+
 ---
 
 ## Décision 12 — Ce que le lot refuse, par écrit

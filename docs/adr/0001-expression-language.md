@@ -203,8 +203,16 @@ rendu ? À trancher à l'étape 2, quand `DataBindingStep` existera.
 > ADR 0002 y ajoute aussi la portée de boucle, que celui-ci avait laissée
 > implicite.
 
-**Question 3 — typage des lectures.** Toujours ouverte, et à formuler dans le bon
-sens : **un modèle ne déclare pas le schéma des données, il déclare ce qu'il en
+**Question 3 — typage des lectures.** ✅ **Tranchée le 2026-08-26 par
+l'[ADR 0015](0015-le-catalogue-de-donnees-de-l-integrateur.md).** Le paragraphe ci-dessous a
+posé la question dans le bon sens, et la réponse ne s'en écarte pas d'un pouce : le catalogue
+appartient à l'hôte, `core` n'en réserve rien, et `checkTemplateDataCompatibility(template,
+catalogue)` **ne prend pas de jeu de données**. La moitié manquante — le type attendu à chaque
+lecture — est un vocabulaire fermé de neuf attentes, dérivé garde par garde de la sémantique
+runtime, et non un vérificateur de types général. `collectDataPaths()` sort du lot inchangé :
+C10 répond à une autre question, par occurrence et non par chemin dédupliqué.
+
+Formulation d'origine, conservée parce qu'elle reste exacte : **un modèle ne déclare pas le schéma des données, il déclare ce qu'il en
 lit.** Le catalogue des champs disponibles appartient à l'application
 intégratrice, qui le transmet au Designer (`dataCatalogue`,
 [`types.ts`](../../packages/designer/src/types.ts)) ; `core` ne le connaît pas et

@@ -116,6 +116,8 @@ Openview Viewer est un composant front-end léger qui affiche le document produi
 3. **Mode d'interaction avec les variables** :
    - Volet latéral ou modale permettant de saisir les valeurs des **champs déclarés par l'application hôte** pour voir le document se mettre à jour en temps réel.
    - Les libellés et les types affichés viennent du catalogue de l'intégrateur. Le viewer n'en connaît aucun par défaut : il rend un formulaire à partir de ce qu'on lui déclare, il n'impose aucune structure.
+   - ✅ **Le contrat existe depuis le lot C10** ([ADR 0015](../../docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md)) : `DataCatalogue` porte les libellés et quatre natures terminales — `string`, `number`, `boolean`, `civil-date` — plus l'objet et la liste. C'est de quoi choisir un contrôle de saisie sans réserver un nom de champ. **Le formulaire interactif reste en v2** : C10 n'en livre rien, et ce paquet ne consomme pas encore le contrat.
+   - ⚠️ Le catalogue décrit ce que l'hôte **permet de lire**, jamais ce qu'un rendu contient. Un formulaire construit dessus ne doit donc pas traiter un champ déclaré comme un champ requis : la disponibilité structurelle n'est pas la présence dans un jeu de données.
 
 ---
 

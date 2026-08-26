@@ -387,6 +387,15 @@ associant chaque lecture à la portée dont elle dépend — la même sortie qui
 détecterait le masquage ci-dessus, donc une seule décision, et `nodeReads` en est
 déjà la matière première.
 
+> ✅ **Les deux questions ci-dessus sont tranchées le 2026-08-26 par
+> l'[ADR 0015](0015-le-catalogue-de-donnees-de-l-integrateur.md), et par une seule décision**,
+> comme ce paragraphe l'annonçait. `checkTemplateDataCompatibility()` rend **une lecture par
+> occurrence**, résolue dans sa portée : un membre mal orthographié d'un élément reçoit
+> `undeclared-data-path` à sa position exacte. Le masquage, lui, ne devient pas un refus — la
+> sémantique runtime est définie, l'alias gagne — mais un `DataScopeWarning` localisé, émis **une
+> fois à la déclaration**. Les quatre sites d'alias partagent une pile lexicale unique.
+> `collectDataPaths` sort du lot **inchangé**, valeur et ordre compris.
+
 **Marques de texte riche** (gras, italique, lien) sur un segment littéral —
 pas de décision requise aujourd'hui, hors l'incrément de version ci-dessus.
 

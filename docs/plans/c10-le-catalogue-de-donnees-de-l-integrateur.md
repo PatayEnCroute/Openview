@@ -4,16 +4,18 @@
 > les diagnostics, les tests et l'ordre d'exécution de C10. Une fois le lot livré, son ADR
 > d'exécution fera foi et ce plan sera marqué périmé.
 >
-> **Statut : PLANIFIÉ, NON EXÉCUTABLE AVANT J3.** Au 2026-08-25, J3 reste ouvert : E4 et la
-> relecture métier demandée par la roadmap ne sont pas terminés. Planifier C10 est permis ; ouvrir
-> son chantier avant que J3 soit démontrable contreviendrait à l'ordre brique par brique. INC-0
-> commence donc par confirmer J3 et par rebaser ce plan sur le contrat de liaison réellement livré
-> par E4.
+> **Statut : ⚠️ PÉRIMÉ.** Le lot est livré, et c'est
+> l'[ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md) qui fait foi. Elle
+> **corrige ce plan sur six points** — le gate J3 n'a pas été respecté et sa protection a été
+> remplacée par une vérification garde par garde, l'ADR porte le numéro **0015** et non 0016, deux
+> fichiers de production s'ajoutent (`data-catalogue/visitor.ts` et `expectations.ts`),
+> `ExpressionVisitor` est un type mappé et non une interface écrite à la main, et le contrôle
+> « pas de troisième switch » est une recherche et non un test. Ce document reste ici comme archive
+> de ce qui était décidé avant l'exécution ; il ne doit plus être lu comme une consigne.
 >
-> **État observé, pas baseline d'exécution.** Le worktree porte des changements E3 non liés à C10,
-> notamment une version de schéma 9 en cours. Ils appartiennent à l'utilisateur et ne doivent être
-> ni repris ni nettoyés par C10. Le numéro d'ADR attendu pour C10 est **0016** si E4 prend 0015 ; il
-> doit être confirmé au début du chantier.
+> **Ce que le statut précédent disait, et qui reste vrai.** Le plan gelait le lot jusqu'à J3, qui
+> n'était pas atteint au 2026-08-26 — E4 et la relecture métier restent dus. Le lot a été exécuté
+> sans ce gate, sur demande explicite, et l'ADR nomme l'écart en tête.
 >
 > **Briques touchées :** `@openview/core`, la couture de type de `@openview/designer`, la facture de
 > référence du playground et la documentation · **Dépend de :** J3 atteint · **Poids roadmap :** M,
