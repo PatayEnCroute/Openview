@@ -3,18 +3,26 @@ import {
   aliasSchema,
   ExpressionSchema,
   PrintableExpressionSchema,
+  ROUND_MODES,
+  RoundingPositionSchema,
 } from '../expression/expression.js';
 import { BoxStyleSchema, TypographySchema } from '../style/style.js';
-import { COLUMN_WIDTH_TYPE_MESSAGE, KEEP_TOGETHER_VALUE_MESSAGE } from '../validation-messages.js';
+import {
+  COLUMN_WIDTH_TYPE_MESSAGE,
+  KEEP_TOGETHER_VALUE_MESSAGE,
+  PAGE_FIELD_NAME_MESSAGE,
+} from '../validation-messages.js';
 import {
   type BlockNode,
   type DocumentNode,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
   PAGE_FIELDS,
+  type PageField,
   TABLE_COLUMN_ALIGNMENTS,
   type TableCell,
   type TableNode,
+  type TableRowNode,
   TEXT_ALIGNMENTS,
 } from './types.js';
 
@@ -73,11 +81,38 @@ export const TextBindingSegmentSchema = z.object({
   typography: typographyField,
 });
 
-export const TextPageFieldSegmentSchema = z.object({
+/** The two counting fields, spelt from the closed list so a new field cannot be forgotten here. */
+const COUNTING_FIELDS = PAGE_FIELDS.filter(
+  (field): field is Exclude<PageField, 'report'> => field !== 'report',
+);
+
+export const TextPageCountSegmentSchema = z.object({
   kind: z.literal('pageField'),
-  field: z.enum(PAGE_FIELDS),
+  field: z.enum(COUNTING_FIELDS),
   typography: typographyField,
 });
+
+export const TextPageReportSegmentSchema = z.object({
+  kind: z.literal('pageField'),
+  field: z.literal('report'),
+  decimals: RoundingPositionSchema,
+  mode: z.enum(ROUND_MODES),
+  typography: typographyField,
+});
+
+/**
+ * A page marker, discriminated a second time on the field it names.
+ *
+ * A report declares the rounding it is written at and the counters declare nothing, so one flat
+ * object would have to accept a report with no rounding or a counter carrying one.
+ */
+export const TextPageFieldSegmentSchema = z.discriminatedUnion(
+  'field',
+  [TextPageCountSegmentSchema, TextPageReportSegmentSchema],
+  /* Without it a field outside the list reads "Invalid input": a nested union reports a missing
+     discriminator, not the options an enum would have listed. */
+  { error: PAGE_FIELD_NAME_MESSAGE },
+);
 
 export const TextSegmentSchema = z.discriminatedUnion('kind', [
   TextLiteralSegmentSchema,
@@ -169,11 +204,16 @@ export const TableCellSchema = z.object({
   children: z.array(BlockNodeSchema),
 });
 
+export const PageReportContributionSchema = z.object({
+  value: PrintableExpressionSchema,
+});
+
 export const TableRowNodeSchema = z.object({
   type: z.literal('tableRow'),
   id: nodeIdSchema,
   keepTogether: keepTogetherField,
   cells: z.array(TableCellSchema),
+  pageReport: PageReportContributionSchema.optional(),
   box: boxField,
 });
 
@@ -217,6 +257,29 @@ function checkCells(
   }
 }
 
+/**
+ * Refuses a contribution declared where it has no single occurrence to be counted on.
+ *
+ * A header repeats on every page a table continues onto, and a footer closes the table rather than
+ * detailing it. Both are refused where the position is still known, rather than left to a renderer
+ * that would have to invent a rule for them.
+ */
+function checkNoContribution(
+  row: TableRowNode,
+  at: readonly (string | number)[],
+  ctx: z.RefinementCtx,
+): void {
+  if (row.pageReport === undefined) {
+    return;
+  }
+  ctx.addIssue({
+    code: 'custom',
+    path: [...at, 'pageReport'],
+    message:
+      'Only a body row contributes to a page report. A header row is repeated on every page and a footer row closes the table, so neither has one occurrence to count.',
+  });
+}
+
 function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   const declared = new Set<string>();
   let columnsAreSound = table.columns.length > 0;
@@ -242,6 +305,7 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
 
   for (const [index, row] of table.header.entries()) {
     checkCells(row.cells, declared, ['header', index], ctx);
+    checkNoContribution(row, ['header', index], ctx);
   }
   for (const [index, entry] of table.body.entries()) {
     if (entry.type === 'tableRow') {
@@ -254,6 +318,7 @@ function checkTableWiring(table: TableNode, ctx: z.RefinementCtx): void {
   }
   for (const [index, row] of table.footer.entries()) {
     checkCells(row.cells, declared, ['footer', index], ctx);
+    checkNoContribution(row, ['footer', index], ctx);
   }
 }
 

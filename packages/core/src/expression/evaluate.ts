@@ -16,4 +16,5 @@ export {
   evaluatePredicate,
   evaluateSequence,
   resolvePath,
+  roundDecimal,
 } from './evaluator/index.js';

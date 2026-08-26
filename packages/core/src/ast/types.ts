@@ -1,4 +1,4 @@
-import type { Expression, PrintableExpression } from '../expression/expression.js';
+import type { Expression, PrintableExpression, RoundMode } from '../expression/expression.js';
 import type { BoxStyle, Typography } from '../style/style.js';
 
 interface NodeBase {
@@ -29,16 +29,33 @@ export interface TextBindingSegment {
 }
 
 /** Available pagination fields for text segments. */
-export const PAGE_FIELDS = ['number', 'count'] as const;
+export const PAGE_FIELDS = ['number', 'count', 'report'] as const;
 
 export type PageField = (typeof PAGE_FIELDS)[number];
 
-/** Pagination text segment (current page number or total page count). */
-export interface TextPageFieldSegment {
+/** Pagination text segment counting pages: the rank of this one, or how many there are. */
+export interface TextPageCountSegment {
   readonly kind: 'pageField';
-  readonly field: PageField;
+  readonly field: 'number' | 'count';
   readonly typography?: Typography | undefined;
 }
+
+/**
+ * Pagination text segment showing what the pages before this one carried forward.
+ *
+ * Rounding is declared, never guessed: `decimals` and `mode` are the two parameters of a round
+ * expression and are required here for the same reason. The writing is the canonical decimal one;
+ * a currency symbol or a digit grouping belongs to a literal the model places beside it.
+ */
+export interface TextPageReportSegment {
+  readonly kind: 'pageField';
+  readonly field: 'report';
+  readonly decimals: number;
+  readonly mode: RoundMode;
+  readonly typography?: Typography | undefined;
+}
+
+export type TextPageFieldSegment = TextPageCountSegment | TextPageReportSegment;
 
 export type TextSegment = TextLiteralSegment | TextBindingSegment | TextPageFieldSegment;
 
@@ -107,10 +124,22 @@ export interface TableCell {
   readonly children: readonly BlockNode[];
 }
 
+/**
+ * What one materialised occurrence of a row adds to the report the pages carry forward.
+ *
+ * Evaluated in the row's own scope, once per occurrence, and required to yield a finite number.
+ * The renderer decides which page an occurrence ends on; the model decides only what it is worth.
+ */
+export interface PageReportContribution {
+  readonly value: PrintableExpression;
+}
+
 /** Table row node. */
 export interface TableRowNode extends NodeBase {
   readonly type: 'tableRow';
   readonly cells: readonly TableCell[];
+  /** Declarable on a body row alone: a header repeats and a footer is not a detail line. */
+  readonly pageReport?: PageReportContribution | undefined;
   readonly box?: BoxStyle | undefined;
 }
 

@@ -1,5 +1,6 @@
-import { type BoxBorder, kindOf, type PageField } from '@openview/core';
-import type { MaterialRun, ResolvedTypography } from '../document/types.js';
+import { type BoxBorder, kindOf, roundDecimal } from '@openview/core';
+import type { MaterialPageFieldRun, MaterialRun, ResolvedTypography } from '../document/types.js';
+import { CANONICAL_NUMBER_MAX_CHARS } from '../pagination/markers.js';
 import type {
   CellFragment,
   MarkerReserve,
@@ -13,10 +14,12 @@ import type { HtmlAttributes, HtmlElement, HtmlElementName, HtmlNode } from './t
 
 const NO_RULES: RowRules = { top: undefined, right: undefined, bottom: undefined, left: undefined };
 
-/** The rank of the page being painted, once the cuts have decided it. */
+/** What the cuts decided about the page being painted, which is all a marker can print. */
 export interface PageValues {
   readonly number: number;
   readonly count: number;
+  /** Unrounded sum the rows finished on earlier pages carry in; each marker rounds it itself. */
+  readonly report: number;
 }
 
 /**
@@ -47,12 +50,33 @@ const keyAttribute = (key: string, context: PaintContext): HtmlAttributes =>
 const runAttribute = (index: number, context: PaintContext): HtmlAttributes =>
   context.keyed ? { 'data-openview-run': String(index) } : {};
 
-/** What a marker prints: the real rank once it is known, a placeholder of the same width before. */
-function markerText(field: PageField, context: PaintContext): string {
-  if (context.page === undefined) {
-    return '0'.repeat(context.markers.digits);
+/**
+ * What a marker prints: the real value once the cuts are known, a placeholder of digits before.
+ *
+ * The placeholder is only ever measured, so what matters is that it cannot be wider than the box
+ * reserved for it: a digit is never wider than the widest glyph of the canonical alphabet.
+ *
+ * A report is rounded HERE and nowhere earlier, with the operation `@openview/core` publishes: the
+ * sum travels raw so that two markers declaring two roundings write two spellings of it, and a
+ * second implementation of the rounding could drift from the one a formula uses.
+ */
+function markerText(run: MaterialPageFieldRun, context: PaintContext): string {
+  const page = context.page;
+  if (page === undefined) {
+    return '0'.repeat(run.field === 'report' ? CANONICAL_NUMBER_MAX_CHARS : context.markers.digits);
   }
-  return String(field === 'number' ? context.page.number : context.page.count);
+  switch (run.field) {
+    case 'number':
+      return String(page.number);
+    case 'count':
+      return String(page.count);
+    case 'report':
+      return String(roundDecimal(page.report, run.decimals, run.mode));
+    default: {
+      const exhaustive: never = run;
+      throw new TypeError(`Unhandled page marker: ${kindOf(exhaustive, 'field')}`);
+    }
+  }
 }
 
 /**
@@ -67,10 +91,10 @@ function buildRun(run: MaterialRun, index: number, context: PaintContext): HtmlE
       'span',
       {
         class: CSS_CLASSES.marker,
-        style: markerCss(run.typography, context.markers.widthOf(run.typography)),
+        style: markerCss(run.typography, context.markers.widthOf(run)),
         ...runAttribute(index, context),
       },
-      [characters(markerText(run.field, context))],
+      [characters(markerText(run, context))],
     );
   }
   return element('span', { style: runCss(run.typography), ...runAttribute(index, context) }, [

@@ -16,6 +16,7 @@ export type {
   ImageNode,
   LoopNode,
   PageField,
+  PageReportContribution,
   TableBodyNode,
   TableCell,
   TableColumn,
@@ -27,7 +28,9 @@ export type {
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
+  TextPageCountSegment,
   TextPageFieldSegment,
+  TextPageReportSegment,
   TextSegment,
 } from './ast/nodes.js';
 export {
@@ -40,6 +43,7 @@ export {
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
   PAGE_FIELDS,
+  PageReportContributionSchema,
   TABLE_COLUMN_ALIGNMENTS,
   TableBodyNodeSchema,
   TableCellSchema,
@@ -51,7 +55,9 @@ export {
   TextBindingSegmentSchema,
   TextLiteralSegmentSchema,
   TextNodeSchema,
+  TextPageCountSegmentSchema,
   TextPageFieldSegmentSchema,
+  TextPageReportSegmentSchema,
   TextSegmentSchema,
 } from './ast/nodes.js';
 export type { NodeReads, NodeVisitor, SegmentVisitor } from './ast/visitor.js';
@@ -124,6 +130,7 @@ export {
   evaluateExpression,
   evaluatePredicate,
   evaluateSequence,
+  roundDecimal,
 } from './expression/evaluate.js';
 export type {
   AggregateExpression,

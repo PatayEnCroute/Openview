@@ -14,9 +14,14 @@ import {
   materializeDocument,
 } from '../document/materialize.js';
 import { DocumentRenderError } from '../errors.js';
-import { buildDigitProbe, buildPagedTree, buildProbeTree, digitKey } from '../html/build-page.js';
+import { buildGlyphProbe, buildPagedTree, buildProbeTree, glyphKey } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
-import { markerReserve, markerSignatures } from '../pagination/markers.js';
+import {
+  CANONICAL_NUMBER_ALPHABET,
+  type GlyphWidths,
+  markerReserve,
+  markerSignatures,
+} from '../pagination/markers.js';
 import { paginate } from '../pagination/paginate.js';
 import { digitsOf, progressionBound } from '../pagination/progress.js';
 import type { MarkerReserve, Metrics, PaginatedDocument } from '../pagination/types.js';
@@ -65,7 +70,10 @@ async function measured<TResult>(run: () => Promise<TResult>): Promise<TResult> 
   }
 }
 
-/** Measures the widest decimal digit of every typography a page marker of this document uses. */
+/** How many of the canonical alphabet's leading characters are the ten decimal digits. */
+const DECIMAL_DIGITS = 10;
+
+/** Measures the widest glyph of every typography a page marker of this document uses. */
 async function reserveMarkers(
   session: PdfRenderSession,
   bound: MaterializedDocument,
@@ -75,7 +83,7 @@ async function reserveMarkers(
   if (signatures.size === 0) {
     return markerReserve(digits, new Map());
   }
-  const probe = buildDigitProbe(bound.document, signatures);
+  const probe = buildGlyphProbe(bound.document, signatures);
   const measurement = await measured(async () =>
     session.measure({
       html: serializeHtml(probe.tree),
@@ -84,15 +92,19 @@ async function reserveMarkers(
     }),
   );
   validateMeasurement(measurement, probe.keys, bound.document.sheet);
-  const widest = new Map<string, number>();
-  for (const box of measurement.boxes) {
-    for (const signature of signatures.keys()) {
-      for (let digit = 0; digit < 10; digit += 1) {
-        if (box.key === digitKey(signature, digit)) {
-          widest.set(signature, Math.max(widest.get(signature) ?? 0, box.width));
-        }
+  const widths = new Map(measurement.boxes.map((box) => [box.key, box.width]));
+  const widest = new Map<string, GlyphWidths>();
+  for (const signature of signatures.keys()) {
+    let digit = 0;
+    let canonical = 0;
+    for (let at = 0; at < CANONICAL_NUMBER_ALPHABET.length; at += 1) {
+      const width = widths.get(glyphKey(signature, at)) ?? 0;
+      canonical = Math.max(canonical, width);
+      if (at < DECIMAL_DIGITS) {
+        digit = Math.max(digit, width);
       }
     }
+    widest.set(signature, { digit, canonical });
   }
   return markerReserve(digits, widest);
 }

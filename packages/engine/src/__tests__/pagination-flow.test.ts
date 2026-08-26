@@ -247,7 +247,7 @@ describe('a box whose own decoration leaves no room', () => {
   });
 });
 
-describe('keepTogether is carried, and changes no cut of this release', () => {
+describe('keepTogether is carried through binding', () => {
   /* The contract spells "no" as an absent key, so the two documents differ by that key alone. */
   const marked = { keepTogether: true };
   const twoTexts = (kept: Record<string, unknown>) =>
@@ -262,14 +262,15 @@ describe('keepTogether is carried, and changes no cut of this release', () => {
       {},
     );
 
-  it('cuts a text the same way whether it is marked or not', () => {
-    expect(textPerPage(paginateOnGrid(twoTexts(marked)), 'b')).toStrictEqual(
-      textPerPage(paginateOnGrid(twoTexts({})), 'b'),
-    );
+  it('moves a marked text whole rather than cutting it where an unmarked one is cut', () => {
+    // Three lines a page, two blocks of two: unmarked, `b` is cut one line on the first page and
+    // one on the second. Marked, it fits a page of its own, so the first page closes without it.
+    expect(textPerPage(paginateOnGrid(twoTexts({})), 'b')).toHaveLength(2);
+    expect(textPerPage(paginateOnGrid(twoTexts(marked)), 'b')).toHaveLength(1);
     expect(paginateOnGrid(twoTexts(marked)).pages).toHaveLength(2);
   });
 
-  it('survives binding so a later release can order a report from it', () => {
+  it('survives binding so the paginator can order a report from it', () => {
     const [container] = twoTexts(marked).root;
     expect(container?.kind === 'container' && container.children[0]?.keepTogether).toBe(true);
     const [plain] = twoTexts({}).root;

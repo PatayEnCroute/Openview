@@ -8,10 +8,19 @@ import {
   reachableOccurrences,
   rolesOf,
 } from '../document/bands.js';
-import type { MaterialDocument } from '../document/types.js';
+import type {
+  MaterialDocument,
+  MaterialPageFieldRun,
+  ResolvedTypography,
+} from '../document/types.js';
 import { buildPagedTree } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
-import { markerReserve, markerSignatures } from '../pagination/markers.js';
+import {
+  CANONICAL_NUMBER_ALPHABET,
+  CANONICAL_NUMBER_MAX_CHARS,
+  markerReserve,
+  markerSignatures,
+} from '../pagination/markers.js';
 import {
   constantMarkers,
   gridPage,
@@ -261,6 +270,31 @@ describe('the two reserves are the same on every page', () => {
   });
 });
 
+const PROBE_TYPOGRAPHY: ResolvedTypography = {
+  family: 'sans-serif',
+  sizePt: 10,
+  bold: false,
+  italic: false,
+  color: '#000000',
+};
+
+/** The signature `typographySignature` writes for {@link PROBE_TYPOGRAPHY}. */
+const PROBE_SIGNATURE = 'sans-serif 10 n n';
+
+const counterRun = (): MaterialPageFieldRun => ({
+  kind: 'pageField',
+  field: 'number',
+  typography: PROBE_TYPOGRAPHY,
+});
+
+const reportRun = (): MaterialPageFieldRun => ({
+  kind: 'pageField',
+  field: 'report',
+  decimals: 2,
+  mode: 'halfExpand',
+  typography: PROBE_TYPOGRAPHY,
+});
+
 describe('the page markers', () => {
   const document = () =>
     multiPageOf(
@@ -407,29 +441,23 @@ describe('the page markers', () => {
     expect(signatures.some((entry) => entry.endsWith('n i'))).toBe(true);
   });
 
-  it('refuses a width for a typography the digit probe never measured', () => {
-    const reserve = markerReserve(2, new Map([['other', 4]]));
-    expect(() =>
-      reserve.widthOf({
-        family: 'sans-serif',
-        sizePt: 10,
-        bold: false,
-        italic: false,
-        color: '#000000',
-      }),
-    ).toThrow(expect.objectContaining({ code: 'layout-measurement-failed' }));
+  it('refuses a width for a typography the glyph probe never measured', () => {
+    const reserve = markerReserve(2, new Map([['other', { digit: 4, canonical: 5 }]]));
+    expect(() => reserve.widthOf(counterRun())).toThrow(
+      expect.objectContaining({ code: 'layout-measurement-failed' }),
+    );
   });
 
   it('multiplies the widest digit by how many digits the bound can reach', () => {
-    const reserve = markerReserve(3, new Map([['sans-serif 10 n n', 5]]));
-    expect(
-      reserve.widthOf({
-        family: 'sans-serif',
-        sizePt: 10,
-        bold: false,
-        italic: false,
-        color: '#000000',
-      }),
-    ).toBe(15);
+    const reserve = markerReserve(3, new Map([[PROBE_SIGNATURE, { digit: 5, canonical: 9 }]]));
+    expect(reserve.widthOf(counterRun())).toBe(15);
+  });
+
+  it('gives a report the widest canonical glyph over the whole canonical writing', () => {
+    // A counter draws digits alone; a report may draw a sign, a point or an exponent, and none of
+    // those is bounded by a digit. Sizing a report on the digit reserve is what clips it.
+    const reserve = markerReserve(3, new Map([[PROBE_SIGNATURE, { digit: 5, canonical: 9 }]]));
+    expect(reserve.widthOf(reportRun())).toBe(9 * CANONICAL_NUMBER_MAX_CHARS);
+    expect(CANONICAL_NUMBER_ALPHABET).toBe('0123456789-+.e');
   });
 });

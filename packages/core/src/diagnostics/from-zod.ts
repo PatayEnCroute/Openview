@@ -79,6 +79,11 @@ function acceptedValues(values: readonly ZodPrimitive[]): string {
 }
 
 function invalidUnionMessage(issue: Extract<ZodIssue, { readonly code: 'invalid_union' }>): string {
+  /* A union that named its own discriminator keeps its words, exactly as a bound or a format does:
+     the generic sentence below names "type" or "kind", which is wrong for any other one. */
+  if (SAFE_SCHEMA_MESSAGES.has(issue.message)) {
+    return issue.message;
+  }
   return issue.errors.length === 0
     ? 'This value matches none of the supported shapes. Check the "type" or "kind" that names it.'
     : 'This value matches none of the supported forms.';

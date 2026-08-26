@@ -18,16 +18,20 @@
 import type {
   BlockNode,
   ContainerNode,
-  PageField,
   TextNode,
+  TextPageCountSegment,
   TextSegment,
 } from '../../ast/nodes.js';
+
+/** The counting markers this page declares; a report marker also carries its rounding. */
+type CountingField = TextPageCountSegment['field'];
+
 import type { PathExpression, PrintableExpression } from '../../expression/expression.js';
 import type { PageSetup } from '../page.js';
 
 const lit = (text: string): TextSegment => ({ kind: 'literal', text });
 const bind = (value: PrintableExpression): TextSegment => ({ kind: 'binding', value });
-const pageField = (field: PageField): TextSegment => ({ kind: 'pageField', field });
+const pageField = (field: CountingField): TextSegment => ({ kind: 'pageField', field });
 const p = (path: string): PathExpression => ({ kind: 'path', path });
 const text = (id: string, content: readonly TextSegment[]): TextNode => ({
   type: 'text',

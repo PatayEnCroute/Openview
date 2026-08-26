@@ -8,6 +8,7 @@ export {
   DocumentNodeSchema,
   ImageNodeSchema,
   LoopNodeSchema,
+  PageReportContributionSchema,
   TableBodyNodeSchema,
   TableCellSchema,
   TableColumnSchema,
@@ -17,7 +18,9 @@ export {
   TextBindingSegmentSchema,
   TextLiteralSegmentSchema,
   TextNodeSchema,
+  TextPageCountSegmentSchema,
   TextPageFieldSegmentSchema,
+  TextPageReportSegmentSchema,
   TextSegmentSchema,
 } from './schemas.js';
 export type {
@@ -30,6 +33,7 @@ export type {
   ImageNode,
   LoopNode,
   PageField,
+  PageReportContribution,
   TableBodyNode,
   TableCell,
   TableColumn,
@@ -41,7 +45,9 @@ export type {
   TextBindingSegment,
   TextLiteralSegment,
   TextNode,
+  TextPageCountSegment,
   TextPageFieldSegment,
+  TextPageReportSegment,
   TextSegment,
 } from './types.js';
 export {

@@ -18,6 +18,9 @@ const IMAGE_FAILED =
 const PAINTS_OUTSIDE =
   'A block paints outside the sheet it belongs to. Read `details.nodeId` for the declaration it came from.';
 
+const MARKER_CLIPPED =
+  'A page marker holds more than the width reserved for it, so the printed document would show a truncated figure. Read `details.limit` for how many markers are involved; what they read is deliberately not reported.';
+
 /** A page whose flow reached past its slot, and by how much. */
 export interface FlowOverflow {
   readonly pageNumber: number;
@@ -52,6 +55,15 @@ export function verifyLayout(
   const [escaped] = measurement.escaping;
   if (escaped !== undefined) {
     throw refusal(PAINTS_OUTSIDE, 'layout-measurement-failed', { nodeId: escaped });
+  }
+
+  /* A refusal, not an overflow to settle: no cut of the flow makes a marker narrower, and the
+     `overflow: hidden` that keeps a marker inside its box is a visual barrier, never a licence to
+     print half a number. */
+  if (measurement.clippedMarkerCount > 0) {
+    throw refusal(MARKER_CLIPPED, 'layout-measurement-failed', {
+      limit: measurement.clippedMarkerCount,
+    });
   }
 
   const expected = {

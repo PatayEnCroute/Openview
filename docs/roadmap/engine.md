@@ -16,15 +16,22 @@
 
 ## Où on en est
 
-**Le document se pagine.** Les lots **E1 et E2 sont livrés** : un modèle et un jeu de
-données donnent une facture en PDF à la feuille déclarée, et une facture de soixante
-lignes en sort sur quatre pages, en-tête de colonnes répété et « page n / N » exact. Le
-jalon **J2 est atteint**. Le jalon **J3 ne l'est pas** : reports, blocs insécables
-ordonnés, écritures, déterminisme, corpus figé et durcissement sont devant, et E3 démarre
-sur une pagination explicite et mesurable plutôt que sur un refus mono-page.
+**Le document se pagine, et il se pagine en comptable.** Les lots **E1, E2 et E3 sont
+livrés** : un modèle et un jeu de données donnent une facture en PDF à la feuille
+déclarée, une facture de soixante lignes en sort sur quatre pages avec l'en-tête de
+colonnes répété et « page n / N » exact, chaque page postérieure à la première porte le
+**report** des lignes achevées avant elle, les blocs marqués restent entiers dès qu'une
+page peut les porter, un texte coupé garde deux lignes de part et d'autre de la couture
+chaque fois que c'est réalisable, et les mentions comme le cadre de paiement ne
+paraissent que sur la dernière feuille.
 
-Voir l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md) et
-l'[ADR 0013](../adr/0013-le-tableau-deborde-proprement.md) pour ce que les deux lots ont
+Le jalon **J2 est atteint**. Le jalon **J3 ne l'est pas encore** : il exige aussi
+français/euros puis anglais/dollars, propriété d'**E4**. Écritures, déterminisme, corpus
+figé et durcissement restent devant.
+
+Voir l'[ADR 0012](../adr/0012-une-facture-d-une-page-sort-en-pdf.md),
+l'[ADR 0013](../adr/0013-le-tableau-deborde-proprement.md) et
+l'[ADR 0014](../adr/0014-les-exigences-comptables.md) pour ce que les trois lots ont
 tranché, ce que les sondes Chromium ont corrigé et ce qui reste ouvert.
 
 Format retenu pour la première version : **le PDF, et lui seul**. HTML et image
@@ -64,7 +71,8 @@ aucune ne commence par une ligne orpheline ou un tableau sans en-tête.
 **✅ livré le 2026-08-22**, [ADR 0013](../adr/0013-le-tableau-deborde-proprement.md).
 La coupure appartient au moteur : Chromium mesure, il ne pagine pas. Une ligne qu'aucune
 page ne peut contenir se fragmente par flux de cellules, ce qui rend paginable un tableau
-imbriqué. Les veuves, les orphelines typographiques et le report de total restent à E3.
+imbriqué. Les veuves, les orphelines typographiques et le report de total sont livrés par
+E3 ([ADR 0014](../adr/0014-les-exigences-comptables.md)).
 
 ### E3. Les exigences comptables
 
@@ -115,13 +123,26 @@ outil utilisable en gestion :
 > la choisit, et c'est aussi E5 qui rendra le repli **observable** dans son résultat de
 > pagination : `core` n'ajoute aucun diagnostic.
 
-**Prêt quand** un utilisateur métier lit une facture de trois pages produite par
-Openview et ne relève aucune anomalie de mise en page.
+**Prêt quand** un utilisateur métier lit une facture paginée produite par Openview et ne
+relève aucune anomalie de mise en page.
 
-**Poids :** XL — **Dépend de :** E2 — **Jalon : J3**
+**Poids :** XL — **Dépend de :** E2 — **Jalon : J3** —
+**✅ livré le 2026-08-25**, [ADR 0014](../adr/0014-les-exigences-comptables.md).
+Le report est le seul calcul que le moteur décide : le modèle désigne ce que chaque ligne
+apporte, le moteur décide sur quelle page l'occurrence s'achève. La marque suit l'ordre
+imposé par l'[ADR 0009](../adr/0009-les-blocs-insecables.md), sa troisième branche étant
+la preuve de terminaison. La recette de soixante lignes sort sur **quatre** feuilles et
+non trois — le nombre annoncé ici avant exécution : E2 en produisait déjà quatre, et E3
+ajoute du contenu ; quatre feuilles éprouvent **trois** reports entrants au lieu de deux.
 
-> C'est le lot le plus coûteux de toute la roadmap. Il est aussi celui qu'on ne peut
-> pas sacrifier : une pagination comptable ajoutée après coup se paie deux fois.
+> ⚠️ **La lecture métier reste à faire.** La recette technique et la recette visuelle sont
+> consignées dans l'ADR ; aucun gestionnaire ni comptable n'a encore relu le PDF. La phrase
+> « un utilisateur métier ne relève aucune anomalie » n'est donc **pas** démontrée, et la
+> séance prévue à J3 par la
+> [question ouverte n° 1 de la vue d'ensemble](README.md) reste à planifier.
+
+> C'était le lot le plus coûteux de toute la roadmap. Il était aussi celui qu'on ne
+> pouvait pas sacrifier : une pagination comptable ajoutée après coup se paie deux fois.
 
 ### E4. Langue et devise au rendu
 

@@ -37,6 +37,7 @@ function reply(overrides: Partial<PdfLayoutMeasurement> = {}): PdfLayoutMeasurem
     lines: [],
     images: [],
     escaping: [],
+    clippedMarkerCount: 0,
     ...overrides,
   };
 }
@@ -95,6 +96,9 @@ describe('a session reply the algorithm refuses', () => {
       },
     ],
     ['fewer boxes than were asked for', { boxes: [] }],
+    ['a negative count of clipped markers', { clippedMarkerCount: -1 }],
+    ['a fractional count of clipped markers', { clippedMarkerCount: 0.5 }],
+    ['a count of clipped markers that is not finite', { clippedMarkerCount: Number.NaN }],
     [
       'a line of a box nobody asked about',
       { lines: [{ key: 'g', index: 0, run: 0, offset: 1, height: 1 }] },
@@ -192,6 +196,7 @@ describe('the final check before anything is printed', () => {
     lines: [],
     images: [],
     escaping: [],
+    clippedMarkerCount: 0,
     pages: document.pages.map(() => ({
       page: box(document.sheet.width * PX_PER_MM, document.sheet.height * PX_PER_MM),
       printable: box(document.printable.width * PX_PER_MM, document.printable.height * PX_PER_MM),
@@ -294,6 +299,22 @@ describe('the final check before anything is printed', () => {
     const refusal = refusalFrom(() => verifyLayout(document, escaped, PX_PER_MM));
     expect(refusal.code).toBe('layout-measurement-failed');
     expect(refusal.details.nodeId).toBe('wide');
+  });
+
+  it('refuses a page marker that holds more than the width reserved for it', () => {
+    // The reserve clips rather than reflows, so a marker one character too narrow is invisible in
+    // every other check: without this count a truncated figure prints with the suite still green.
+    const document = paginated();
+    const clipped = laidOut(document, { clippedMarkerCount: 2 });
+    const refusal = refusalFrom(() => verifyLayout(document, clipped, PX_PER_MM));
+    expect(refusal.code).toBe('layout-measurement-failed');
+    expect(refusal.details.limit).toBe(2);
+    expect(refusal.message).toContain('truncated');
+  });
+
+  it('accepts the sequence when no marker is clipped', () => {
+    const document = paginated();
+    expect(verifyLayout(document, laidOut(document), PX_PER_MM)).toBeUndefined();
   });
 
   it('refuses a band that reached past the height reserved for it', () => {

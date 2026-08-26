@@ -1,5 +1,6 @@
-import type { MaterialRow, MaterialTable } from '../document/types.js';
+import type { MaterialRow, MaterialRowGroupOccurrence, MaterialTable } from '../document/types.js';
 import { refusal } from '../errors.js';
+import { decideKeepTogether } from './keep-together.js';
 import { placeRow } from './row.js';
 import type {
   FlowFill,
@@ -26,6 +27,36 @@ function headerHeight(header: readonly MaterialRow[], metrics: Metrics): number 
   let total = 0;
   for (const row of header) {
     total += metrics.height(row.key);
+  }
+  return total;
+}
+
+/**
+ * The rows of a marked group occurrence starting exactly at `index`, or nothing.
+ *
+ * The occurrence has to START here: resuming inside a group that already fell back would offer it
+ * a fresh page on every page it spans, and the sequence would never advance.
+ */
+function groupStartingAt(
+  sequence: readonly MaterialRow[],
+  index: number,
+): MaterialRowGroupOccurrence | undefined {
+  const group = sequence[index]?.keptGroup;
+  return group !== undefined && group.firstRow === index ? group : undefined;
+}
+
+/** The natural height of the rows one group occurrence spans, header excluded. */
+function groupHeight(
+  sequence: readonly MaterialRow[],
+  group: MaterialRowGroupOccurrence,
+  metrics: Metrics,
+): number {
+  let total = 0;
+  for (let at = group.firstRow; at < group.firstRow + group.rowCount; at += 1) {
+    const row = sequence[at];
+    if (row !== undefined) {
+      total += metrics.height(row.key);
+    }
   }
   return total;
 }
@@ -92,6 +123,29 @@ export function placeTable(
     const row = sequence[index];
     if (row === undefined) {
       break;
+    }
+    const group = inner === undefined ? groupStartingAt(sequence, index) : undefined;
+    if (group !== undefined) {
+      const decision = decideKeepTogether(groupHeight(sequence, group, metrics), room, freshRoom);
+      if (decision === 'defer') {
+        break;
+      }
+      if (decision === 'whole') {
+        for (let at = index; at < group.firstRow + group.rowCount; at += 1) {
+          const kept = sequence[at];
+          if (kept === undefined) {
+            break;
+          }
+          const height = metrics.height(kept.key);
+          rows.push(wholeRow(kept));
+          used += height;
+          room -= height;
+        }
+        index = group.firstRow + group.rowCount;
+        continue;
+      }
+      /* Fell back: the rows of this occurrence take the ordinary policy from here on, one by one,
+         and a row of its own that asks to stay whole is still honoured below. */
     }
     const height = metrics.height(row.key);
     if (inner === undefined && height <= room) {

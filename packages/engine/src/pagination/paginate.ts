@@ -4,6 +4,7 @@ import { refusal } from '../errors.js';
 import { bandReserves } from './bands.js';
 import { fillFlow } from './flow.js';
 import { assertAdvanced } from './progress.js';
+import { withIncomingReports } from './reports.js';
 import type {
   FlowCursor,
   MarkerReserve,
@@ -82,13 +83,16 @@ export function paginate(
   }
 
   const count = roots.length;
-  const pages: MaterialPage[] = roots.map((root, index) => {
+  /* Composed from the cuts that were just chosen, never patched from an earlier attempt: a settling
+     round that moves one row to the next page changes which rows finished before which page. */
+  const pages: MaterialPage[] = withIncomingReports(roots).map((reported, index) => {
     const number = index + 1;
     const role = pageRole(number, count);
     return {
       number,
       count,
-      root,
+      root: reported.root,
+      incomingReport: reported.incomingReport,
       header: bandBlocks(document.headerBands, role),
       footer: bandBlocks(document.footerBands, role),
     };

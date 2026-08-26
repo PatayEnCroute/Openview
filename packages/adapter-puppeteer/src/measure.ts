@@ -214,5 +214,14 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     }
   }
 
-  return { pages, boxes, lines, images, escaping };
+  /* A marker box is a fixed width with `overflow: hidden`, so a value one character too wide is
+     invisible in the paint and visible only here. Counted, never read: the digits are render data. */
+  let clippedMarkerCount = 0;
+  for (const marker of document.querySelectorAll('.ov-marker')) {
+    if (marker.scrollWidth > marker.clientWidth + tolerance) {
+      clippedMarkerCount += 1;
+    }
+  }
+
+  return { pages, boxes, lines, images, escaping, clippedMarkerCount };
 }

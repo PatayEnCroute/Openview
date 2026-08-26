@@ -141,7 +141,10 @@ const READS_VISITOR: NodeVisitor<NodeReads> = {
   condition: (condition) => ({ reads: [condition.when], binds: undefined }),
   table: () => NO_READS,
   tableRowGroup: (group) => ({ reads: [group.each], binds: group.as }),
-  tableRow: () => NO_READS,
+  /* A contribution is read in the row's own scope, so its paths belong to the row and not to the
+     group that repeats it: an alias bound above still masks them. */
+  tableRow: (row) =>
+    row.pageReport === undefined ? NO_READS : { reads: [row.pageReport.value], binds: undefined },
 };
 
 /** Returns the expressions directly read by a node and any bound alias. */

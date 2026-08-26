@@ -63,6 +63,10 @@ export function validateMeasurement(
     throw refusal(WRONG_SHEET, 'layout-measurement-failed');
   }
 
+  if (!Number.isInteger(measurement.clippedMarkerCount) || measurement.clippedMarkerCount < 0) {
+    refuse();
+  }
+
   const heights = new Map<OccurrenceKey, number>();
   for (const box of measurement.boxes) {
     if (!expected.has(box.key) || heights.has(box.key)) {

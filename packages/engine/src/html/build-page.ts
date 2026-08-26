@@ -1,4 +1,5 @@
 import type { MaterialBlock, MaterialDocument } from '../document/types.js';
+import { CANONICAL_NUMBER_ALPHABET } from '../pagination/markers.js';
 import type { MarkerReserve, MaterialPage, PaginatedDocument } from '../pagination/types.js';
 import { wholeFragment } from '../pagination/whole.js';
 import { buildFragment, characters, element, type PaintContext } from './build.js';
@@ -35,7 +36,7 @@ function bandSlot(
 function buildPage(page: MaterialPage, markers: MarkerReserve): HtmlElement {
   const context: PaintContext = {
     markers,
-    page: { number: page.number, count: page.count },
+    page: { number: page.number, count: page.count, report: page.incomingReport },
     keyed: false,
   };
   return element('div', { class: CSS_CLASSES.page, 'data-openview-page': String(page.number) }, [
@@ -123,17 +124,18 @@ export function buildProbeTree(document: MaterialDocument, markers: MarkerReserv
   return { tree, keys: keysOf(tree) };
 }
 
-/** The key a measured digit is filed under. */
-export const digitKey = (signature: string, digit: number): string => `d${digit}:${signature}`;
+/** The key a measured glyph is filed under, by its rank in the canonical alphabet. */
+export const glyphKey = (signature: string, at: number): string => `g${at}:${signature}`;
 
 /**
- * The digit probe: one box per decimal digit and per typography a marker uses.
+ * The glyph probe: one box per character of the canonical alphabet and per typography a marker uses.
  *
- * The widest digit of a font decides the reserve, so all ten are measured rather than assumed
- * equal. Kerning and ligatures are off on the same class the printed marker uses, which is what
- * makes the sum of digit advances the width of the value.
+ * The widest glyph of a font decides the reserve, so every character is measured rather than
+ * assumed equal -- and a report may draw a sign, a point or an exponent, none of which a digit
+ * bounds. Kerning and ligatures are off on the same class the printed marker uses, which is what
+ * makes the sum of the advances the width of the value.
  */
-export function buildDigitProbe(
+export function buildGlyphProbe(
   document: MaterialDocument,
   signatures: ReadonlyMap<string, { readonly css: string }>,
 ): ProbeTree {
@@ -143,15 +145,15 @@ export function buildDigitProbe(
       element(
         'div',
         { class: CSS_CLASSES.container },
-        Array.from({ length: 10 }, (_unused, digit) =>
+        [...CANONICAL_NUMBER_ALPHABET].map((glyph, at) =>
           element(
             'span',
             {
               class: CSS_CLASSES.marker,
               style: css,
-              'data-openview-key': digitKey(signature, digit),
+              'data-openview-key': glyphKey(signature, at),
             },
-            [characters(String(digit))],
+            [characters(glyph)],
           ),
         ),
       ),

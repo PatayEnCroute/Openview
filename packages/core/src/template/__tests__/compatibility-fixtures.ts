@@ -378,6 +378,117 @@ const v8 = {
   },
 };
 
+/**
+ * A body row that declares what it is worth to the page report, and a running header that writes
+ * that report at a declared rounding. The header row carries no contribution: only a body row can.
+ */
+const v9 = {
+  schemaVersion: 9,
+  id: 'tpl_v9',
+  name: 'Historical model',
+  version: '1.0.0',
+  page: {
+    sheet: { width: 210, height: 297 },
+    margins: { top: 15, right: 15, bottom: 15, left: 15 },
+    header: [
+      {
+        on: 'exceptFirst',
+        content: {
+          type: 'container',
+          id: 'carried',
+          children: [
+            {
+              type: 'text',
+              id: 'carried-line',
+              content: [
+                { kind: 'literal', text: 'Carried forward ' },
+                { kind: 'pageField', field: 'report', decimals: 2, mode: 'halfExpand' },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+    footer: [],
+  },
+  root: {
+    type: 'container',
+    id: 'root',
+    children: [
+      {
+        type: 'table',
+        id: 'lines',
+        columns: [
+          { id: 'label', width: 3, align: 'start' },
+          { id: 'amount', width: 1, align: 'end' },
+        ],
+        header: [
+          {
+            type: 'tableRow',
+            id: 'head',
+            cells: [
+              {
+                columnId: 'label',
+                children: [
+                  { type: 'text', id: 'h-label', content: [{ kind: 'literal', text: 'Label' }] },
+                ],
+              },
+              {
+                columnId: 'amount',
+                children: [
+                  { type: 'text', id: 'h-amount', content: [{ kind: 'literal', text: 'Amount' }] },
+                ],
+              },
+            ],
+          },
+        ],
+        body: [
+          {
+            type: 'tableRowGroup',
+            id: 'entries',
+            each: { kind: 'path', path: 'payload.entries' },
+            as: 'entry',
+            rows: [
+              {
+                type: 'tableRow',
+                id: 'entry-row',
+                pageReport: { value: { kind: 'path', path: 'entry.amount' } },
+                cells: [
+                  {
+                    columnId: 'label',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'entry-label',
+                        content: [
+                          { kind: 'binding', value: { kind: 'path', path: 'entry.label' } },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    columnId: 'amount',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'entry-amount',
+                        content: [
+                          { kind: 'binding', value: { kind: 'path', path: 'entry.amount' } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        footer: [],
+      },
+    ],
+  },
+};
+
 /** One historical document and its compatibility expectations. */
 export interface HistoricalFixture {
   /** The stored version this document was written under. */
@@ -399,6 +510,7 @@ const TABLE = ['table', 'tableRow', 'tableRowGroup', 'columns'];
 const APPEARANCE = ['box', 'typography', 'align'];
 const WRITINGS = 'presentations';
 const FRAGMENTATION = 'keepTogether';
+const ACCOUNTING = 'pageReport';
 
 /**
  * The closed matrix: one witness per stored version, ordered from the oldest.
@@ -411,47 +523,53 @@ export const HISTORICAL_FIXTURES: readonly HistoricalFixture[] = [
     version: 1,
     document: V1_DOCUMENT,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION],
+    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 2,
     document: v2,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, 'round', ...APPEARANCE, WRITINGS, FRAGMENTATION],
+    futureTokens: [...TABLE, 'round', ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 3,
     document: v3,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION],
+    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 4,
     document: v4,
     receivesCompatibilityPage: true,
-    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION],
+    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 5,
     document: v5,
     receivesCompatibilityPage: false,
-    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION],
+    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 6,
     document: v6,
     receivesCompatibilityPage: false,
-    futureTokens: [WRITINGS, FRAGMENTATION],
+    futureTokens: [WRITINGS, FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 7,
     document: v7,
     receivesCompatibilityPage: false,
-    futureTokens: [FRAGMENTATION],
+    futureTokens: [FRAGMENTATION, ACCOUNTING],
   },
   {
     version: 8,
     document: v8,
+    receivesCompatibilityPage: false,
+    futureTokens: [ACCOUNTING],
+  },
+  {
+    version: 9,
+    document: v9,
     receivesCompatibilityPage: false,
     futureTokens: [],
   },

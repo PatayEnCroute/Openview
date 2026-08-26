@@ -93,6 +93,14 @@ export interface PdfLayoutMeasurement {
   readonly images: readonly ImageMeasurement[];
   /** Declaration ids whose painted box left the sheet it belongs to. */
   readonly escaping: readonly string[];
+  /**
+   * How many page markers hold more than their reserved width shows.
+   *
+   * A count and nothing else: which value was clipped, and what it read, are render data. The
+   * reserve clips rather than reflows on purpose, so without this number a marker one character too
+   * narrow prints a truncated figure with every other check still green.
+   */
+  readonly clippedMarkerCount: number;
 }
 
 /**

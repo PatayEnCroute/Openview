@@ -35,6 +35,8 @@ export interface FakeLayout {
   readonly escaping?: readonly string[] | undefined;
   /** Images the fake says the page holds. */
   readonly images?: PdfLayoutMeasurement['images'] | undefined;
+  /** How many page markers the fake says hold more than their reserved width shows. */
+  readonly clippedMarkers?: number | undefined;
 }
 
 /** A composed sequence declares a break after every sheet but the last; a probe declares none. */
@@ -162,6 +164,7 @@ export function fakeStrategy(
               lines,
               images: layout.images ?? [],
               escaping: composed ? (layout.escaping ?? []) : [],
+              clippedMarkerCount: composed ? (layout.clippedMarkers ?? 0) : 0,
               pages: pagesOf(document.html, document.sheet, layout, overflowing),
             });
           },

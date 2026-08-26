@@ -2,6 +2,7 @@ import { kindOf } from '@openview/core';
 import type {
   MaterialBlock,
   MaterialDocument,
+  MaterialPageFieldRun,
   MaterialRow,
   ResolvedTypography,
 } from '../document/types.js';
@@ -72,21 +73,60 @@ export function markerSignatures(document: MaterialDocument): ReadonlyMap<string
 }
 
 /**
- * The width every marker of a typography reserves, from the widest digit that typography draws.
+ * Every character the canonical writing of a finite number can use.
  *
- * A footer that goes from `9` to `10` must not move the cut that decides how many pages there are.
- * Reserving the widest value the document could reach makes the geometry of a marker independent of
- * the value it ends up showing, which is what breaks that circle without a fixed-point search.
+ * `String(value)` on a finite double produces digits, an optional sign, a decimal point and, past
+ * the two thresholds where the notation switches, `e` with its own sign. Nothing else appears --
+ * no separator, no symbol, no space -- because the writing is canonical and not localised.
  */
-export function markerReserve(digits: number, widest: ReadonlyMap<string, number>): MarkerReserve {
+export const CANONICAL_NUMBER_ALPHABET = '0123456789-+.e';
+
+/**
+ * The longest canonical writing of a finite number, in characters.
+ *
+ * MEASURED, and exactly tight rather than generous: `-0.0000012345678901234567` reaches it -- a
+ * sign, `0.`, the five zeros the decimal notation still allows, and seventeen significant digits.
+ * A localised writing is a different alphabet and a different bound.
+ */
+export const CANONICAL_NUMBER_MAX_CHARS = 25;
+
+/** The widest glyph of one typography, in the two alphabets a marker draws from. */
+export interface GlyphWidths {
+  /** Widest decimal digit, which bounds a page counter. */
+  readonly digit: number;
+  /** Widest character of the canonical alphabet, which bounds a page report. */
+  readonly canonical: number;
+}
+
+/**
+ * The width every marker reserves, from the widest glyph its own alphabet can draw.
+ *
+ * A footer that goes from `9` to `10` must not move the cut that decides how many pages there are,
+ * and a report that goes from `0` to `-1234.56` must not either. Reserving the widest value the
+ * marker could ever reach makes its geometry independent of the value it ends up showing, which is
+ * what breaks that circle without a fixed-point search.
+ *
+ * A counter and a report take different bounds: a counter writes at most `digits` digits, a report
+ * writes at most {@link CANONICAL_NUMBER_MAX_CHARS} characters of a wider alphabet.
+ */
+export function markerReserve(
+  digits: number,
+  widest: ReadonlyMap<string, GlyphWidths>,
+): MarkerReserve {
+  const glyphs = (typography: ResolvedTypography): GlyphWidths => {
+    const found = widest.get(typographySignature(typography));
+    if (found === undefined) {
+      throw refusal(UNMEASURED, 'layout-measurement-failed');
+    }
+    return found;
+  };
   return {
     digits,
-    widthOf(typography: ResolvedTypography): number {
-      const width = widest.get(typographySignature(typography));
-      if (width === undefined) {
-        throw refusal(UNMEASURED, 'layout-measurement-failed');
-      }
-      return width * digits;
+    widthOf(run: MaterialPageFieldRun): number {
+      const found = glyphs(run.typography);
+      return run.field === 'report'
+        ? found.canonical * CANONICAL_NUMBER_MAX_CHARS
+        : found.digit * digits;
     },
   };
 }
