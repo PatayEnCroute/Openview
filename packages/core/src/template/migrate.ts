@@ -87,6 +87,18 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
     // Stamp only. A v7 document declares no fragmentation policy, which is what it already said.
     migrate: (input) => ({ ...input, schemaVersion: 8 }),
   },
+  {
+    from: 8,
+    to: 9,
+    /**
+     * Stamp only. A v8 document contributes to no page report and names no report marker, which is
+     * what it already said; there is no accounting value a migration could invent for it.
+     *
+     * The stamp is the whole work here: without it, a v9 document opened by a v8 build loses its
+     * contributions in silence, or is refused on an unknown discriminator with no version named.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 9 }),
+  },
 ];
 
 const recordSchema = z.record(z.string(), z.unknown());

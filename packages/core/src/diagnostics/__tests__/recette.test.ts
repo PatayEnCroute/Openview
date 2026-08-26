@@ -10,6 +10,7 @@ import {
   type PathExpression,
   parseTemplate,
 } from '../../index.js';
+import { PAGE_FIELD_NAME_MESSAGE } from '../../validation-messages.js';
 
 const data = { invoice: { total: 1200, customer: 'Fabrique Martin' }, lines: [{ amount: 400 }] };
 const literal = (value: string | number): LiteralExpression => ({ kind: 'literal', value });
@@ -130,10 +131,13 @@ const CONTRACT_CASES = [
         { nodeId: 'footer-text' },
       ),
     source: 'template-validation',
-    code: 'invalid-value',
+    /* A page marker is discriminated twice: on `kind`, then on the field it names. An unmatched
+       field is therefore a structure refusal, and the schema's own sentence is what names the
+       three markers in place of an enumerated list. */
+    code: 'invalid-structure',
     path: ['root', 'children', 0, 'content', 0, 'field'],
     nodeId: 'footer-text',
-    message: 'This field must be one of "number" or "count".',
+    message: PAGE_FIELD_NAME_MESSAGE,
   },
   {
     title: 'a sheet width that is not finite',

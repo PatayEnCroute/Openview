@@ -21,6 +21,7 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
   'image-load-failed',
   'oversized-atomic-resource',
   'page-band-overflow',
+  'page-report-refused',
   'pagination-impossible',
   'layout-measurement-failed',
   'pdf-export-failed',

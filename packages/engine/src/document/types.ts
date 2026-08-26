@@ -2,9 +2,9 @@ import type {
   BoxStyle,
   Color,
   PageBandOccurrence,
-  PageField,
   PageMargins,
   PrintableArea,
+  RoundMode,
   Sheet,
   TableColumn,
   TextAlignment,
@@ -30,16 +30,32 @@ export interface MaterialTextRun {
 }
 
 /**
- * A page marker that survived data binding unresolved.
+ * A page counter that survived data binding unresolved.
  *
  * Its value is the rank of the page that ends up holding it, which is not known until the cuts are
  * chosen, so binding leaves the marker in place and page composition writes the digits.
  */
-export interface MaterialPageFieldRun {
+export interface MaterialPageCountRun {
   readonly kind: 'pageField';
-  readonly field: PageField;
+  readonly field: 'number' | 'count';
   readonly typography: ResolvedTypography;
 }
+
+/**
+ * A page report that survived data binding unresolved, with the rounding it is written at.
+ *
+ * Which rows ended before the page holding it is decided by the cuts, so the sum is composed with
+ * them; the rounding travels here because the model declared it and nothing measures it.
+ */
+export interface MaterialPageReportRun {
+  readonly kind: 'pageField';
+  readonly field: 'report';
+  readonly decimals: number;
+  readonly mode: RoundMode;
+  readonly typography: ResolvedTypography;
+}
+
+export type MaterialPageFieldRun = MaterialPageCountRun | MaterialPageReportRun;
 
 export type MaterialRun = MaterialTextRun | MaterialPageFieldRun;
 
@@ -89,8 +105,39 @@ export interface MaterialCell {
   readonly children: readonly MaterialBlock[];
 }
 
+/**
+ * What one materialised occurrence of a row is worth to the pages that follow it.
+ *
+ * `order` is the rank the row was materialised at, zero-based and reset per render. Summing in that
+ * order rather than in the order boxes come back makes the total reproducible, which an IEEE-754
+ * addition of the same terms in another order does not guarantee.
+ */
+export interface MaterialPageReport {
+  readonly key: OccurrenceKey;
+  readonly order: number;
+  readonly value: number;
+}
+
+/**
+ * One occurrence of a marked row group: the rows a single item produced, as one unit.
+ *
+ * Shared by the rows it spans, so recognising the start of a group is comparing keys rather than
+ * re-deriving a boundary. `firstRow` indexes the table's body-then-footer sequence; groups live in
+ * the body, so it is also the index in the body.
+ */
+export interface MaterialRowGroupOccurrence {
+  readonly key: OccurrenceKey;
+  readonly nodeId: string;
+  readonly path: readonly (string | number)[];
+  readonly firstRow: number;
+  readonly rowCount: number;
+}
+
 export interface MaterialRow extends MaterialBase {
   readonly cells: readonly MaterialCell[];
+  readonly pageReport: MaterialPageReport | undefined;
+  /** The marked group occurrence this row belongs to, when one asked to be kept whole. */
+  readonly keptGroup: MaterialRowGroupOccurrence | undefined;
 }
 
 export interface MaterialTable extends MaterialBase {

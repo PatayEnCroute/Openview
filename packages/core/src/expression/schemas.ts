@@ -88,14 +88,22 @@ export const PercentOfExpressionSchema = z.object({
   rate: PrintableExpressionSchema,
 });
 
+/**
+ * The decimal position a rounding is declared at, with the bounds and messages of the operation.
+ *
+ * Shared rather than repeated: every site that rounds accepts exactly the same positions, so a
+ * second spelling would be a second policy able to drift from this one.
+ */
+export const RoundingPositionSchema = z
+  .number({ error: ROUNDING_POSITION_TYPE_MESSAGE })
+  .int('A rounding position is a whole number of decimal places')
+  .min(MIN_ROUND_DECIMALS, `A rounding position may not go below ${MIN_ROUND_DECIMALS}`)
+  .max(MAX_ROUND_DECIMALS, `A rounding position may not exceed ${MAX_ROUND_DECIMALS}`);
+
 export const RoundExpressionSchema = z.object({
   kind: z.literal('round'),
   value: PrintableExpressionSchema,
-  decimals: z
-    .number({ error: ROUNDING_POSITION_TYPE_MESSAGE })
-    .int('A rounding position is a whole number of decimal places')
-    .min(MIN_ROUND_DECIMALS, `A rounding position may not go below ${MIN_ROUND_DECIMALS}`)
-    .max(MAX_ROUND_DECIMALS, `A rounding position may not exceed ${MAX_ROUND_DECIMALS}`),
+  decimals: RoundingPositionSchema,
   mode: z.enum(ROUND_MODES),
 });
 

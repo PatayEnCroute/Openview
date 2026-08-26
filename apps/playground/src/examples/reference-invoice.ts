@@ -315,6 +315,82 @@ export const APPARENCE_B: Apparence = {
 const siNonVide = (style: BoxStyle | Typography): BoxStyle | Typography | undefined =>
   Object.values(style).some((entree) => entree !== undefined) ? style : undefined;
 
+/**
+ * Le bandeau d'un domaine de page, avec la ligne que ce domaine porte en plus — ou aucune.
+ *
+ * Les deux domaines d'en-tête montrent la même marque et la même référence, donc le bandeau est
+ * construit une fois et écrit deux fois. Ce qui diffère est la ligne dessous : les pages autres que
+ * la première portent le report des lignes achevées avant elles.
+ */
+const bandeauDe = (
+  a: Apparence,
+  report: Record<string, unknown> | undefined,
+): Record<string, unknown> => ({
+  type: 'container',
+  id: 'bandeau',
+  // Une bande a le style GRATUITEMENT : `PageBand.content` EST un `ContainerNode`,
+  // donc pas une ligne de `page/` n'a bougé pour que ceci soit exprimable.
+  box: siNonVide(a.bandeau),
+  children: [
+    // Le logo et la référence, côte à côte DANS UN TABLEAU — et le tableau est là
+    // pour une raison précise.
+    //
+    // Une image sans dimension déclarée prend la largeur de CONTENU de son parent et
+    // garde son ratio intrinsèque : posée directement dans la bande, elle occuperait
+    // toute la largeur imprimable. Le contrat d'apparence ne porte aucune largeur de
+    // boîte, donc la seule façon d'en contraindre une aujourd'hui est un POIDS DE
+    // COLONNE. C'est la réponse d'un auteur de modèle, pas un contournement.
+    {
+      type: 'table',
+      id: 'bandeau-grille',
+      columns: [
+        { id: 'marque', width: 1, align: 'start' },
+        { id: 'reference', width: 5, align: 'end' },
+      ],
+      header: [],
+      body: [
+        {
+          type: 'tableRow',
+          id: 'bandeau-ligne',
+          cells: [
+            {
+              columnId: 'marque',
+              children: [
+                {
+                  type: 'image',
+                  id: 'logo',
+                  src: LOGO_PNG,
+                  alt: 'marque de l’émetteur',
+                },
+              ],
+            },
+            {
+              columnId: 'reference',
+              children: [
+                {
+                  type: 'text',
+                  id: 'bandeau-titre',
+                  typography: a.corps,
+                  content: [
+                    { kind: 'literal', text: 'Commande ' },
+                    {
+                      kind: 'binding',
+                      value: { kind: 'path', path: 'commande.numero' },
+                      typography: a.accent,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      footer: [],
+    },
+    ...(report === undefined ? [] : [report]),
+  ],
+});
+
 export const factureAvecApparence = (a: Apparence): Template =>
   parseTemplate({
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -357,72 +433,31 @@ export const factureAvecApparence = (a: Apparence): Template =>
       sheet: { ...STANDARD_SHEETS_MM.a4 },
       margins: { top: 18, right: 15, bottom: 18, left: 15 },
       header: [
+        // `firstOnly` + `exceptFirst` plutôt qu'un seul `every` : les pages suivantes portent le
+        // report entrant, et la première n'a rien à reporter. Le bandeau est donc écrit deux fois —
+        // c'est le coût qu'un domaine de bande fait payer, assumé ici plutôt que caché derrière un
+        // helper qui inventerait un troisième domaine.
+        { on: 'firstOnly', content: bandeauDe(a, undefined) },
         {
-          on: 'every',
-          content: {
-            type: 'container',
-            id: 'bandeau',
-            // Une bande a le style GRATUITEMENT : `PageBand.content` EST un `ContainerNode`,
-            // donc pas une ligne de `page/` n'a bougé pour que ceci soit exprimable.
-            box: siNonVide(a.bandeau),
-            children: [
-              // Le logo et la référence, côte à côte DANS UN TABLEAU — et le tableau est là
-              // pour une raison précise.
-              //
-              // Une image sans dimension déclarée prend la largeur de CONTENU de son parent et
-              // garde son ratio intrinsèque : posée directement dans la bande, elle occuperait
-              // toute la largeur imprimable. Le contrat d'apparence ne porte aucune largeur de
-              // boîte, donc la seule façon d'en contraindre une aujourd'hui est un POIDS DE
-              // COLONNE. C'est la réponse d'un auteur de modèle, pas un contournement.
+          on: 'exceptFirst',
+          content: bandeauDe(a, {
+            type: 'text',
+            id: 'bandeau-report',
+            typography: a.corps,
+            align: 'end',
+            content: [
+              { kind: 'literal', text: 'Report ' },
+              // Le marqueur déclare OÙ le report s'imprime et À QUEL ARRONDI ; sa valeur vient du
+              // paginateur, qui seul sait quelles lignes se sont achevées avant cette page.
               {
-                type: 'table',
-                id: 'bandeau-grille',
-                columns: [
-                  { id: 'marque', width: 1, align: 'start' },
-                  { id: 'reference', width: 5, align: 'end' },
-                ],
-                header: [],
-                body: [
-                  {
-                    type: 'tableRow',
-                    id: 'bandeau-ligne',
-                    cells: [
-                      {
-                        columnId: 'marque',
-                        children: [
-                          {
-                            type: 'image',
-                            id: 'logo',
-                            src: LOGO_PNG,
-                            alt: 'marque de l’émetteur',
-                          },
-                        ],
-                      },
-                      {
-                        columnId: 'reference',
-                        children: [
-                          {
-                            type: 'text',
-                            id: 'bandeau-titre',
-                            typography: a.corps,
-                            content: [
-                              { kind: 'literal', text: 'Commande ' },
-                              {
-                                kind: 'binding',
-                                value: { kind: 'path', path: 'commande.numero' },
-                                typography: a.accent,
-                              },
-                            ],
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-                footer: [],
+                kind: 'pageField',
+                field: 'report',
+                decimals: 2,
+                mode: 'halfExpand',
+                typography: a.accent,
               },
             ],
-          },
+          }),
         },
       ],
       // Un pied COURANT et un pied de DERNIÈRE page. `every` + `lastOnly` serait refusé par le
@@ -454,6 +489,16 @@ export const factureAvecApparence = (a: Apparence): Template =>
                 id: 'pied-mentions',
                 content: [
                   { kind: 'binding', value: { kind: 'path', path: 'societe.mentionsLegales' } },
+                ],
+              },
+              // Les coordonnées de paiement que le MODÈLE choisit de ne montrer que sur la dernière
+              // feuille. Le moteur ne connaît aucun vocabulaire légal : il applique le domaine de
+              // bande et mesure la hauteur, rien de plus.
+              {
+                type: 'text',
+                id: 'pied-paiement',
+                content: [
+                  { kind: 'binding', value: { kind: 'path', path: 'societe.coordonnees' } },
                 ],
               },
             ],
@@ -518,6 +563,10 @@ export const factureAvecApparence = (a: Apparence): Template =>
                 {
                   type: 'tableRow',
                   id: 'ligne-detail',
+                  // Ce que cette ligne apporte au report des pages suivantes. Le moteur décide sur
+                  // quelle page l'occurrence s'achève ; le modèle ne décide que le montant, et
+                  // c'est la même formule que la colonne « Montant » imprime.
+                  pageReport: { value: lineAmount },
                   // Le padding d'une LIGNE insète le contenu de chaque cellule à l'identique et ne
                   // déplace aucune frontière de colonne : sans lui, deux colonnes voisines se
                   // touchent et « 30 » colle à « Remise appliquée ».
@@ -635,6 +684,9 @@ export const factureAvecApparence = (a: Apparence): Template =>
           id: 'totals',
           typography: a.corps,
           align: 'end',
+          // Un cadre de totaux coupé en deux est illisible : la marque demande qu'il reste entier,
+          // et il retombe sur la politique ordinaire si aucune page neuve ne peut le porter.
+          keepTogether: true,
           content: [
             { kind: 'literal', text: 'Total HT ' },
             { kind: 'binding', value: totalHT, typography: a.accent },
@@ -671,6 +723,33 @@ export const factureAvecApparence = (a: Apparence): Template =>
             { kind: 'literal', text: 'Lignes remisées ' },
             { kind: 'binding', value: lignesRemisees, typography: a.accent },
           ],
+        },
+        // Un cadre encadré qui demande à rester entier. Sur le jeu long il atterrit là où les
+        // lignes s'arrêtent : c'est exactement le cas pour lequel la marque existe, puisqu'un cadre
+        // coupé reste ouvert derrière le bord de page.
+        {
+          type: 'container',
+          id: 'paiement',
+          keepTogether: true,
+          box: siNonVide(a.bandeau),
+          children: [
+            txt('paiement-titre', 'Règlement', a.accent),
+            {
+              type: 'text',
+              id: 'paiement-corps',
+              typography: a.corps,
+              content: [{ kind: 'binding', value: { kind: 'path', path: 'societe.reglement' } }],
+            },
+          ],
+        },
+        // Assez long pour être coupé par un bord de page : c'est le bloc sur lequel la préférence
+        // de deux lignes de part et d'autre de la coupure s'exerce sur un document réel.
+        {
+          type: 'text',
+          id: 'conditions',
+          typography: a.corps,
+          align: a.alignementMentions,
+          content: [{ kind: 'binding', value: { kind: 'path', path: 'societe.conditions' } }],
         },
       ],
     },
@@ -725,7 +804,14 @@ export const renderData = {
   traitement: { effectueLe: '2026-03-10' },
   // Lu par le PIED DE DERNIÈRE PAGE et par lui seul. Aucun bloc du flux ne le lit, donc cette
   // clé n'apparaît dans « Données requises » que parce que l'analyse descend dans les bandes.
-  societe: { mentionsLegales: 'Escompte pour paiement anticipé : néant.' },
+  societe: {
+    mentionsLegales: 'Escompte pour paiement anticipé : néant.',
+    reglement:
+      'Par virement sur le compte indiqué dans l’avis de règlement, en rappelant la référence.',
+    coordonnees: 'Les règlements sont imputés d’abord sur la ligne impayée la plus ancienne.',
+    conditions:
+      'Le règlement est exigible à la date portée ci-dessus, sans escompte. Les intérêts au taux légal courent de plein droit dès le lendemain de cette date sur toute somme restée impayée, et l’indemnité forfaitaire de recouvrement prévue par la loi s’y ajoute. Les marchandises demeurent la propriété de l’émetteur jusqu’au paiement intégral de la facture. Toute contestation portant sur une ligne du présent relevé doit être formée par écrit dans les trente jours de son émission, en rappelant la référence portée en tête de chaque feuille ; une ligne non contestée dans ce délai est réputée acceptée.',
+  },
 };
 
 /**
@@ -747,7 +833,14 @@ export const renderDataCourt = {
   },
   arrondi: { lignes: [{ sku: 'Z-9', quantite: 3, prixUnitaire: 7.77 }] },
   traitement: { effectueLe: '2026-04-02' },
-  societe: { mentionsLegales: 'Règlement intégral attendu à l’échéance.' },
+  societe: {
+    mentionsLegales: 'Règlement intégral attendu à l’échéance.',
+    reglement:
+      'Par virement sur le compte indiqué dans l’avis de règlement, en rappelant la référence.',
+    coordonnees: 'Les règlements sont imputés d’abord sur la ligne impayée la plus ancienne.',
+    conditions:
+      'Le règlement est exigible à la date portée ci-dessus, sans escompte. Les intérêts au taux légal courent de plein droit dès le lendemain de cette date sur toute somme restée impayée, et l’indemnité forfaitaire de recouvrement prévue par la loi s’y ajoute. Les marchandises demeurent la propriété de l’émetteur jusqu’au paiement intégral de la facture. Toute contestation portant sur une ligne du présent relevé doit être formée par écrit dans les trente jours de son émission, en rappelant la référence portée en tête de chaque feuille ; une ligne non contestée dans ce délai est réputée acceptée.',
+  },
 };
 
 /** Ce que chaque ligne longue désigne, cyclé pour que la recette se lise comme un document. */
@@ -788,5 +881,12 @@ export const renderDataLong = {
     ],
   },
   traitement: { effectueLe: '2026-03-11' },
-  societe: { mentionsLegales: 'Retenue de garantie de cinq pour cent libérée à la réception.' },
+  societe: {
+    mentionsLegales: 'Retenue de garantie de cinq pour cent libérée à la réception.',
+    reglement:
+      'Par virement sur le compte indiqué dans l’avis de règlement, en rappelant la référence.',
+    coordonnees: 'Les règlements sont imputés d’abord sur la ligne impayée la plus ancienne.',
+    conditions:
+      'Le règlement est exigible à la date portée ci-dessus, sans escompte. Les intérêts au taux légal courent de plein droit dès le lendemain de cette date sur toute somme restée impayée, et l’indemnité forfaitaire de recouvrement prévue par la loi s’y ajoute. Les marchandises demeurent la propriété de l’émetteur jusqu’au paiement intégral de la facture. Toute contestation portant sur une ligne du présent relevé doit être formée par écrit dans les trente jours de son émission, en rappelant la référence portée en tête de chaque feuille ; une ligne non contestée dans ce délai est réputée acceptée.',
+  },
 };

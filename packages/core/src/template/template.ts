@@ -12,11 +12,13 @@ import { PresentationTableSchema } from '../presentation/presentation.js';
  * document either strips the unknown field with no error at all, or refuses it with a message
  * naming no version and offering no remedy.
  *
- * Version 8 adds one optional field, `keepTogether`, to every node, and widens no union.
+ * Version 9 adds one optional field, `pageReport`, to a table row, and widens the page-marker
+ * union with a `report` field carrying its own rounding. Both classes of change need the bump: the
+ * first is stripped in silence by an older build, the second is refused by it with no version named.
  *
  * @see docs/adr/0009-les-blocs-insecables.md
  */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /**
  * Zod schema for validating a complete document template at CURRENT_SCHEMA_VERSION.

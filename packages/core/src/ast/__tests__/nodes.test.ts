@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
 import { parseTemplate } from '../../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
+import { PAGE_FIELD_NAME_MESSAGE } from '../../validation-messages.js';
 import {
   BlockNodeSchema,
   type ConditionNode,
@@ -450,8 +451,8 @@ describe('DocumentNodeSchema', () => {
       id: 't',
       content: [{ kind: 'pageField', field: 'total' }],
     });
-    // An ABSENT field yields the SAME message: `z.enum` treats `undefined` as an unknown
-    // option, so an author who forgot the key reads "expected one of ..." rather than
+    // An ABSENT field yields the SAME message: an unwritten discriminator matches no member of
+    // the union, so an author who forgot the key reads which markers exist rather than
     // "required". Exact, and misleading -- recorded for lot C8, not corrected here.
     const absentField = TextNodeSchema.safeParse({
       type: 'text',
@@ -462,15 +463,11 @@ describe('DocumentNodeSchema', () => {
     expect(unknownField.success).toBe(false);
     if (!unknownField.success) {
       expect(unknownField.error.issues[0]?.path).toStrictEqual(['content', 0, 'field']);
-      expect(unknownField.error.issues[0]?.message).toBe(
-        'Invalid option: expected one of "number"|"count"',
-      );
+      expect(unknownField.error.issues[0]?.message).toBe(PAGE_FIELD_NAME_MESSAGE);
     }
     expect(absentField.success).toBe(false);
     if (!absentField.success) {
-      expect(absentField.error.issues[0]?.message).toBe(
-        'Invalid option: expected one of "number"|"count"',
-      );
+      expect(absentField.error.issues[0]?.message).toBe(PAGE_FIELD_NAME_MESSAGE);
     }
   });
 

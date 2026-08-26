@@ -18,11 +18,13 @@ import {
   type TableColumn,
   type TableColumnAlignment,
   type TableNode,
+  type TableRowGroupNode,
   type TableRowNode,
   type Template,
   type TextNode,
   type TextSegment,
   type Typography,
+  valueTypeOf,
   visitNode,
   visitSegment,
 } from '@openview/core';
@@ -34,7 +36,9 @@ import type {
   MaterialContainer,
   MaterialDocument,
   MaterialPageBand,
+  MaterialPageReport,
   MaterialRow,
+  MaterialRowGroupOccurrence,
   MaterialRun,
   MaterialText,
   OccurrenceKey,
@@ -44,6 +48,12 @@ import { resolveRunTypography } from './typography.js';
 
 const EXPRESSION_REFUSED =
   'A formula of this template could not be evaluated against the supplied data. Read `details.diagnostics` for the operand or the bound that stopped it.';
+
+const CONTRIBUTION_NOT_A_NUMBER =
+  'A row declares what it contributes to the page report, and the formula produced something other than a finite number. Read `details.actualType` for what arrived; the value itself is deliberately not repeated.';
+
+const CONTRIBUTION_IN_A_BAND =
+  'A row inside a page band declares a contribution to the page report. A band is painted on every page its domain names, so the occurrence it would be counted on does not exist. Read `details.nodeId` for the row.';
 
 /** Alignment used when neither the block nor its column declares one. */
 const DEFAULT_ALIGN = 'start';
@@ -56,14 +66,27 @@ const DEFAULT_ALIGN = 'start';
  */
 export interface KeySource {
   next(): OccurrenceKey;
+  /**
+   * The materialisation rank of one page-report contribution, zero-based.
+   *
+   * Kept beside the keys because it has the same lifetime and the same guarantee: a counter, so
+   * the same template and the same data rank the same contributions the same way twice.
+   */
+  nextReportOrder(): number;
 }
 
 export function createKeySource(): KeySource {
   let issued = 0;
+  let ranked = 0;
   return {
     next(): OccurrenceKey {
       issued += 1;
       return `o${issued}`;
+    },
+    nextReportOrder(): number {
+      const rank = ranked;
+      ranked += 1;
+      return rank;
     },
   };
 }
@@ -134,13 +157,22 @@ function runOf(
       ),
       typography: complete(binding.typography),
     }),
-    /* No digits here: which page holds this run is decided by the cuts, and the cuts are decided
-       after binding. The marker travels as itself and page composition writes its value. */
-    pageField: (field) => ({
-      kind: 'pageField',
-      field: field.field,
-      typography: complete(field.typography),
-    }),
+    /* No digits here: which page holds this run, and which rows ended before it, are decided by
+       the cuts. The marker travels as itself and page composition writes its value. */
+    pageField: (field) =>
+      field.field === 'report'
+        ? {
+            kind: 'pageField',
+            field: 'report',
+            decimals: field.decimals,
+            mode: field.mode,
+            typography: complete(field.typography),
+          }
+        : {
+            kind: 'pageField',
+            field: field.field,
+            typography: complete(field.typography),
+          },
   });
 }
 
@@ -179,24 +211,56 @@ function materializeChildren(
   );
 }
 
+/**
+ * Wraps one occurrence of a marked loop or condition so the paginator has something to keep whole.
+ *
+ * The wrapper carries no box and no style, and Chromium gives the flow inside it exactly the widths
+ * and heights the flattened flow had. It exists only when the mark asks for it: an unmarked node
+ * still flattens, so no document pays for a boundary nothing reads.
+ */
+function transparentGroup(
+  nodeId: string,
+  children: readonly MaterialBlock[],
+  context: Context,
+): MaterialContainer {
+  return {
+    kind: 'container',
+    key: context.keys.next(),
+    nodeId,
+    path: context.path,
+    box: undefined,
+    keepTogether: true,
+    children,
+  };
+}
+
 function materializeLoop(node: LoopNode, context: Context): readonly MaterialBlock[] {
   const items = within(node.id, context, () =>
     evaluateSequence(node.each, context.scope, { budget: context.budget, caller: 'loop' }),
   );
-  return items.flatMap((item, index) =>
-    materializeChildren(node.children, {
+  /* One group per item, never one around all of them: a marked loop asks for each iteration to
+     stay whole, and a single group of sixty would be a block no page could hold. */
+  return items.flatMap((item, index) => {
+    const inner: Context = {
       ...context,
       scope: childScope(context.scope, node.as, item),
       path: [...context.path, index],
-    }),
-  );
+    };
+    const children = materializeChildren(node.children, inner);
+    return node.keepTogether === true ? [transparentGroup(node.id, children, inner)] : children;
+  });
 }
 
 function materializeCondition(node: ConditionNode, context: Context): readonly MaterialBlock[] {
   const holds = within(node.id, context, () =>
     evaluatePredicate(node.when, context.scope, { budget: context.budget, caller: 'condition' }),
   );
-  return holds ? materializeChildren(node.children, context) : [];
+  if (!holds) {
+    /* A branch that does not hold produces no occurrence, so there is nothing for a mark to keep. */
+    return [];
+  }
+  const children = materializeChildren(node.children, context);
+  return node.keepTogether === true ? [transparentGroup(node.id, children, context)] : children;
 }
 
 function materializeCell(
@@ -220,17 +284,59 @@ function materializeCell(
   };
 }
 
+/**
+ * Evaluates what one occurrence of a row contributes, in that occurrence's own scope.
+ *
+ * Once per occurrence and on the shared budget: sixty repetitions cost sixty evaluations, never one
+ * per page and never one per settling round. A value that is not a finite number is refused with
+ * the category of what arrived and nothing of the value itself.
+ */
+function contributionOf(
+  row: TableRowNode,
+  key: OccurrenceKey,
+  context: Context,
+): MaterialPageReport | undefined {
+  const declared = row.pageReport;
+  if (declared === undefined) {
+    return undefined;
+  }
+  if (context.region !== 'root') {
+    throw refusal(CONTRIBUTION_IN_A_BAND, 'page-report-refused', {
+      nodeId: row.id,
+      path: context.path,
+      region: context.region,
+    });
+  }
+  const at = [...context.path, 'pageReport', 'value'];
+  const raw = within(row.id, { ...context, path: at }, () =>
+    evaluateExpression(declared.value, context.scope, { budget: context.budget }),
+  );
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    throw refusal(CONTRIBUTION_NOT_A_NUMBER, 'page-report-refused', {
+      nodeId: row.id,
+      path: at,
+      region: context.region,
+      actualType: valueTypeOf(raw),
+    });
+  }
+  return { key, order: context.keys.nextReportOrder(), value: raw };
+}
+
 function materializeRow(
   row: TableRowNode,
   columns: readonly TableColumn[],
   context: Context,
+  keptGroup: MaterialRowGroupOccurrence | undefined = undefined,
 ): MaterialRow {
+  const key = context.keys.next();
   return {
-    key: context.keys.next(),
+    key,
     nodeId: row.id,
     path: context.path,
     box: row.box,
     keepTogether: row.keepTogether === true,
+    pageReport: contributionOf(row, key, context),
+    keptGroup,
     cells: columns.map((column, index) => materializeCell(row, column, index, context)),
   };
 }
@@ -241,10 +347,35 @@ function materializeRow(
  * Takes any node rather than the body union so that the six refusing handlers are reachable and
  * provable, instead of being defensive branches no call can enter.
  */
+/**
+ * The rows one item of a marked group produced, each pointing at the occurrence they form.
+ *
+ * The boundary is a reference on the rows and nothing in the markup: `tbody` keeps holding `tr` and
+ * only `tr`, so the columns, the rules and the height of the table are the ones it already had.
+ */
+function groupOccurrenceOf(
+  group: TableRowGroupNode,
+  index: number,
+  firstRow: number,
+  context: Context,
+): MaterialRowGroupOccurrence | undefined {
+  if (group.keepTogether !== true) {
+    return undefined;
+  }
+  return {
+    key: context.keys.next(),
+    nodeId: group.id,
+    path: [...context.path, index],
+    firstRow,
+    rowCount: group.rows.length,
+  };
+}
+
 export function materializeBodyEntry(
   entry: DocumentNode,
   columns: readonly TableColumn[],
   context: Context,
+  firstRow = 0,
 ): readonly MaterialRow[] {
   return visitNode<readonly MaterialRow[]>(entry, {
     tableRow: (row) => [materializeRow(row, columns, context)],
@@ -255,15 +386,24 @@ export function materializeBodyEntry(
           caller: 'tableRowGroup',
         }),
       );
-      return items.flatMap((item, index) =>
-        group.rows.map((row, rowIndex) =>
-          materializeRow(row, columns, {
-            ...context,
-            scope: childScope(context.scope, group.as, item),
-            path: [...context.path, index, 'rows', rowIndex],
-          }),
-        ),
-      );
+      /* Per item, exactly as a marked loop: several rows declared in one group are kept together
+         for each item, never for the whole sequence. */
+      return items.flatMap((item, index) => {
+        const at = firstRow + index * group.rows.length;
+        const occurrence = groupOccurrenceOf(group, index, at, context);
+        return group.rows.map((row, rowIndex) =>
+          materializeRow(
+            row,
+            columns,
+            {
+              ...context,
+              scope: childScope(context.scope, group.as, item),
+              path: [...context.path, index, 'rows', rowIndex],
+            },
+            occurrence,
+          ),
+        );
+      });
     },
     text: rejectAsRow,
     image: rejectAsRow,
@@ -272,6 +412,23 @@ export function materializeBodyEntry(
     condition: rejectAsRow,
     table: rejectAsRow,
   });
+}
+
+/**
+ * The body of a table, flattened while keeping each group occurrence's position in the sequence.
+ *
+ * Accumulated rather than mapped, because a group occurrence has to know where its first row lands
+ * in the whole body: that index is what lets the paginator recognise the start of the occurrence.
+ */
+function bodyRows(
+  node: TableNode,
+  section: (name: 'header' | 'body' | 'footer', index: number) => Context,
+): readonly MaterialRow[] {
+  const rows: MaterialRow[] = [];
+  for (const [index, entry] of node.body.entries()) {
+    rows.push(...materializeBodyEntry(entry, node.columns, section('body', index), rows.length));
+  }
+  return rows;
 }
 
 function materializeTable(node: TableNode, context: Context): MaterialBlock {
@@ -292,9 +449,7 @@ function materializeTable(node: TableNode, context: Context): MaterialBlock {
     header: node.header.map((row, index) =>
       materializeRow(row, node.columns, section('header', index)),
     ),
-    body: node.body.flatMap((entry, index) =>
-      materializeBodyEntry(entry, node.columns, section('body', index)),
-    ),
+    body: bodyRows(node, section),
     footer: node.footer.map((row, index) =>
       materializeRow(row, node.columns, section('footer', index)),
     ),

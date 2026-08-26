@@ -7,6 +7,7 @@ import {
   PageSetupSchema,
   TemplateSchema,
 } from '../../index.js';
+import { PAGE_FIELD_NAME_MESSAGE } from '../../validation-messages.js';
 
 function refuse(schema: z.ZodType, raw: unknown): readonly OpenviewDiagnostic[] {
   const result = schema.safeParse(raw);
@@ -119,15 +120,35 @@ describe('diagnosticsOf on a validation error', () => {
       template({
         type: 'container',
         id: 'root',
+        children: [{ type: 'text', id: 't1', align: 'sideways', content: [] }],
+      }),
+    );
+    const diagnostic = at(diagnostics, ['root', 'children', 0, 'align']);
+    expect(diagnostic.code).toBe('invalid-value');
+    expect(diagnostic.message).toBe(
+      'This field must be one of "start", "center", "end" or "justify".',
+    );
+    if (diagnostic.code === 'invalid-value') {
+      expect(diagnostic.acceptedValues).toEqual(['"start"', '"center"', '"end"', '"justify"']);
+    }
+  });
+
+  it('keeps the words a union wrote about its own discriminator', () => {
+    // A page marker is discriminated twice -- on `kind`, then on the field it names -- so an
+    // unmatched field is a structure refusal and carries no enumerated value. The message the
+    // schema wrote is what replaces the list; the generic sentence would name `type` or `kind`,
+    // which is not the discriminator here.
+    const diagnostics = refuse(
+      TemplateSchema,
+      template({
+        type: 'container',
+        id: 'root',
         children: [{ type: 'text', id: 't1', content: [{ kind: 'pageField' }] }],
       }),
     );
     const diagnostic = at(diagnostics, ['root', 'children', 0, 'content', 0, 'field']);
-    expect(diagnostic.code).toBe('invalid-value');
-    expect(diagnostic.message).toBe('This field must be one of "number" or "count".');
-    if (diagnostic.code === 'invalid-value') {
-      expect(diagnostic.acceptedValues).toEqual(['"number"', '"count"']);
-    }
+    expect(diagnostic.code).toBe('invalid-structure');
+    expect(diagnostic.message).toBe(PAGE_FIELD_NAME_MESSAGE);
   });
 
   it('keeps the words a schema wrote for a single accepted value', () => {

@@ -61,6 +61,57 @@ const edgeOf = (first: boolean, last: boolean): FragmentEdge => {
   return last ? 'last' : 'middle';
 };
 
+/** The smallest run of visual lines a fragment of a cut text may keep on either side of the cut. */
+const MIN_LINES_PER_SIDE = 2;
+
+/**
+ * Where to cut a text block: as far as fits, but never leaving one line alone on either page.
+ *
+ * A preference and not a rule, in this order. The greedy end is bounded so at least two lines follow
+ * the cut, and required to leave at least two before it. When the room where the block stands
+ * cannot satisfy that but a page holding nothing else could -- by taking the block whole or by
+ * allowing the same 2/2 cut -- nothing is placed and the page closes. When no page can satisfy it,
+ * the greedy end stands: a preference may cost a page, never a refusal and never a page that
+ * consumed nothing.
+ *
+ * Fewer than four lines remain: two on each side is arithmetically impossible, so the greedy end
+ * stands and no artificial cut is introduced.
+ *
+ * @param greedy the E2 end for a given room, which decides the cursors and the runs either way
+ * @returns the line to cut before, or `undefined` to close the page and offer a fresh one
+ */
+function keptLines(
+  greedy: (room: number) => number,
+  total: number,
+  line: number,
+  available: number,
+  fresh: number,
+): number | undefined {
+  const end = greedy(available);
+  if (end === total) {
+    return end === line ? undefined : end;
+  }
+  if (end === line) {
+    return undefined;
+  }
+  if (total - line < MIN_LINES_PER_SIDE * 2) {
+    return end;
+  }
+
+  const bounded = (candidate: number): number => Math.min(candidate, total - MIN_LINES_PER_SIDE);
+  const satisfied = (candidate: number): boolean =>
+    candidate === total || bounded(candidate) >= line + MIN_LINES_PER_SIDE;
+
+  if (satisfied(end)) {
+    return bounded(end);
+  }
+  /* Already on a page holding nothing else: deferring would offer the same room again. */
+  if (available >= fresh) {
+    return end;
+  }
+  return satisfied(greedy(fresh)) ? undefined : end;
+}
+
 /** One text fragment and what it consumed. */
 export interface TextPlacement {
   readonly fragment: TextFragment;
@@ -121,15 +172,20 @@ export function sliceText(
     throw refusal(TOO_TALL, 'pagination-impossible', { nodeId: block.nodeId, path: block.path });
   }
 
-  let end = line;
-  while (end < lines.length) {
-    const candidate = lines[end];
-    if (candidate === undefined || padding + (candidate.height - before) > available) {
-      break;
+  const greedy = (room: number): number => {
+    let end = line;
+    while (end < lines.length) {
+      const candidate = lines[end];
+      if (candidate === undefined || padding + (candidate.height - before) > room) {
+        break;
+      }
+      end += 1;
     }
-    end += 1;
-  }
-  if (end === line) {
+    return end;
+  };
+
+  const end = keptLines(greedy, lines.length, line, available, fresh);
+  if (end === undefined) {
     return undefined;
   }
 

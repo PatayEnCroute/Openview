@@ -37,6 +37,7 @@ export {
   PercentOfExpressionSchema,
   PrintableExpressionSchema,
   RoundExpressionSchema,
+  RoundingPositionSchema,
   TextCaseExpressionSchema,
   TextExpressionSchema,
 } from './schemas.js';

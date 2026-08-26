@@ -4,12 +4,12 @@ import type {
   MaterialCell,
   MaterialContainer,
   MaterialImage,
+  MaterialPageFieldRun,
   MaterialRow,
   MaterialRun,
   MaterialTable,
   MaterialText,
   OccurrenceKey,
-  ResolvedTypography,
 } from '../document/types.js';
 
 /** Where a fragment sits in the sequence its source was cut into. */
@@ -114,15 +114,22 @@ export const FLOW_START: FlowCursor = { index: 0, inner: undefined };
 export interface MaterialPage {
   readonly number: number;
   readonly count: number;
+  /**
+   * The sum the rows finished on earlier pages carry into this one, unrounded.
+   *
+   * Raw on purpose: every report marker declares the rounding it is written at, so two markers of
+   * two roundings write two spellings of this one total.
+   */
+  readonly incomingReport: number;
   readonly header: readonly MaterialBlock[];
   readonly root: readonly MaterialFragment[];
   readonly footer: readonly MaterialBlock[];
 }
 
-/** The reserved width of one page marker, in css pixels, per typography signature. */
+/** The reserved width of one page marker, in css pixels, for the exact run being painted. */
 export interface MarkerReserve {
   readonly digits: number;
-  widthOf(typography: ResolvedTypography): number;
+  widthOf(run: MaterialPageFieldRun): number;
 }
 
 export interface PaginatedDocument {

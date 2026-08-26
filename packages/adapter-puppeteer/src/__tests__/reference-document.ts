@@ -133,6 +133,71 @@ const bound = (id: string, value: PrintableExpression): Record<string, unknown> 
   content: [{ kind: 'binding', value }],
 });
 
+/**
+ * The banner of one page domain, with the extra line that domain carries -- or none.
+ *
+ * The two header domains show the same mark and the same reference, so the banner is built once and
+ * spelt twice. What differs is the line below it: the pages after the first carry the amount
+ * brought forward from the rows that ended before them.
+ */
+function stripe(
+  appearance: Appearance,
+  carried: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  return {
+    type: 'container',
+    id: 'stripe',
+    box: orUndefined(appearance.stripe),
+    children: [
+      /* The mark and the reference share a table, and the table is what gives the image a width:
+         an image with no declared size takes the content width of its parent, and the appearance
+         contract carries no width on a box. A column weight is the only way a model constrains
+         one today. */
+      {
+        type: 'table',
+        id: 'stripe-grid',
+        columns: [
+          { id: 'mark', width: 1, align: 'start' },
+          { id: 'reference', width: 5, align: 'end' },
+        ],
+        header: [],
+        body: [
+          {
+            type: 'tableRow',
+            id: 'stripe-row',
+            cells: [
+              {
+                columnId: 'mark',
+                children: [{ type: 'image', id: 'logo', src: LOGO_PNG, alt: 'issuer mark' }],
+              },
+              {
+                columnId: 'reference',
+                children: [
+                  {
+                    type: 'text',
+                    id: 'stripe-reference',
+                    typography: appearance.body,
+                    content: [
+                      { kind: 'literal', text: 'Reference ' },
+                      {
+                        kind: 'binding',
+                        value: { kind: 'path', path: 'order.reference' },
+                        typography: appearance.accent,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        footer: [],
+      },
+      ...(carried === undefined ? [] : [carried]),
+    ],
+  };
+}
+
 /** What an appearance declares, and nothing else: three boxes, three typographies, one alignment. */
 export interface Appearance {
   readonly name: string;
@@ -204,61 +269,32 @@ export function referenceDocument(appearance: Appearance): Template {
       sheet: { ...STANDARD_SHEETS_MM.a4 },
       margins: { top: 14, right: 14, bottom: 14, left: 14 },
       header: [
+        /* `firstOnly` plus `exceptFirst` rather than one `every`: the pages after the first carry
+           the amount brought forward, and the first has nothing to bring. The banner is therefore
+           spelt twice -- the duplication a band domain costs, paid here rather than hidden behind
+           a helper that would invent a third page domain. */
         {
-          on: 'every',
-          content: {
-            type: 'container',
-            id: 'stripe',
-            box: orUndefined(appearance.stripe),
-            children: [
-              /* The mark and the reference share a table, and the table is what gives the image a
-                 width: an image with no declared size takes the content width of its parent, and
-                 the appearance contract carries no width on a box. A column weight is the only way
-                 a model constrains one today. */
+          on: 'firstOnly',
+          content: stripe(appearance, undefined),
+        },
+        {
+          on: 'exceptFirst',
+          content: stripe(appearance, {
+            type: 'text',
+            id: 'stripe-carried',
+            typography: appearance.body,
+            align: 'end',
+            content: [
+              { kind: 'literal', text: 'Brought forward ' },
               {
-                type: 'table',
-                id: 'stripe-grid',
-                columns: [
-                  { id: 'mark', width: 1, align: 'start' },
-                  { id: 'reference', width: 5, align: 'end' },
-                ],
-                header: [],
-                body: [
-                  {
-                    type: 'tableRow',
-                    id: 'stripe-row',
-                    cells: [
-                      {
-                        columnId: 'mark',
-                        children: [
-                          { type: 'image', id: 'logo', src: LOGO_PNG, alt: 'issuer mark' },
-                        ],
-                      },
-                      {
-                        columnId: 'reference',
-                        children: [
-                          {
-                            type: 'text',
-                            id: 'stripe-reference',
-                            typography: appearance.body,
-                            content: [
-                              { kind: 'literal', text: 'Reference ' },
-                              {
-                                kind: 'binding',
-                                value: { kind: 'path', path: 'order.reference' },
-                                typography: appearance.accent,
-                              },
-                            ],
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                ],
-                footer: [],
+                kind: 'pageField',
+                field: 'report',
+                decimals: 2,
+                mode: 'halfExpand',
+                typography: appearance.accent,
               },
             ],
-          },
+          }),
         },
       ],
       footer: [
@@ -285,6 +321,15 @@ export function referenceDocument(appearance: Appearance): Template {
                 typography: appearance.body,
                 align: appearance.noticeAlign,
                 content: [{ kind: 'binding', value: { kind: 'path', path: 'issuer.notice' } }],
+              },
+              /* The payment details the model chose to show on the last sheet only. The engine
+                 knows no legal vocabulary: it applies the domain and measures the height. */
+              {
+                type: 'text',
+                id: 'final-foot-payment',
+                typography: appearance.body,
+                align: appearance.noticeAlign,
+                content: [{ kind: 'binding', value: { kind: 'path', path: 'issuer.payment' } }],
               },
             ],
           },
@@ -341,6 +386,10 @@ export function referenceDocument(appearance: Appearance): Template {
                   /* Meets the header rule on one boundary with a different width. */
                   box: { border: appearance.firstRowRule },
                   keepTogether: true,
+                  /* What this line is worth to the pages after it. The renderer decides which page
+                     the occurrence ends on; the model decides only the amount, and it is the same
+                     formula the `amount` column prints. */
+                  pageReport: { value: rowAmount },
                   cells: [
                     {
                       columnId: 'sku',
@@ -397,6 +446,7 @@ export function referenceDocument(appearance: Appearance): Template {
           id: 'totals',
           typography: appearance.body,
           align: 'end',
+          keepTogether: true,
           content: [
             { kind: 'literal', text: 'Net ' },
             { kind: 'binding', value: netTotal, typography: appearance.accent },
@@ -420,6 +470,32 @@ export function referenceDocument(appearance: Appearance): Template {
             { kind: 'binding', value: reducedRowCount, typography: appearance.accent },
           ],
         },
+        /* A framed block that asks to stay whole. It lands where the rows leave off, so on the long
+           dataset it is the case the mark exists for: cut it and the frame is left open. */
+        {
+          type: 'container',
+          id: 'settlement',
+          keepTogether: true,
+          box: { ...appearance.stripe, border: appearance.headRule },
+          children: [
+            { ...label('settlement-head', 'How to settle'), typography: appearance.accent },
+            {
+              type: 'text',
+              id: 'settlement-body',
+              typography: appearance.body,
+              content: [{ kind: 'binding', value: { kind: 'path', path: 'issuer.settlement' } }],
+            },
+          ],
+        },
+        /* Long enough to be cut across a page edge, which is where the two-line preference on
+           either side of the seam is exercised on a real document rather than on a grid. */
+        {
+          type: 'text',
+          id: 'terms',
+          typography: appearance.body,
+          align: appearance.noticeAlign,
+          content: [{ kind: 'binding', value: { kind: 'path', path: 'issuer.terms' } }],
+        },
       ],
     },
   });
@@ -440,7 +516,13 @@ export const THREE_ROWS: EvaluationScope = {
       { sku: 'C-3', units: 4, rate: 2.5, reduction: 5 },
     ],
   },
-  issuer: { notice: 'No early-payment discount applies to this document.' },
+  issuer: {
+    notice: 'No early-payment discount applies to this document.',
+    settlement: 'By transfer to the account named in the remittance advice, quoting the reference.',
+    payment: 'Remittances are applied to the oldest unpaid line first.',
+    terms:
+      'Payment is due on the date shown above, without deduction. Interest at the statutory rate runs from the day after that date on any part left unpaid, and the recovery costs allowed by law are added to it. Goods remain the property of the issuer until the invoice is settled in full. Any dispute about a line of this statement is to be raised in writing within thirty days of its issue, quoting the reference at the head of every sheet; a line not disputed within that period is taken as accepted.',
+  },
 };
 
 /** One row, none reduced, the short wording: the same model, different results. */
@@ -454,7 +536,13 @@ export const ONE_ROW: EvaluationScope = {
     reductionRate: 3,
     rows: [{ sku: 'Z-9', units: 3, rate: 7.77, reduction: 0 }],
   },
-  issuer: { notice: 'Settlement in full is expected on the due date.' },
+  issuer: {
+    notice: 'Settlement in full is expected on the due date.',
+    settlement: 'By transfer to the account named in the remittance advice, quoting the reference.',
+    payment: 'Remittances are applied to the oldest unpaid line first.',
+    terms:
+      'Payment is due on the date shown above, without deduction. Interest at the statutory rate runs from the day after that date on any part left unpaid, and the recovery costs allowed by law are added to it. Goods remain the property of the issuer until the invoice is settled in full. Any dispute about a line of this statement is to be raised in writing within thirty days of its issue, quoting the reference at the head of every sheet; a line not disputed within that period is taken as accepted.',
+  },
 };
 
 export const APPEARANCES = [FRAMED, BARE] as const;
@@ -501,5 +589,11 @@ export const SIXTY_ROWS: EvaluationScope = {
     reductionRate: 7.5,
     rows: sixtyRows(),
   },
-  issuer: { notice: 'Retention of five per cent is released on practical completion.' },
+  issuer: {
+    notice: 'Retention of five per cent is released on practical completion.',
+    settlement: 'By transfer to the account named in the remittance advice, quoting the reference.',
+    payment: 'Remittances are applied to the oldest unpaid line first.',
+    terms:
+      'Payment is due on the date shown above, without deduction. Interest at the statutory rate runs from the day after that date on any part left unpaid, and the recovery costs allowed by law are added to it. Goods remain the property of the issuer until the invoice is settled in full. Any dispute about a line of this statement is to be raised in writing within thirty days of its issue, quoting the reference at the head of every sheet; a line not disputed within that period is taken as accepted.',
+  },
 };

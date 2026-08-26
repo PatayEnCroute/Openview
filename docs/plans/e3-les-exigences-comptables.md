@@ -4,9 +4,12 @@
 > représentations internes, les sondes, les tests et l'ordre d'exécution du lot. Une fois E3 livré,
 > l'ADR d'exécution prendra le relais et ce plan sera marqué périmé.
 >
-> **Statut : prêt à exécuter.** Les choix nécessaires à `INC-0` sont fermés. Les mesures Chromium
-> restent des critères de sortie des incréments concernés, pas des hypothèses présentées comme des
-> faits.
+> **Statut : ⚠️ PÉRIMÉ.** Le lot est livré, et c'est
+> l'[ADR 0014](../adr/0014-les-exigences-comptables.md) qui fait foi. Elle **corrige ce plan sur
+> sept points** — la borne de vingt-cinq caractères y est exacte et non généreuse, le refus d'un
+> marqueur inconnu change de code, une contribution dans une bande est refusée, la recette sort sur
+> quatre feuilles et non trois, et l'ordre des incréments a changé. Ce document reste ici comme
+> archive de ce qui était décidé avant l'exécution ; il ne doit plus être lu comme une consigne.
 >
 > **Baseline relevée le 2026-08-22 :** `HEAD=e216de4`, branche
 > `feat/e2-le-tableau-deborde-proprement`, worktree propre, schéma stocké en version **8**. E2 est

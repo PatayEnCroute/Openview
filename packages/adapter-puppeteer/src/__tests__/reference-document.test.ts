@@ -1,4 +1,9 @@
-import { collectTemplateDataPaths, type EvaluationScope, type Template } from '@openview/core';
+import {
+  collectTemplateDataPaths,
+  type EvaluationScope,
+  roundDecimal,
+  type Template,
+} from '@openview/core';
 import { createPdfRenderPort, DocumentRenderError, type PdfSourceDocument } from '@openview/engine';
 import { describe, expect, it } from 'vitest';
 import {
@@ -249,9 +254,15 @@ describe('the same document, mutated to fail', () => {
   });
 
   it('refuses a bound object rather than serialising it', async () => {
+    /* The other keys of the issuer are kept: replacing the whole of it would make the run stop on
+       the first ABSENT value instead of on the object this case is about. */
+    const issuer = THREE_ROWS.issuer;
+    if (typeof issuer !== 'object' || issuer === null || Array.isArray(issuer)) {
+      throw new Error('the fixture should carry an issuer object');
+    }
     const refused = await refusalFrom({
       ...THREE_ROWS,
-      issuer: { notice: { text: 'nested' } },
+      issuer: { ...issuer, notice: { text: 'nested' } },
     });
     expect(refused.code).toBe('non-printable-binding-value');
     expect(refused.details.actualType).toBe('object');
@@ -356,14 +367,27 @@ describe('the paginated recette: sixty lines on the same model', () => {
     'numbers the sheets one to four and shows the same count on all of them',
     async () => {
       const { html } = (await renderSixty(FRAMED)).printed;
-      const shown = sheets(html).map((sheet) =>
-        [...sheet.matchAll(/class="ov-marker"[^>]*>(\d+)</g)].map((match) => match[1]),
-      );
-      expect(shown).toStrictEqual([
+      /* Read by REGION, not by rank: a sheet holds a report marker in its top band and the two
+         counters in its bottom one, and the top band comes first in the markup. Matching digits
+         only would have hidden that, and would have passed or failed on whether the report of the
+         day happened to round to a whole number. */
+      const markersIn = (sheet: string, region: 'header' | 'footer'): readonly string[] => {
+        const band = sheet.split(`data-openview-region="${region}"`)[1] ?? '';
+        const slot = band.slice(0, band.indexOf('data-openview-region='));
+        return [...slot.matchAll(/class="ov-marker"[^>]*>([^<]*)</g)].map(
+          (match) => match[1] ?? '',
+        );
+      };
+
+      expect(sheets(html).map((sheet) => markersIn(sheet, 'footer'))).toStrictEqual([
         ['1', '4'],
         ['2', '4'],
         ['3', '4'],
         ['4', '4'],
+      ]);
+      /* One report box on every sheet but the first, whose band domain excludes it. */
+      expect(sheets(html).map((sheet) => markersIn(sheet, 'header').length)).toStrictEqual([
+        0, 1, 1, 1,
       ]);
       /* Nothing of the measuring pass survives: no placeholder digit and no unresolved marker. */
       expect(html).not.toContain('pageField');
@@ -383,7 +407,8 @@ describe('the paginated recette: sixty lines on the same model', () => {
       );
       expect(running).toStrictEqual([1, 1, 1, 0]);
       expect(final).toStrictEqual([0, 0, 0, 1]);
-      /* `every` on the header side means all four. */
+      /* `firstOnly` plus `exceptFirst` covers every sheet exactly once, so the banner appears
+         four times even though no single domain names all four. */
       expect(count(html, 'data-openview-node="stripe"')).toBe(4);
     },
     CHROMIUM_TIMEOUT_MS,
@@ -411,6 +436,97 @@ describe('the paginated recette: sixty lines on the same model', () => {
       /* Digits and natural heights for the one-page hypothesis, the same two again once the run of
          pages widened the band domains, then the composed sequence. Sixty rows do not add a sixth. */
       expect(measured).toHaveLength(5);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  /** The text of one declaration on one sheet, in order of appearance. */
+  const written = (sheet: string, nodeId: string): readonly string[] =>
+    sheet
+      .split(`data-openview-node="${nodeId}"`)
+      .slice(1)
+      .map((piece) =>
+        [...piece.slice(0, piece.indexOf('</div>')).matchAll(/>([^<]*)</g)]
+          .map((match) => match[1] ?? '')
+          .join('')
+          .trim(),
+      );
+
+  it(
+    'carries forward exactly the amounts of the rows that ended on the sheets before',
+    async () => {
+      // The oracle is DERIVED from the printed sheets: the amounts each sheet shows are summed and
+      // rounded the way the model declared, and compared with what the next sheet brought forward.
+      // Nothing here is a number copied out of the engine.
+      const { html } = (await renderSixty(FRAMED)).printed;
+      const perSheet = sheets(html).map((sheet) => ({
+        amounts: written(sheet, 'd-amount').map(Number),
+        carried: written(sheet, 'stripe-carried'),
+      }));
+
+      expect(perSheet[0]?.carried).toStrictEqual([]);
+      let running = 0;
+      for (const [index, sheet] of perSheet.entries()) {
+        if (index > 0) {
+          expect(sheet.carried).toStrictEqual([
+            `Brought forward ${String(roundDecimal(running, 2, 'halfExpand'))}`,
+          ]);
+        }
+        for (const amount of sheet.amounts) {
+          expect(Number.isFinite(amount)).toBe(true);
+          running += amount;
+        }
+      }
+
+      /* And the last carried figure plus the last sheet's rows is the total the model computed. */
+      expect(written(html, 'f-amount')).toStrictEqual([String(running)]);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'shows the notice and the payment details on the last sheet only',
+    async () => {
+      const { html } = (await renderSixty(FRAMED)).printed;
+      const counted = (nodeId: string) =>
+        sheets(html).map((sheet) => count(sheet, `data-openview-node="${nodeId}"`));
+      expect(counted('final-foot-notice')).toStrictEqual([0, 0, 0, 1]);
+      expect(counted('final-foot-payment')).toStrictEqual([0, 0, 0, 1]);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'never cuts the settlement frame, and never repeats it',
+    async () => {
+      // The block asks to stay whole and fits on a fresh page, so it is on exactly one sheet -- and
+      // being one box on one sheet is what keeps its frame closed.
+      const { html } = (await renderSixty(FRAMED)).printed;
+      const perSheet = sheets(html).map((sheet) => count(sheet, 'data-openview-node="settlement"'));
+      expect(perSheet.filter((seen) => seen > 0)).toStrictEqual([1]);
+      expect(count(html, 'data-openview-node="settlement-body"')).toBe(1);
+      expect(count(html, 'data-openview-node="totals"')).toBe(1);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'prints the long terms whole, losing nothing at whatever seam they fall on',
+    async () => {
+      // What this proves is RESTORATION, not the two-line preference: html carries runs and not
+      // visual lines, so the count on each side of a seam is not observable from here. That count
+      // is proven where lines exist, in `engine`'s widow matrix on the measured grid.
+      const { html } = (await renderSixty(FRAMED)).printed;
+      const pieces = sheets(html).flatMap((sheet) => written(sheet, 'terms'));
+      expect(pieces.length).toBeGreaterThan(0);
+      for (const piece of pieces) {
+        expect(piece.length).toBeGreaterThan(0);
+      }
+      /* Concatenated, the fragments are the notice the data supplied -- start, end and everything
+         between, with nothing repeated at a seam. */
+      const restored = pieces.join('');
+      expect(restored.startsWith('Payment is due on the date shown above')).toBe(true);
+      expect(restored.endsWith('is taken as accepted.')).toBe(true);
     },
     CHROMIUM_TIMEOUT_MS,
   );

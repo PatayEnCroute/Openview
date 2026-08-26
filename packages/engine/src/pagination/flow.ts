@@ -1,6 +1,7 @@
 import { kindOf } from '@openview/core';
 import type { MaterialBlock } from '../document/types.js';
 import { refusal } from '../errors.js';
+import { decideKeepTogether } from './keep-together.js';
 import { placeTable } from './table.js';
 import { sliceText } from './text.js';
 import type {
@@ -80,6 +81,20 @@ function placeBlock(
   fresh: number,
   metrics: Metrics,
 ): BlockPlacement | undefined {
+  /* Only at the first cursor of the occurrence: once a fragment of it exists, the mark has already
+     fallen back and re-deciding on every page would defer the same block for ever. The recursion
+     below still reads the mark of every descendant, so a parent that fell back does not silence
+     the children that can still be honoured. */
+  if (block.keepTogether && inner === undefined) {
+    const whole = metrics.height(block.key);
+    const decision = decideKeepTogether(whole, available, fresh);
+    if (decision === 'whole') {
+      return { fragment: wholeFragment(block), height: whole, remaining: undefined };
+    }
+    if (decision === 'defer') {
+      return undefined;
+    }
+  }
   switch (block.kind) {
     case 'text': {
       const placed = sliceText(block, textLineOf(inner), available, fresh, metrics);

@@ -188,10 +188,12 @@ describe('the longest run of lines that fits', () => {
     }
     const metrics = gridMetrics(padded);
     const padding = 2 * GRID.pxPerMm;
-    const one = sliceText(block, 0, padding + 10, 100, metrics);
-    expect(one?.height).toBeCloseTo(padding + 10, 6);
-    const rest = sliceText(block, 1, padding + 10, 100, metrics);
-    expect(rest?.height).toBeCloseTo(padding + 10, 6);
+    /* Two lines on each side: a four-line block cut one-and-three would leave an orphan, and the
+       preference would move the whole block rather than charge the padding twice for one line. */
+    const one = sliceText(block, 0, padding + 20, 100, metrics);
+    expect(one?.height).toBeCloseTo(padding + 20, 6);
+    const rest = sliceText(block, 2, padding + 20, 100, metrics);
+    expect(rest?.height).toBeCloseTo(padding + 20, 6);
   });
 });
 

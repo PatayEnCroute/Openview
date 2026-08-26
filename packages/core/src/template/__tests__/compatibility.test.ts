@@ -77,6 +77,15 @@ function tokensOf(document: Record<string, unknown>): ReadonlySet<string> {
   return found;
 }
 
+/** The witness of one stored version, by version rather than by position in the corpus. */
+function witnessAt(version: number): Record<string, unknown> {
+  const fixture = HISTORICAL_FIXTURES.find((candidate) => candidate.version === version);
+  if (fixture === undefined) {
+    throw new Error(`the corpus should carry a witness at version ${version}`);
+  }
+  return fixture.document;
+}
+
 describe('the official upgrade chain', () => {
   it('is continuous, ordered and complete from the initial version to the current one', () => {
     // The single owner of the whole chain. Its expectation is DERIVED from the two bounds rather
@@ -234,17 +243,29 @@ describe('the historical corpus, version by version', () => {
     // The version 8 witness carries two siblings and marks only one. The check is on the OWN
     // PROPERTY: a step writing `keepTogether: undefined` onto every node would survive a JSON
     // comparison while the key travelled into an `onSave` and cost one value of the node budget.
-    const version8 = HISTORICAL_FIXTURES.at(-1);
-    if (version8 === undefined) {
-      throw new Error('the corpus should carry a witness at the current version');
-    }
-
-    const root = parseTemplate(version8.document).root;
+    const root = parseTemplate(witnessAt(8)).root;
     const [marked, unmarked] = root.children;
 
     expect(Object.hasOwn(root, 'keepTogether')).toBe(false);
     expect(marked?.keepTogether).toBe(true);
     expect(unmarked === undefined || Object.hasOwn(unmarked, 'keepTogether')).toBe(false);
+  });
+
+  it('carries a row contribution through the chain and invents none for the header row', () => {
+    // The same own-property check on the accounting field, and on the row that must NOT have one:
+    // a chain writing `pageReport: undefined` onto every row would pass a JSON comparison while
+    // teaching an integrator that a header row may declare one.
+    const table = parseTemplate(witnessAt(9)).root.children[0];
+    if (table?.type !== 'table') {
+      throw new Error('the version 9 witness should carry a table');
+    }
+    const group = table.body[0];
+    if (group?.type !== 'tableRowGroup') {
+      throw new Error('the version 9 witness should repeat its detail row');
+    }
+
+    expect(group.rows[0]?.pageReport?.value).toStrictEqual({ kind: 'path', path: 'entry.amount' });
+    expect(Object.hasOwn(table.header[0] ?? {}, 'pageReport')).toBe(false);
   });
 });
 
