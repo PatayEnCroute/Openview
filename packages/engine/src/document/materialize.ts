@@ -32,6 +32,12 @@ import {
   visitSegment,
 } from '@openview/core';
 import { type DocumentArea, type DocumentRegion, refusal, refusalOf } from '../errors.js';
+import {
+  createPresentationSession,
+  type PresentationSelection,
+  type PresentationSession,
+  writeValue,
+} from './presentation.js';
 import { printableText } from './printable.js';
 import type {
   MaterialBlock,
@@ -103,6 +109,8 @@ export interface MaterializeContext {
   readonly scope: EvaluationScope;
   readonly budget: EvaluationBudget;
   readonly keys: KeySource;
+  /** The writings of this render, resolved on first use and shared by every site that asks. */
+  readonly presentations: PresentationSession;
   readonly region: DocumentArea;
   /** Alignment of the enclosing table column, which a block alignment overrides. */
   readonly column: TableColumnAlignment | undefined;
@@ -148,24 +156,37 @@ function runOf(
   const complete = (run: Typography | undefined): ResolvedTypography =>
     resolveRunTypography(run, block.typography);
   const at = [...context.path, 'content', index];
+  const details = { nodeId: block.id, path: at, region: context.region };
   return visitSegment<MaterialRun>(segment, {
     literal: (literal) => ({
       kind: 'text',
       text: literal.text,
       typography: complete(literal.typography),
     }),
-    binding: (binding) => ({
-      kind: 'text',
-      text: printableText(
-        within(block.id, { ...context, path: at }, () =>
-          evaluateExpression(binding.value, context.scope, { budget: context.budget }),
-        ),
-        { nodeId: block.id, path: at, region: context.region },
-      ),
-      typography: complete(binding.typography),
-    }),
+    /* Evaluated, then guarded, then written: the writing a site declares decides which formatter
+       runs, and a site declaring none keeps the canonical form to the character. */
+    binding: (binding) => {
+      const value = within(block.id, { ...context, path: at }, () =>
+        evaluateExpression(binding.value, context.scope, { budget: context.budget }),
+      );
+      const format = binding.format;
+      return {
+        kind: 'text',
+        text:
+          format === undefined
+            ? printableText(value, details)
+            : writeValue(
+                format,
+                context.presentations.resolve(format, details).presentation,
+                value,
+                details,
+              ),
+        typography: complete(binding.typography),
+      };
+    },
     /* No digits here: which page holds this run, and which rows ended before it, are decided by
-       the cuts. The marker travels as itself and page composition writes its value. */
+       the cuts. The marker travels as itself, carrying the writing it resolved, and page
+       composition writes its value. */
     pageField: (field) =>
       field.field === 'report'
         ? {
@@ -173,11 +194,23 @@ function runOf(
             field: 'report',
             decimals: field.decimals,
             mode: field.mode,
+            ...(field.format === undefined
+              ? {}
+              : {
+                  writing: context.presentations.resolveReport(
+                    field.format,
+                    field.decimals,
+                    details,
+                  ),
+                }),
             typography: complete(field.typography),
           }
         : {
             kind: 'pageField',
             field: field.field,
+            ...(field.format === undefined
+              ? {}
+              : { writing: context.presentations.resolveCounter(field.format, details) }),
             typography: complete(field.typography),
           },
   });
@@ -614,6 +647,13 @@ export interface MaterializedDocument {
   readonly document: MaterialDocument;
   readonly budget: EvaluationBudget;
   readonly keys: KeySource;
+  /**
+   * The writings this render resolved, carried so a later pass reuses them.
+   *
+   * Its lifetime is the render's: a profile met in the flow and again in a band bound later is
+   * resolved once, and no resolution survives the call that created it.
+   */
+  readonly presentations: PresentationSession;
   /** The domains whose bands are already bound, so a second pass binds only the new ones. */
   readonly bound: ReadonlySet<PageBandOccurrence>;
 }
@@ -622,16 +662,19 @@ export interface MaterializedDocument {
  * Evaluates template bindings with host data into a materialized document without pending expressions.
  *
  * @param reachable The band domains that can appear across pages.
+ * @param selection Which declared writing each profile the template names stands for.
  */
 export function materializeDocument(
   template: Template,
   data: EvaluationScope,
   reachable: ReadonlySet<PageBandOccurrence>,
   evaluationLimits?: Partial<EvaluationLimits>,
+  selection?: PresentationSelection | undefined,
 ): MaterializedDocument {
   const budget = createBudget(evaluationLimits);
   const keys = createKeySource();
-  const shared = { scope: data, budget, keys, column: undefined, path: [] };
+  const presentations = createPresentationSession(template.presentations, selection);
+  const shared = { scope: data, budget, keys, presentations, column: undefined, path: [] };
   /* Evaluation follows paint order and never varies per page: background layers, top bands, flow,
      bottom bands, foreground layers. The order stays observable when a budget stops it. */
   const backgroundLayers = materializeLayers(template.page.layers, 'background', {
@@ -658,6 +701,7 @@ export function materializeDocument(
   return {
     budget,
     keys,
+    presentations,
     bound: new Set(reachable),
     document: {
       sheet: template.page.sheet,
@@ -689,6 +733,9 @@ export function extendBands(
     scope: data,
     budget: previous.budget,
     keys: previous.keys,
+    /* The SAME session, never a fresh one: a writing already resolved for the flow is reused by a
+       band bound here, so one render resolves one writing key exactly once. */
+    presentations: previous.presentations,
     column: undefined,
     path: [],
   };
@@ -703,6 +750,7 @@ export function extendBands(
   return {
     budget: previous.budget,
     keys: previous.keys,
+    presentations: previous.presentations,
     bound: new Set([...previous.bound, ...added]),
     document: {
       ...previous.document,

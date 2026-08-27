@@ -1,5 +1,6 @@
 import type { EvaluationLimits, ShapeLimits, Sheet } from '@openview/core';
 import type { DocumentImage } from '../document/images.js';
+import type { PresentationSelection } from '../document/presentation.js';
 import type { DocumentRegion } from '../errors.js';
 
 /**
@@ -140,4 +141,12 @@ export interface PdfRenderStrategy {
 export interface RenderEngineOptions {
   readonly shapeLimits?: Partial<ShapeLimits> | undefined;
   readonly evaluationLimits?: Partial<EvaluationLimits> | undefined;
+  /**
+   * Which declared writing each profile the template names stands for, for this port.
+   *
+   * A construction argument, not a third field of a render request: the same stored template is
+   * rendered in another language by opening a second port, and no key of the caller's data set is
+   * ever read to find it. Read with `Object.hasOwn`, so an inherited name selects nothing.
+   */
+  readonly presentationSelection?: PresentationSelection | undefined;
 }

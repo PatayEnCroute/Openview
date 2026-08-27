@@ -96,10 +96,10 @@ export function multiPageOf(
   return materializeDocument(templateOf(overrides), data, reachableOccurrences(2)).document;
 }
 
-/** A marker reserve that answers the same width for every typography. */
+/** A marker reserve that answers the same width, and the same placeholder, for every shape. */
 export const constantMarkers = (digits = 1, width = 8): MarkerReserve => ({
-  digits,
   widthOf: () => width * digits,
+  placeholderOf: () => '0'.repeat(digits),
 });
 
 /** Cuts a document on squared paper, with no session and no browser. */

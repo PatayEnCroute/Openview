@@ -3,6 +3,8 @@ import {
   type ExpressionValueType,
   type OpenviewDiagnostic,
   OpenviewError,
+  type PresentationFormatKind,
+  type PresentationRefusal,
 } from '@openview/core';
 
 /**
@@ -17,6 +19,8 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
   'expression-refused',
   'missing-binding-value',
   'non-printable-binding-value',
+  'presentation-refused',
+  'unformattable-binding-value',
   'unsupported-image-source',
   'image-load-failed',
   'oversized-atomic-resource',
@@ -57,6 +61,15 @@ export interface DocumentRenderErrorDetails {
   readonly path?: readonly (string | number)[] | undefined;
   /** Closed category of an unusable value, from the core value-type vocabulary. */
   readonly actualType?: ExpressionValueType | undefined;
+  /**
+   * Which writing function the offending site asked for.
+   *
+   * A closed literal, so it names the intention without naming the profile the model chose, the
+   * writing the caller selected or the value that failed to be written.
+   */
+  readonly formatKind?: PresentationFormatKind | undefined;
+  /** The cause the presentation resolver named, when the refusal came from it rather than here. */
+  readonly presentationRefusal?: PresentationRefusal | undefined;
   /** Which area of the page was being built. */
   readonly region?: DocumentArea | undefined;
   /** A declared bound the render exceeded, in the unit of that bound. */

@@ -10,6 +10,7 @@ import type {
   TableColumn,
   TextAlignment,
 } from '@openview/core';
+import type { MarkerWriting } from './presentation.js';
 
 /**
  * A typography with no absent property left. Every run of the document carries one, resolved from
@@ -39,6 +40,8 @@ export interface MaterialTextRun {
 export interface MaterialPageCountRun {
   readonly kind: 'pageField';
   readonly field: 'number' | 'count';
+  /** The writing this counter resolved, when its site declared one. */
+  readonly writing?: MarkerWriting | undefined;
   readonly typography: ResolvedTypography;
 }
 
@@ -53,6 +56,13 @@ export interface MaterialPageReportRun {
   readonly field: 'report';
   readonly decimals: number;
   readonly mode: RoundMode;
+  /**
+   * The writing this report resolved, when its site declared one.
+   *
+   * Resolved rather than named: the reserve has to tell two currencies apart before any cut is
+   * chosen, and nothing past materialisation may reach the caller's selection again.
+   */
+  readonly writing?: MarkerWriting | undefined;
   readonly typography: ResolvedTypography;
 }
 

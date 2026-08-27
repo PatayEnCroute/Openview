@@ -14,16 +14,17 @@ import {
   materializeDocument,
 } from '../document/materialize.js';
 import { DocumentRenderError } from '../errors.js';
-import { buildGlyphProbe, buildPagedTree, buildProbeTree, glyphKey } from '../html/build-page.js';
+import { buildMarkerProbe, buildPagedTree, buildProbeTree, sampleKey } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
 import {
-  CANONICAL_NUMBER_ALPHABET,
-  type GlyphWidths,
+  type MarkerBounds,
   markerReserve,
   markerSignatures,
+  NO_MARKERS,
 } from '../pagination/markers.js';
 import { paginate } from '../pagination/paginate.js';
-import { digitsOf, progressionBound } from '../pagination/progress.js';
+import { progressionBound } from '../pagination/progress.js';
+import { reportMagnitudeBound } from '../pagination/reports.js';
 import type { MarkerReserve, Metrics, PaginatedDocument } from '../pagination/types.js';
 import { validateMeasurement } from '../pagination/validate-measurement.js';
 import { verifyLayout } from '../pagination/verify.js';
@@ -64,20 +65,26 @@ async function measured<TResult>(run: () => Promise<TResult>): Promise<TResult> 
   }
 }
 
-/** How many of the canonical alphabet's leading characters are the ten decimal digits. */
-const DECIMAL_DIGITS = 10;
-
-/** Measures the widest glyph of every typography a page marker of this document uses. */
+/**
+ * Measures every shape a page marker of this document is painted in, and reserves its width.
+ *
+ * Both bounds come from the materialised document, so the reserve is decided BEFORE any cut and
+ * does not move when the pages are recomposed: the highest rank the flow can reach, and the
+ * saturated magnitude of the contributions the rows declared.
+ */
 async function reserveMarkers(
   session: PdfRenderSession,
   bound: MaterializedDocument,
 ): Promise<MarkerReserve> {
-  const signatures = markerSignatures(bound.document);
-  const digits = digitsOf(progressionBound(bound.document));
+  const bounds: MarkerBounds = {
+    pages: progressionBound(bound.document),
+    report: reportMagnitudeBound(bound.document),
+  };
+  const signatures = markerSignatures(bound.document, bounds);
   if (signatures.size === 0) {
-    return markerReserve(digits, new Map());
+    return NO_MARKERS;
   }
-  const probe = buildGlyphProbe(bound.document, signatures);
+  const probe = buildMarkerProbe(bound.document, signatures);
   const measurement = await measured(async () =>
     session.measure({
       html: serializeHtml(probe.tree),
@@ -87,20 +94,15 @@ async function reserveMarkers(
   );
   validateMeasurement(measurement, probe.keys, bound.document.sheet);
   const widths = new Map(measurement.boxes.map((box) => [box.key, box.width]));
-  const widest = new Map<string, GlyphWidths>();
-  for (const signature of signatures.keys()) {
-    let digit = 0;
-    let canonical = 0;
-    for (let at = 0; at < CANONICAL_NUMBER_ALPHABET.length; at += 1) {
-      const width = widths.get(glyphKey(signature, at)) ?? 0;
-      canonical = Math.max(canonical, width);
-      if (at < DECIMAL_DIGITS) {
-        digit = Math.max(digit, width);
-      }
+  const widest = new Map<string, number>();
+  for (const [signature, shape] of signatures) {
+    let found = 0;
+    for (const [at] of shape.samples.entries()) {
+      found = Math.max(found, widths.get(sampleKey(signature, at)) ?? 0);
     }
-    widest.set(signature, { digit, canonical });
+    widest.set(signature, found);
   }
-  return markerReserve(digits, widest);
+  return markerReserve(signatures, widest);
 }
 
 /** Lays the whole document out at its real width with no height constraint, and reads its boxes. */
@@ -226,6 +228,7 @@ export function createPdfRenderPort(
         request.data,
         ONE_PAGE_DOMAINS,
         options?.evaluationLimits,
+        options?.presentationSelection,
       );
       const session = await openSession(strategy, bound);
       let bytes: Uint8Array;

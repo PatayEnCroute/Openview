@@ -1,4 +1,9 @@
-import type { MaterialPageReport } from '../document/types.js';
+import type {
+  MaterialBlock,
+  MaterialDocument,
+  MaterialPageReport,
+  MaterialRow,
+} from '../document/types.js';
 import { refusal } from '../errors.js';
 import type { CellFragment, MaterialFragment, TableFragment } from './types.js';
 import { wholeFragment } from './whole.js';
@@ -74,6 +79,55 @@ function totalOf(carried: readonly MaterialPageReport[], pageNumber: number): nu
     throw refusal(NOT_FINITE, 'page-report-refused', { pageNumber });
   }
   return total;
+}
+
+/**
+ * The largest absolute value any incoming page report of this document can reach.
+ *
+ * The saturated sum of the ABSOLUTE contributions. Every page carries forward some subset of the
+ * contributions that finished before it, and the absolute value of any such subset sum is bounded
+ * by this one whatever cancels out inside it -- which is what lets a marker reserve its width once,
+ * before the cuts that decide the subsets exist.
+ *
+ * Saturating at `Number.MAX_VALUE` stays safe: the bound only grows, so a document whose amounts
+ * overflow asks for an absurd reserve and is refused, never quietly cropped.
+ */
+export function reportMagnitudeBound(document: MaterialDocument): number {
+  let total = 0;
+
+  const rows = (list: readonly MaterialRow[]): void => {
+    for (const row of list) {
+      if (row.pageReport !== undefined) {
+        total += Math.abs(row.pageReport.value);
+      }
+      for (const cell of row.cells) {
+        blocks(cell.children);
+      }
+    }
+  };
+
+  function blocks(list: readonly MaterialBlock[]): void {
+    for (const block of list) {
+      if (block.kind === 'container') {
+        blocks(block.children);
+      }
+      if (block.kind === 'table') {
+        rows(block.header);
+        rows(block.body);
+        rows(block.footer);
+      }
+      if (block.kind === 'grid') {
+        for (const item of block.items) {
+          blocks([item.content]);
+        }
+      }
+    }
+  }
+
+  /* The flow alone: a contribution declared inside a band or a layer is refused at binding, since
+     the occurrence it would be counted on does not exist. */
+  blocks(document.root);
+  return Number.isFinite(total) ? total : Number.MAX_VALUE;
 }
 
 /** One page's fragments, with the raw total the pages before it carry into them. */

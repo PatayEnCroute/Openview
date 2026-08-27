@@ -13,6 +13,7 @@ import {
   materializeDocument,
   materializeNode,
 } from '../document/materialize.js';
+import { createPresentationSession } from '../document/presentation.js';
 import { printableText } from '../document/printable.js';
 import type { MaterialBlock, MaterialTable, MaterialText } from '../document/types.js';
 import { DEFAULT_TYPOGRAPHY, resolveRunTypography } from '../document/typography.js';
@@ -731,6 +732,7 @@ describe('exhaustive traversal', () => {
     scope: {},
     budget: createBudget(),
     keys: createKeySource(),
+    presentations: createPresentationSession(undefined, undefined),
     region: 'root' as const,
     column: undefined,
     path: [] as readonly (string | number)[],

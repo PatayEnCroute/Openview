@@ -140,8 +140,14 @@ export interface MaterialPage {
 
 /** The reserved width of one page marker, in css pixels, for the exact run being painted. */
 export interface MarkerReserve {
-  readonly digits: number;
   widthOf(run: MaterialPageFieldRun): number;
+  /**
+   * What a probe shows in a marker whose value the cuts have not decided yet.
+   *
+   * One of the strings the reserve was measured from, so it fits the box by construction: a probe
+   * that overflowed its own marker would measure a line the print never has.
+   */
+  placeholderOf(run: MaterialPageFieldRun): string;
 }
 
 export interface PaginatedDocument {

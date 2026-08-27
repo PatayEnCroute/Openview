@@ -18,7 +18,10 @@ import { serializeHtml } from '../html/serialize.js';
 import {
   CANONICAL_NUMBER_ALPHABET,
   CANONICAL_NUMBER_MAX_CHARS,
+  type MarkerBounds,
+  type MarkerSignature,
   markerReserve,
+  markerSignature,
   markerSignatures,
 } from '../pagination/markers.js';
 import {
@@ -56,6 +59,13 @@ const PAGINATION = [
 ];
 
 const marked = (id: string): Record<string, unknown> => ({ type: 'text', id, content: PAGINATION });
+
+/** A text block carrying a page report marker, with the rounding the model declares for it. */
+const reported = (id: string): Record<string, unknown> => ({
+  type: 'text',
+  id,
+  content: [{ kind: 'pageField', field: 'report', decimals: 2, mode: 'halfExpand' }],
+});
 
 describe('which band a page of each role carries', () => {
   const TABLE: readonly (readonly [PageRole, readonly PageBandOccurrence[]])[] = [
@@ -278,8 +288,35 @@ const PROBE_TYPOGRAPHY: ResolvedTypography = {
   color: '#000000',
 };
 
-/** The signature `typographySignature` writes for {@link PROBE_TYPOGRAPHY}. */
-const PROBE_SIGNATURE = 'sans-serif 10 n n';
+/** Bounds a counter of three digits and no contribution at all: the canonical case. */
+const PROBE_BOUNDS: MarkerBounds = { pages: 100, report: 0 };
+
+/** The shape map the reserve reads, filed under the key the run really answers to. */
+function shapeOf(
+  run: MaterialPageFieldRun,
+  shape: Partial<MarkerSignature>,
+): {
+  readonly signatures: ReadonlyMap<string, MarkerSignature>;
+  readonly key: string;
+} {
+  const key = markerSignature(run);
+  return {
+    key,
+    signatures: new Map([
+      [
+        key,
+        {
+          typography: run.typography,
+          css: '',
+          samples: ['0'],
+          repeat: 1,
+          placeholder: '0',
+          ...shape,
+        },
+      ],
+    ]),
+  };
+}
 
 const counterRun = (): MaterialPageFieldRun => ({
   kind: 'pageField',
@@ -381,7 +418,7 @@ describe('the page markers', () => {
   });
 
   it('collects one signature per typography a marker uses, and no other', () => {
-    const signatures = markerSignatures(document());
+    const signatures = markerSignatures(document(), PROBE_BOUNDS);
     expect(signatures.size).toBe(1);
     const [signature] = [...signatures.values()];
     expect(signature?.css).toContain('font-family:sans-serif');
@@ -434,30 +471,39 @@ describe('the page markers', () => {
       },
       {},
     );
-    const signatures = [...markerSignatures(nested).keys()].sort();
+    const signatures = [...markerSignatures(nested, PROBE_BOUNDS).keys()].sort();
     /* Plain, bold and italic: three typographies, and nothing from the image or the plain text. */
     expect(signatures).toHaveLength(3);
-    expect(signatures.some((entry) => entry.endsWith('b n'))).toBe(true);
-    expect(signatures.some((entry) => entry.endsWith('n i'))).toBe(true);
+    expect(signatures.some((entry) => entry.includes('b n'))).toBe(true);
+    expect(signatures.some((entry) => entry.includes('n i'))).toBe(true);
   });
 
-  it('refuses a width for a typography the glyph probe never measured', () => {
-    const reserve = markerReserve(2, new Map([['other', { digit: 4, canonical: 5 }]]));
-    expect(() => reserve.widthOf(counterRun())).toThrow(
+  it('refuses a width for a shape the width probe never measured', () => {
+    const stranger = shapeOf(reportRun(), {});
+    expect(() => markerReserve(stranger.signatures, new Map()).widthOf(counterRun())).toThrow(
       expect.objectContaining({ code: 'layout-measurement-failed' }),
     );
   });
 
-  it('multiplies the widest digit by how many digits the bound can reach', () => {
-    const reserve = markerReserve(3, new Map([[PROBE_SIGNATURE, { digit: 5, canonical: 9 }]]));
+  it('multiplies the widest sample by how many of them a value is made of', () => {
+    const counter = shapeOf(counterRun(), { repeat: 3 });
+    const reserve = markerReserve(counter.signatures, new Map([[counter.key, 5]]));
     expect(reserve.widthOf(counterRun())).toBe(15);
   });
 
-  it('gives a report the widest canonical glyph over the whole canonical writing', () => {
+  it('sizes a canonical counter on its digits and a canonical report on the whole writing', () => {
     // A counter draws digits alone; a report may draw a sign, a point or an exponent, and none of
     // those is bounded by a digit. Sizing a report on the digit reserve is what clips it.
-    const reserve = markerReserve(3, new Map([[PROBE_SIGNATURE, { digit: 5, canonical: 9 }]]));
-    expect(reserve.widthOf(reportRun())).toBe(9 * CANONICAL_NUMBER_MAX_CHARS);
+    const both = markerSignatures(
+      multiPageOf({ page: gridPage(6, {}), ...flow([marked('rank'), reported('carried')]) }, {}),
+      PROBE_BOUNDS,
+    );
+    const counter = [...both.values()].find((shape) => shape.repeat !== CANONICAL_NUMBER_MAX_CHARS);
+    const report = [...both.values()].find((shape) => shape.repeat === CANONICAL_NUMBER_MAX_CHARS);
+
+    expect(counter?.samples).toStrictEqual([...'0123456789']);
+    expect(counter?.repeat).toBe(3);
+    expect(report?.samples).toStrictEqual([...CANONICAL_NUMBER_ALPHABET]);
     expect(CANONICAL_NUMBER_ALPHABET).toBe('0123456789-+.e');
   });
 });
