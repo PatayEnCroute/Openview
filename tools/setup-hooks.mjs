@@ -1,22 +1,5 @@
 /**
- * Points git at .githooks. Invoked by the root `prepare` script, so it runs on
- * every `pnpm install` -- in every contributor clone and in CI.
- *
- * Two things it must never do, both learned the hard way:
- *
- * 1. Never touch a repository that is not this one. `git rev-parse --git-dir`
- *    searches ANCESTOR directories, so a vendored or tarball copy of Openview
- *    sitting anywhere under another checkout passed that check and then rewrote
- *    the OUTER repository's `core.hooksPath`, silently disabling every hook that
- *    project had -- pointing them at a `.githooks` directory that does not exist
- *    there -- while never installing Openview's own hook. The toplevel is
- *    compared against this file's own location instead.
- *
- * 2. Never fail the install. A source tarball, a vendored copy or a Docker stage
- *    that copies package files without `.git` has no repository at all, and a
- *    read-only or lock-contended `.git/config` cannot be written. Neither is a
- *    reason to abort `pnpm install` for a hook that is irrelevant in that context,
- *    so every git call is guarded and every failure is a warning.
+ * Configures git core.hooksPath to .githooks safely during workspace prepare.
  */
 import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';

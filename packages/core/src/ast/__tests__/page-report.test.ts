@@ -291,8 +291,12 @@ describe('the public surface the report contract adds', () => {
 describe('the stamp the report contract carries', () => {
   it('stands one past the fragmentation preference', () => {
     // Both classes of change need it: an optional field an older build strips in silence, and a
-    // widened union it refuses on an unknown discriminator with no version named.
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
-    expect(core.TEMPLATE_MIGRATIONS.at(-1)).toMatchObject({ from: 8, to: 9 });
+    // widened union it refuses on an unknown discriminator with no version named. Registered in
+    // the chain rather than pinned as the current version, which later lots keep moving.
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(9);
+    expect(core.TEMPLATE_MIGRATIONS.find((step) => step.from === 8)).toMatchObject({
+      from: 8,
+      to: 9,
+    });
   });
 });

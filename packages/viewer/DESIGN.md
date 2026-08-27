@@ -158,3 +158,19 @@ les redécouvrir plus tard :
    contrepartie dans les métadonnées, lesquelles ne décrivent que le thème clair.
    Une implémentation qui se fierait aux seuls jetons produirait une interface
    sans mode sombre, alors que la charte en promet un.
+
+---
+
+## 5. Attente de composition — lot C11 (grille et calques)
+
+Le contrat porte depuis le lot C11 deux capacités que l''aperçu V1/V3 devra composer
+fidèlement au PDF ([ADR 0016](../../docs/adr/0016-grille-colonnes-et-calques.md)) :
+
+- **`GridNode`** : colonnes égales (`repeat(columns, minmax(0, 1fr))`), lignes au pas déclaré
+  (`repeat(rows, {step}mm)`), zones positionnées 1-based avec spans. Aucun `overflow: hidden`
+  sur une zone : un contenu qui déborde est un refus du moteur, pas un rognage de l''aperçu.
+- **`PageSetup.layers`** : peints pleine feuille, marges comprises, sur chaque page —
+  `background` sous le contenu paginé, `foreground` au-dessus, dans l''ordre du tableau
+  (l''ordre DOM suffit, aucun `z-index` du modèle). L''`opacity` s''applique au wrapper du
+  calque entier. Les calques ne consomment aucune place dans le flux : l''aperçu ne doit pas
+  les compter dans la hauteur d''une page.

@@ -20,6 +20,7 @@ import {
   BARE,
   DATASETS,
   FRAMED,
+  layeredReferenceDocument,
   ONE_ROW,
   referenceDocument,
   SIXTY_ROWS,
@@ -542,6 +543,161 @@ describe('the paginated recette: sixty lines on the same model', () => {
       for (const row of rows) {
         expect(row).toContain(' - ');
       }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
+describe('the C11 recette: a gridded heading and three page layers on the same model', () => {
+  const layered = new Map<string, Promise<CapturedRender>>();
+
+  const renderLayered = (withLayers: boolean): Promise<CapturedRender> => {
+    const at = withLayers ? 'layered' : 'grid-only';
+    const found = layered.get(at);
+    if (found !== undefined) {
+      return found;
+    }
+    const running = renderCapturing(layeredReferenceDocument(FRAMED, withLayers), SIXTY_ROWS);
+    layered.set(at, running);
+    return running;
+  };
+
+  const count = (html: string, needle: string): number => html.split(needle).length - 1;
+  const sheets = (html: string): readonly string[] => html.split('class="ov-page"').slice(1);
+
+  it('parses and comes out of a JSON round trip identical', () => {
+    const template = layeredReferenceDocument(FRAMED);
+    const snapshot: unknown = JSON.parse(JSON.stringify(template));
+    expect(JSON.parse(JSON.stringify(referenceDocument(FRAMED)))).not.toStrictEqual(snapshot);
+    const grid = template.root.children[0];
+    if (grid?.type !== 'grid') {
+      throw new Error('the recette should open on a heading grid');
+    }
+    expect(grid.columns).toBe(12);
+    expect(template.page.layers?.map((layer) => layer.plane)).toStrictEqual([
+      'background',
+      'background',
+      'foreground',
+    ]);
+  });
+
+  it(
+    'gives the three heading zones their exact shares of one width',
+    async () => {
+      // The oracle of aligned columns: each zone's measured width is its span's share of one grid,
+      // so the vertical edges the shares imply are common ones.
+      const { measured } = await renderLayered(true);
+      const probe = measured.find(
+        (document) =>
+          document.html.includes('data-openview-grid-item') &&
+          document.html.includes('data-openview-key'),
+      );
+      if (probe === undefined) {
+        throw new Error('the pipeline should have measured a keyed probe of the grid');
+      }
+      const keyOf = (nodeId: string): string => {
+        const found = new RegExp(
+          `data-openview-node="${nodeId}"[^>]*data-openview-key="([^"]+)"`,
+        ).exec(probe.html)?.[1];
+        if (found === undefined) {
+          throw new Error(`the probe should key ${nodeId}`);
+        }
+        return found;
+      };
+      const session = await hostStrategy().open({ sheet: probe.sheet, images: probe.images });
+      try {
+        const measurement = await session.measure(probe);
+        const widthOf = (nodeId: string): number =>
+          measurement.boxes.find((box) => box.key === keyOf(nodeId))?.width ?? 0;
+        const mark = widthOf('zone-mark');
+        const title = widthOf('zone-title');
+        const reference = widthOf('zone-reference');
+        expect(mark).toBeGreaterThan(0);
+        expect(Math.abs(mark / 3 - title / 5)).toBeLessThan(1);
+        expect(Math.abs(title / 5 - reference / 4)).toBeLessThan(1);
+      } finally {
+        await session.close();
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'prints four sheets, each carrying the three layers in paint order',
+    async () => {
+      const { bytes, printed } = await renderLayered(true);
+      expect((await inspectPdf(bytes)).pages).toBe(4);
+      const perSheet = sheets(printed.html);
+      expect(perSheet).toHaveLength(4);
+      for (const sheet of perSheet) {
+        const paper = sheet.indexOf('data-openview-node="paper"');
+        const watermark = sheet.indexOf('data-openview-node="watermark"');
+        const printable = sheet.indexOf('class="ov-printable"');
+        const stamp = sheet.indexOf('data-openview-node="stamp"');
+        expect(paper).toBeGreaterThanOrEqual(0);
+        expect(watermark).toBeGreaterThan(paper);
+        expect(printable).toBeGreaterThan(watermark);
+        expect(stamp).toBeGreaterThan(printable);
+        expect(count(sheet, 'DUPLICATA')).toBe(1);
+      }
+      expect(printed.html).toContain('style="opacity:0.12"');
+      expect(printed.html).toContain('style="opacity:0.85"');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'adds and removes the layers without moving one cut, one row or one carried figure',
+    async () => {
+      const withLayers = (await renderLayered(true)).printed.html;
+      const without = (await renderLayered(false)).printed.html;
+      const rowsPerSheet = (html: string): readonly number[] =>
+        sheets(html).map((sheet) => count(sheet, 'data-openview-node="detail"'));
+      const carried = (html: string): readonly string[] =>
+        [...html.matchAll(/Brought forward [^<]*<[^>]*>([^<]*)</g)].map((hit) => hit[1] ?? '');
+      expect(sheets(withLayers).length).toBe(sheets(without).length);
+      expect(rowsPerSheet(withLayers)).toStrictEqual(rowsPerSheet(without));
+      expect(carried(withLayers)).toStrictEqual(carried(without));
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses a zone whose content no longer fits, and prints nothing',
+    async () => {
+      const noisy = {
+        ...SIXTY_ROWS,
+        order: {
+          ...(SIXTY_ROWS.order as Record<string, unknown>),
+          holder: 'a holder whose name is far too long for the zone the model gave it '.repeat(4),
+        },
+      };
+      const inner = hostStrategy();
+      let printedAnything = false;
+      const observing = createPdfRenderPort({
+        format: 'pdf',
+        async open(resources) {
+          const session = await inner.open(resources);
+          return {
+            measure: (source: PdfSourceDocument) => session.measure(source),
+            print: (source: PdfSourceDocument) => {
+              printedAnything = true;
+              return session.print(source);
+            },
+            close: () => session.close(),
+          };
+        },
+      });
+      const caught: unknown = await observing
+        .render({ template: layeredReferenceDocument(FRAMED), data: noisy })
+        .catch((error: unknown) => error);
+      expect(caught).toBeInstanceOf(DocumentRenderError);
+      if (caught instanceof DocumentRenderError) {
+        expect(caught.code).toBe('grid-content-overflow');
+        expect(caught.details.nodeId).toBe('zone-title');
+        expect(caught.message).not.toContain('holder whose name');
+      }
+      expect(printedAnything).toBe(false);
     },
     CHROMIUM_TIMEOUT_MS,
   );

@@ -1,9 +1,9 @@
-import type { MaterialBlock, MaterialDocument } from '../document/types.js';
+import type { MaterialBlock, MaterialDocument, MaterialPageLayer } from '../document/types.js';
 import { CANONICAL_NUMBER_ALPHABET } from '../pagination/markers.js';
 import type { MarkerReserve, MaterialPage, PaginatedDocument } from '../pagination/types.js';
 import { wholeFragment } from '../pagination/whole.js';
 import { buildFragment, characters, element, type PaintContext } from './build.js';
-import { CSS_CLASSES, documentCss, probeCss } from './css.js';
+import { CSS_CLASSES, documentCss, layerCss, probeCss } from './css.js';
 import type { HtmlElement, HtmlNode, HtmlTree } from './types.js';
 
 /**
@@ -33,13 +33,33 @@ function bandSlot(
   );
 }
 
-function buildPage(page: MaterialPage, markers: MarkerReserve): HtmlElement {
+/**
+ * One layer wrapper: absolute over the whole sheet, with the layer's own opacity when one is
+ * declared. Painted per page so a marker inside it writes that page's values, from the single
+ * materialisation the render made.
+ */
+function buildLayer(layer: MaterialPageLayer, context: PaintContext): HtmlElement {
+  const style = layerCss(layer.opacity);
+  return element(
+    'div',
+    style === undefined ? { class: CSS_CLASSES.layer } : { class: CSS_CLASSES.layer, style },
+    [buildFragment(wholeFragment(layer.content), context)],
+  );
+}
+
+function buildPage(
+  page: MaterialPage,
+  markers: MarkerReserve,
+  background: readonly MaterialPageLayer[],
+  foreground: readonly MaterialPageLayer[],
+): HtmlElement {
   const context: PaintContext = {
     markers,
     page: { number: page.number, count: page.count, report: page.incomingReport },
     keyed: false,
   };
   return element('div', { class: CSS_CLASSES.page, 'data-openview-page': String(page.number) }, [
+    ...background.map((layer) => buildLayer(layer, context)),
     element('div', { class: CSS_CLASSES.printable }, [
       bandSlot(page.header, 'header', `${CSS_CLASSES.band} ${CSS_CLASSES.headerSlot}`, context),
       slot(
@@ -49,17 +69,21 @@ function buildPage(page: MaterialPage, markers: MarkerReserve): HtmlElement {
       ),
       bandSlot(page.footer, 'footer', `${CSS_CLASSES.band} ${CSS_CLASSES.footerSlot}`, context),
     ]),
+    ...foreground.map((layer) => buildLayer(layer, context)),
   ]);
 }
 
 /**
- * The printed document: one closed box per page, all at the declared sheet and with the same three
- * slots, and every page marker replaced by the rank of the page that holds it.
+ * The printed document: one closed box per page, all at the declared sheet, each composed as
+ * background layers, then the three printable slots, then foreground layers -- DOM order is the
+ * paint order, so no z-index of the model ever enters the css.
  */
 export function buildPagedTree(paginated: PaginatedDocument): HtmlTree {
   return {
     css: documentCss(paginated),
-    body: paginated.pages.map((page) => buildPage(page, paginated.markers)),
+    body: paginated.pages.map((page) =>
+      buildPage(page, paginated.markers, paginated.backgroundLayers, paginated.foregroundLayers),
+    ),
   };
 }
 
@@ -89,11 +113,7 @@ function keysOf(tree: HtmlTree): ReadonlySet<string> {
 }
 
 /**
- * The measuring probe: the same widths as the printed document, and no height constraint anywhere.
- *
- * Every box carries its occurrence key, so a reply can be filed against the ask and a missing or
- * doubled answer is caught before a height of it decides a cut. Bands are laid out one after the
- * other in their region: only the height of each is read, never where the probe happened to put it.
+ * Builds the unconstrained HTML probe tree for natural layout measurement.
  */
 export function buildProbeTree(document: MaterialDocument, markers: MarkerReserve): ProbeTree {
   const context: PaintContext = { markers, page: undefined, keyed: true };

@@ -9,6 +9,7 @@ import type {
   ConditionNode,
   ContainerNode,
   DocumentNode,
+  GridNode,
   ImageNode,
   LoopNode,
   TableNode,
@@ -31,6 +32,7 @@ export interface NodeVisitor<TResult> {
   readonly loop: (node: LoopNode) => TResult;
   readonly condition: (node: ConditionNode) => TResult;
   readonly table: (node: TableNode) => TResult;
+  readonly grid: (node: GridNode) => TResult;
   readonly tableRowGroup: (node: TableRowGroupNode) => TResult;
   readonly tableRow: (node: TableRowNode) => TResult;
 }
@@ -52,6 +54,8 @@ export function visitNode<TResult>(node: DocumentNode, visitor: NodeVisitor<TRes
       return visitor.condition(node);
     case 'table':
       return visitor.table(node);
+    case 'grid':
+      return visitor.grid(node);
     case 'tableRowGroup':
       return visitor.tableRowGroup(node);
     case 'tableRow':

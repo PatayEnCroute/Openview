@@ -1,9 +1,5 @@
 /**
- * The data catalogue a host application declares, and what a model may read from it.
- *
- * Facade of the subsystem: the contract, its schema, its ordered flattening, and the compatibility
- * of one template with one catalogue. Nothing here reads, parses or requires a dataset.
- *
+ * Data catalogue subsystem facade: contracts, schemas, flattening, and template compatibility.
  * @see docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md
  */
 export type { TemplateDataCompatibility } from './compatibility.js';

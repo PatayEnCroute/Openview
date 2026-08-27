@@ -11,12 +11,13 @@ const describeNode = (node: DocumentNode): string =>
     loop: (n) => `loop:${n.each.kind}`,
     condition: (n) => `condition:${n.when.kind}`,
     table: (n) => `table:${n.columns.length}`,
+    grid: (n) => `grid:${n.columns}x${n.rows}`,
     tableRowGroup: (n) => `tableRowGroup:${n.as}`,
     tableRow: (n) => `tableRow:${n.cells.length}`,
   });
 
 describe('visitNode', () => {
-  it('dispatches each of the eight node types to its own branch', () => {
+  it('dispatches each of the nine node types to its own branch', () => {
     // Keyed by kind rather than walked, so this file needs nothing from the traversal module: a
     // broken `nodeShape` branch must not be able to redden the test of the dispatch itself.
     const described: Readonly<Record<DocumentNodeType, string>> = {
@@ -26,6 +27,7 @@ describe('visitNode', () => {
       loop: describeNode(ONE_NODE_PER_KIND.loop),
       condition: describeNode(ONE_NODE_PER_KIND.condition),
       table: describeNode(ONE_NODE_PER_KIND.table),
+      grid: describeNode(ONE_NODE_PER_KIND.grid),
       tableRowGroup: describeNode(ONE_NODE_PER_KIND.tableRowGroup),
       tableRow: describeNode(ONE_NODE_PER_KIND.tableRow),
     };
@@ -37,6 +39,7 @@ describe('visitNode', () => {
       loop: 'loop:path',
       condition: 'condition:path',
       table: 'table:1',
+      grid: 'grid:2x2',
       tableRowGroup: 'tableRowGroup:poste',
       tableRow: 'tableRow:2',
     });
@@ -57,6 +60,7 @@ describe('visitNode', () => {
         loop: () => 'x',
         condition: () => 'x',
         table: () => 'x',
+        grid: () => 'x',
         tableRowGroup: () => 'x',
         tableRow: () => 'x',
       }),

@@ -1,4 +1,4 @@
-import { kindOf } from '@openview/core';
+﻿import { kindOf } from '@openview/core';
 import type { MaterialBlock, MaterialDocument } from './types.js';
 
 /** One image the document references, named by the declaration it came from. */
@@ -24,6 +24,11 @@ function collect(blocks: readonly MaterialBlock[], into: DocumentImage[]): void 
           }
         }
         break;
+      case 'grid':
+        for (const item of block.items) {
+          collect([item.content], into);
+        }
+        break;
       case 'text':
         break;
       default: {
@@ -43,12 +48,18 @@ function collect(blocks: readonly MaterialBlock[], into: DocumentImage[]): void 
  */
 export function documentImages(document: MaterialDocument): readonly DocumentImage[] {
   const found: DocumentImage[] = [];
+  for (const layer of document.backgroundLayers) {
+    collect([layer.content], found);
+  }
   for (const band of document.headerBands) {
     collect([band.content], found);
   }
   collect(document.root, found);
   for (const band of document.footerBands) {
     collect([band.content], found);
+  }
+  for (const layer of document.foregroundLayers) {
+    collect([layer.content], found);
   }
   return found;
 }

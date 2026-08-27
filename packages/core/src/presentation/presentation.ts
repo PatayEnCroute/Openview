@@ -1,13 +1,5 @@
 /**
- * Presentation contract: locale, currency, fraction digits and date styles, plus the four pure
- * functions that honour a declared writing.
- *
- * Barrel by design: consumers import from here, never from the files behind it.
- *
- * Not exported, deliberately: the two locale predicates, which no consumer outside this package
- * names; any list of locales or currencies, since Openview holds no referential; any bounded parse
- * door, since a writing lives on a `Template` that `parseTemplate` already validates.
- *
+ * Presentation contract: locale, currency, fraction digits, date styles, and formatting functions.
  * @see docs/adr/0008-langue-devise-et-formats.md
  */
 export {

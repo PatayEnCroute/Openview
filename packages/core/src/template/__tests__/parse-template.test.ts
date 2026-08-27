@@ -103,9 +103,7 @@ describe('parseTemplate', () => {
   });
 
   it('ACCEPTS an under-stamped document, because the guard only bites upward', () => {
-    // The pipeline bounds the shape, migrates, then validates against the CURRENT schema, never
-    // against the schema of the stamp it read. A document stamped 2 that already carries a
-    // `round` -- hand-made, or written by an unstamped mid-lot build -- is therefore accepted.
+    // The pipeline bounds the shape, migrates, then validates against the current schema.
     const understamped = {
       ...validTemplate,
       schemaVersion: 2,

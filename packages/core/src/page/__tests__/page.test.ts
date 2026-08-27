@@ -24,34 +24,7 @@ import {
 import { RECIPE_PAGE } from './fixtures.js';
 
 /**
- * The KEY SETS of the four stored page shapes, compared in both directions.
- *
- * The `extends` assertion in `page/schemas.ts` cannot stand in for these, and that was
- * measured rather than assumed: an OPTIONAL field added to the hand-written type and
- * forgotten in the schema leaves `z.infer<typeof PageSetupSchema> extends PageSetup` at
- * `true`, because an optional key is satisfied by absence. The JSON round trip below cannot
- * catch it either -- `RECIPE_PAGE` is annotated `PageSetup`, so it would never carry the
- * new field in the first place. Compiled with a `readonly bleed?: number | undefined` added
- * to `PageSetup`: the `extends` assertion stays green, the pairs below redden.
- *
- * `keyof` includes optional keys, which is what makes the comparison catch both directions
- * for required and optional fields alike -- the reason `nodes.test.ts` uses this exact
- * shape for `TableCell`. Comparing KEY SETS rather than the types themselves is also what
- * sidesteps the array variance that forces the assertion in `schemas.ts` to be
- * one-directional: `keyof` yields a union of strings, and `readonly` never enters it.
- *
- * The likeliest drift site was said here to be `Sheet` or `PageMargins`, on the grounds that
- * "lot C5 has a bleed and a gutter in its declared future". LOT C5 DECLINED BOTH, and this
- * sentence was the ONLY place in the repository attributing them to it. ADR 0006 decision 13
- * ranges the binding margin and the bleed in "un SILENCE que ce lot décide de ne pas rompre",
- * which is not a declared future and is attributed to NOBODY; the need is moreover already
- * covered with no field at all, `page/types.ts`: "Zero is legal -- a full-bleed label, or a
- * template that manages its own gutter". A lot does not break a silence it did not open.
- *
- * The four pairs below stay, and they earned their keep elsewhere: lot C5 attaches a style to
- * nine sites, and MEASURED, the type gate saw nine of this package's fifteen sites not at all
- * before that lot wrote its own eight pairs in `ast/__tests__/nodes.test.ts`. `PageBand` was one
- * of the six it DID see, thanks to the third pair here.
+ * Key set verification for page setup schemas and types, ensuring bidirectional assignability.
  */
 export const SHEET_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof SheetSchema>,
@@ -73,17 +46,7 @@ export const PAGE_SETUP_KEYS_IN_STEP: MutuallyAssignable<
   keyof PageSetup
 > = true;
 
-/**
- * The two sides, so every band assertion below runs on BOTH.
- *
- * It was a footer-only vehicle, and that left the header side untested by construction:
- * `header: []` was hard-coded here, `RECIPE_PAGE` and `paths.test.ts` carry exactly one
- * header band, and no other fixture carries two. MEASURED -- dropping the refinement from
- * `header` alone and leaving it on `footer` kept all 569 tests green and coverage at 100 %
- * of branches and functions, while a template could then stack `every` + `lastOnly` at the
- * top of the sheet: the exact ambiguity the refusal exists to remove. Coverage cannot see
- * this, because the function stays covered through the other side.
- */
+/** Both header and footer sides for band assertions. */
 const SIDES = ['header', 'footer'] as const;
 
 type BandSide = (typeof SIDES)[number];
@@ -105,13 +68,7 @@ function withBands(side: BandSide, occurrences: readonly PageBandOccurrence[]): 
 const acceptsOn = (side: BandSide, occurrences: readonly PageBandOccurrence[]): boolean =>
   PageSetupSchema.safeParse(withBands(side, occurrences)).success;
 
-/**
- * Accepted on BOTH sides, or the page is refused.
- *
- * The two sides share one `PageBandsSchema`, so they cannot disagree today -- and that is
- * the property being pinned rather than a reason to test one of them: the day a side gets
- * its own schema, this reads it.
- */
+/** Verifies acceptance on both page sides. */
 const accepts = (occurrences: readonly PageBandOccurrence[]): boolean => {
   const verdicts = SIDES.map((side) => acceptsOn(side, occurrences));
   const [onHeader, onFooter] = verdicts;
@@ -121,15 +78,7 @@ const accepts = (occurrences: readonly PageBandOccurrence[]): boolean => {
   return onHeader === true;
 };
 
-/**
- * Whether an occurrence covers a given rank, out of a given page count.
- *
- * A `Record` over the union rather than a `switch`, for two reasons. It gives the same
- * exhaustiveness guarantee -- a member added to `PAGE_BAND_OCCURRENCES` and not here does not
- * compile, `TS2741` -- and it does NOT open a second traversal of occurrences, which the
- * lot's mechanical criteria count. It is also the idiom `BAND_OCCURRENCE_CONFLICTS` already
- * uses, one file over.
- */
+/** Predicate mapping for page band occurrences over rank and count. */
 const APPLIES_TO: Readonly<
   Record<PageBandOccurrence, (rank: number, pageCount: number) => boolean>
 > = {
@@ -228,10 +177,7 @@ describe('the recipe page', () => {
   });
 
   it('refuses a document with no page at all, on the path `page`', () => {
-    // The proposition the recipe criterion words as "a template IMPOSES its format". An
-    // optional field imposes nothing, and a `z.default()` would be worse than optional -- it
-    // would write a sheet Openview chose into a document its author never saw, at every parse.
-    // This `it` is what forbids anyone from "easing the migration" by relaxing the field.
+    // Verifies that the page field is strictly required on Template.
     const { page: _dropped, ...noPage } = {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       id: 'facture-c4',
@@ -241,12 +187,7 @@ describe('the recipe page', () => {
       root: { type: 'container', id: 'racine', children: [] },
     };
 
-    // ANCHORED ON THE PATH rather than on a substring of the aggregated message, and the reason
-    // is measured. With a REQUIRED field added to `Template`, the parse yields TWO issues, the new
-    // one BEFORE `page`, and an unanchored regular expression still matches -- so this test would
-    // stay GREEN while assuring nothing, which is worse than a red test because a red test is
-    // visible. Lot C5 adds no required field, so the hazard does not fire today; the anchor is a
-    // few lines, and it is preventive.
+    // Asserts exact issue path on missing page field.
     let caught: unknown;
     try {
       parseTemplate(noPage);
@@ -505,11 +446,8 @@ describe('PageBandsSchema', () => {
     content: { type: 'container', id: on, children: [] },
   });
 
-  it('carries the overlap invariant, which `z.array(PageBandSchema)` does not', () => {
-    // The reason it is exported at all. Composing the obvious `z.array(PageBandSchema)`
-    // accepts `every` + `lastOnly`, stores it, and meets the refusal only later from
-    // `parseTemplate`, on a path far from the code that accepted it -- the trap
-    // `parseDocumentNode` documents for a bare `tableRow`, one lot on.
+  it('carries the overlap invariant', () => {
+    // Verifies that overlapping band occurrences are refused by PageBandsSchema.
     const overlapping = [band('every'), band('lastOnly')];
 
     expect(z.array(PageBandSchema).safeParse(overlapping).success).toBe(true);
@@ -595,21 +533,12 @@ describe('the bands', () => {
   });
 
   it('matches the rank-domain derivation for every page count from 1 to 8', () => {
-    // What makes "declared, not computed" a shortcut rather than a different rule. The schema
-    // cannot compute this -- it has no `n` -- so the equivalence is verified here instead.
     for (const [left, right] of COUPLES) {
       expect(accepts([left, right])).toBe(areDisjointAtEveryCount(left, right, 8));
     }
   });
 
   it.each(SIDES)('refuses a third band by the COUNT, still one message at a time (%s)', (side) => {
-    // A legal pair plus an intruder used to be refused band by band, at `[side, 2, 'on']`.
-    // It is now refused by `MAX_BANDS_PER_SIDE`, and the swap is what bounds the COST: the
-    // per-band spelling allocated one issue per supernumerary band, so a hostile side of
-    // 100 000 produced 99 998 of them and a 2.8 MB `error.message`. The bound refuses no
-    // page the pairwise rule did not already refuse -- of the twenty-five couples exactly
-    // two are compatible and they share no member, so a valid side never carries three --
-    // and the refusal stays a single message, which is what lot C8 was promised.
     const result = PageSetupSchema.safeParse(
       withBands(side, ['firstOnly', 'exceptFirst', 'lastOnly']),
     );
@@ -624,11 +553,6 @@ describe('the bands', () => {
   });
 
   it('answers a hostile band list in one message, not one per band', () => {
-    // The cost bound, asserted rather than described. Before `MAX_BANDS_PER_SIDE` this input
-    // was O(n) issue objects on top of an O(n^2) scan -- MEASURED at 62 s of blocked CPU for
-    // 100 000 bands ordered `exceptFirst` then `firstOnly`, the ordering that defeats the
-    // short-circuit. It is the denial of service `template/guard.ts` bounds one layer down,
-    // reopened by the refusal itself.
     const hostile = Array.from({ length: 5_000 }, (_unused, index) => ({
       on: index < 2_500 ? 'exceptFirst' : 'firstOnly',
       content: { type: 'container', id: `b${index}`, children: [] },
@@ -658,11 +582,7 @@ describe('the bands', () => {
     }
   });
 
-  it('answers an ABSENT occurrence with the same message, which lot C8 has to know', () => {
-    // `z.enum` treats `undefined` as an unknown option, so an author who forgot the field
-    // reads "expected one of ..." rather than "this field is required" -- exact, and
-    // misleading. Recorded here rather than corrected: fixing it would mean replacing both
-    // enums of this lot with literal unions, which changes the message above too.
+  it('answers an ABSENT occurrence with the same message', () => {
     const result = PageSetupSchema.safeParse({
       ...RECIPE_PAGE,
       footer: [{ content: { type: 'container', id: 'b', children: [] } }],
@@ -682,9 +602,6 @@ describe('the bands', () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      // TWO issues for one fault, and it is structural rather than this lot's doing:
-      // `ContainerNodeSchema` is a `z.object`, not a discriminated union, so a text node fails
-      // both on the discriminant and on the missing `children`. Written down for lot C8.
       expect(result.error.issues.map((issue) => issue.path.join('.'))).toStrictEqual([
         'footer.0.content.type',
         'footer.0.content.children',
@@ -693,8 +610,6 @@ describe('the bands', () => {
   });
 
   it('inherits the BlockNode cut of lot C3 without one line of this lot', () => {
-    // A bare `tableRow` in a band is refused because `PageBand.content` is a `ContainerNode`,
-    // whose children are the block union. That is the whole return on choosing the type.
     const result = PageSetupSchema.safeParse({
       ...RECIPE_PAGE,
       footer: [
@@ -757,8 +672,7 @@ describe('printableAreaOf', () => {
   });
 
   it('returns two lengths and no origin', () => {
-    // `{ x, y }` would impose an origin convention -- which corner, which axis direction --
-    // that nothing in the contract fixes and that lot C11 may want to fix differently.
+    // Only width and height are returned without imposing origin coordinate conventions.
     expect(Object.keys(printableAreaOf(RECIPE_PAGE))).toStrictEqual(['width', 'height']);
   });
 });

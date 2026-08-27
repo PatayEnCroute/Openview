@@ -29,14 +29,16 @@ non plus décrire une **page** (format, marges, en-tête répété), un **tablea
 colonnes, ni la moindre **apparence** — pas une police, pas un filet, pas une couleur.
 Ces quatre manques sont le contenu de la vague 1.
 
-> ✅ **Vague 1 close le 2026-08-21**, et **C10 livré le 2026-08-26** — le contrat sait
-> désormais confronter un modèle au **catalogue déclaré par l'application hôte** :
-> libellés proposables dans l'ordre de l'hôte, et chaque lecture localisée dans sa
-> portée exacte. Il reste **C11** pour finir la vague 2.
+> ✅ **Vague 1 close le 2026-08-21**, **C10 livré le 2026-08-26**, et **C11 livré le
+> 2026-08-26** — le contrat sait confronter un modèle au **catalogue déclaré par
+> l'application hôte**, décrire une **grille** de mise en page (colonnes égales, pas
+> vertical déclaré, zones avec spans) et des **calques de page** (fond de papier,
+> filigrane, cachet) répétés sur toutes les pages. **La vague 2 est close.**
 >
-> ⚠️ **C10 a été livré sans que J3 soit atteint** — E4 et la relecture par un gestionnaire
-> restent dus. L'écart et sa contrepartie sont nommés en tête de
-> l'[ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md).
+> ⚠️ **C10 et C11 ont été livrés sans que J3 soit atteint** — E4 et la relecture par un
+> gestionnaire restent dus. Les écarts et leurs contreparties sont nommés en tête des
+> [ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md) et
+> [ADR 0016](../adr/0016-grille-colonnes-et-calques.md).
 
 ---
 
@@ -504,6 +506,20 @@ grille, et un fond de page (filigrane, cachet) placé sur un calque distinct.
 **Poids :** L — **Dépend de :** C10, et des enseignements du moteur sur le
 multi-pages. *C'est le lot le plus risqué du contrat : voir le risque « calques et
 multi-pages » en [§6 de la vue d'ensemble](README.md#6-risques-assumés).*
+
+> ✅ **Livré le 2026-08-26** — [ADR 0016](../adr/0016-grille-colonnes-et-calques.md),
+> schéma **10**. Un `GridNode` rejoint le flux : colonnes égales dérivées du parent, lignes au
+> pas déclaré (`step` en mm), zones 1-based avec spans (≥ 2), recouvrements et sorties refusés
+> au parsing. `PageSetup.layers` porte des calques pleine feuille, `background`/`foreground`,
+> répétés sur toutes les pages, hors flux, avec une opacité de calque strictement entre 0 et 1.
+> Le moteur les consomme entièrement : grille **atomique** à la pagination, calques peints sans
+> toucher une coupure, et un contenu de zone qui déborde est un refus mesuré
+> (`grid-content-overflow`) avant impression — jamais un rognage. Poids réel : **XL**, comme le
+> plan l'annonçait — tenir « un modèle accepté n'est jamais ignoré par le moteur » a coûté le
+> moteur, l'adaptateur et la recette dans la même fenêtre.
+>
+> ⚠️ **Livré hors gate, comme C10** : J3 (E4 + relecture métier) n'était toujours pas atteint
+> au 2026-08-26. L'écart est consigné dans l'ADR 0016.
 
 ---
 

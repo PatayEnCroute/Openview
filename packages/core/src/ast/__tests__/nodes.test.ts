@@ -12,6 +12,7 @@ import {
   type DocumentNode,
   DocumentNodeSchema,
   type DocumentNodeType,
+  GridNodeSchema,
   type ImageNode,
   ImageNodeSchema,
   type LoopNode,
@@ -41,102 +42,31 @@ import {
 } from '../nodes.js';
 import { type MutuallyAssignable, RECIPE_TABLE } from './fixtures.js';
 
-/**
- * The segment schema and the hand-written union, checked in BOTH directions.
- *
- * `z.ZodType` is covariant in its output, so neither `DocumentNodeSchema`'s explicit
- * binding nor the `const segments: readonly TextSegment[]` assignment further down can
- * catch a schema that drifted -- both accept one producing LESS than `TextSegment`. The
- * annotation here does: `MutuallyAssignable` collapses to `false`, and `false` does not
- * assign to `true`.
- *
- * A `const` and not an `it`, because there is nothing to run. It used to be an `it` ending
- * in `expect(inStep).toBe(true)`, an assertion that cannot fail -- worse than no assertion,
- * because it made the suite look like it checked something at runtime. The guard is the
- * ANNOTATION, and `pnpm run type-check` is what runs it: `tsconfig.typecheck.json` covers
- * test files. Exported so it is not reported unused; nothing imports it, and the runner
- * ignores a test module's exports.
- */
+/** Asserts bidirectional type compatibility between TextSegment schema and interface. */
 export const SEGMENT_SCHEMA_IN_STEP: MutuallyAssignable<
   z.infer<typeof TextSegmentSchema>,
   TextSegment
 > = true;
 
-/**
- * The column schema and the hand-written record, checked in BOTH directions.
- *
- * The exact twin of {@link SEGMENT_SCHEMA_IN_STEP}, with the same covariance argument, and
- * NOT tautological the way the same assertion posed on `DocumentNodeSchema` would be:
- * `TableColumnSchema` carries no `z.ZodType<TableColumn>` annotation, so its inference is
- * what is being compared rather than an annotation compared with itself.
- *
- * Dropping `align` from the schema is caught here and in four other places besides -- a
- * `TS6133` on the now-unused import of `TABLE_COLUMN_ALIGNMENTS`, two `TS2375` on the
- * `z.ZodType` annotations, and a `TS2345` on the argument passed to `.superRefine` -- all
- * four at gate 2. This one is at gate 3, and it is the only one that also catches the
- * REVERSE drift: a field added to the schema and forgotten in the interface.
- */
+/** Asserts bidirectional type compatibility between TableColumn schema and interface. */
 export const TABLE_COLUMN_SCHEMA_IN_STEP: MutuallyAssignable<
   z.infer<typeof TableColumnSchema>,
   TableColumn
 > = true;
 
-/**
- * The two members `checkTableWiring` discriminates by hand, held to the union.
- *
- * The narrowing at that site does NOT hold it: measured, a third member carrying
- * `rows: readonly TableRowNode[]` compiles there and is absorbed by the `else`. This
- * annotation collapses to `false` on any third member at all, and `false` does not assign to
- * `true`. A defensive `else` in the schema would buy the same guarantee at the price of a branch
- * no input can reach -- `invalid_union` on a body entry is abandoning, so the refinement never
- * runs -- and of a `throw` that escapes `safeParse`.
- */
+/** Asserts table body discriminated members match the union. */
 export const TABLE_BODY_MEMBERS_IN_STEP: MutuallyAssignable<
   TableBodyNode['type'],
   'tableRow' | 'tableRowGroup'
 > = true;
 
-/**
- * The body SCHEMA held to the body TYPE, and it is not the same guard as the one above.
- *
- * `TABLE_BODY_MEMBERS_IN_STEP` constrains the hand-written union. It says nothing about
- * `rowMembers()`, and measured: reducing that factory to `[TableRowNodeSchema]` compiles at
- * exit 0 under both tsconfigs -- `TableBodyNodeSchema` narrows, `DocumentNodeSchema` absorbs
- * the loss by covariance, and `checkTableWiring` stays assignable to `.superRefine` because a
- * `tableRow`-only array still satisfies `readonly TableBodyNode[]`. `tableRowGroup` would
- * simply stop being parseable in a table body, and every stored document carrying a repeated
- * section would answer `invalid_union`.
- *
- * Compared on the DISCRIMINANT rather than the whole node, because that is the part a lost
- * factory member removes, and comparing whole recursive unions drags `z.lazy` inference in.
- */
+/** Asserts TableBodyNodeSchema matches TableBodyNode types. */
 export const TABLE_BODY_SCHEMA_IN_STEP: MutuallyAssignable<
   z.infer<typeof TableBodyNodeSchema>['type'],
   TableBodyNode['type']
 > = true;
 
-/**
- * The four remaining new pairs, held KEY BY KEY.
- *
- * `MutuallyAssignable` on the objects themselves is not enough, and measured: under
- * `exactOptionalPropertyTypes`, `{ columnId, children }` and
- * `{ columnId, children, rowSpan?: number | undefined }` are mutually assignable, so an
- * OPTIONAL field added to one side only -- precisely the shape a backward-compatible new field
- * takes -- slips through. A field present in the TYPE and absent from the SCHEMA is worse than
- * a compile error: `parseTemplate` strips it at runtime (measured), so an editor writes it, the
- * next open erases it, `onSave` persists the loss, and `schemaVersion` never moves. That is the
- * *perte silencieuse* AGENTS.md 1.2 exists to prevent.
- *
- * `keyof` includes optional keys, so comparing key sets catches both directions for required
- * and optional fields alike.
- *
- * `TableCell` was said here to be the likeliest site, "a per-cell alignment override is lot C5's
- * declared future". IT WAS NOT A DECLARED FUTURE: ADR 0005 wrote "s'IL la décide", a conditional
- * reservation this comment hardened into a promise. Lot C5 delivered the override on the BLOCK IN
- * THE CELL instead -- a cell is not a node, it has no `id`, and an editor Command cannot address
- * it. THE PAIR STAYS, and it earned its place: it is one of the six sites that DID redden when a
- * field was added to a schema alone, and it is what a future field on `TableCell` will meet.
- */
+/** Asserts key assignability for table cell node structure. */
 export const TABLE_CELL_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof TableCellSchema>,
   keyof TableCell
@@ -164,31 +94,7 @@ export const TABLE_COLUMN_KEYS_IN_STEP: MutuallyAssignable<
 > = true;
 
 /**
- * ## The eight pairs lot C5 owed this file BEFORE it wrote one style field
- *
- * The five pairs above and the four in `page/__tests__/page.test.ts` cover exactly the six
- * sites a style could attach to that the type gate WAS watching. MEASURED, one mutation per
- * site on a copy of `core/src`, an OPTIONAL field added to the schema alone: of the fifteen
- * sites in this package, NINE compiled at exit 0 with no assertion refusing -- the three
- * segment kinds, `TextNode`, `ImageNode`, `ContainerNode`, `LoopNode`, `ConditionNode`, and
- * `Template`. Which is to say: the eight sites lot C5 attaches a style to were precisely the
- * eight nobody watched.
- *
- * And nothing else catches it. MEASURED on the same copy with four schemas deliberately
- * diverging from their types: every test PASSES. A field absent from the schema is not an
- * uncovered branch, it is a branch that does not exist, so the 90 % threshold sees nothing
- * either.
- *
- * The reason the objects themselves are not compared is the one the block above already
- * gives: under `exactOptionalPropertyTypes` an optional field added to ONE side leaves the
- * two types mutually assignable, and an optional field is precisely the shape a
- * backward-compatible new field takes. `keyof` compares KEY SETS, so it catches both
- * directions.
- *
- * The last two are CONTRE-ÉPREUVES OF THE CUT, not preparation for a field: `loop` and
- * `condition` carry NO style, deliberately -- they produce N sequences or nothing, so a box
- * on them has no subject. Their pairs redden the day someone adds a field to one side only,
- * which is how a cut stays a cut rather than becoming a habit.
+ * Key assignability pairs ensuring schemas stay strictly aligned with TypeScript interfaces.
  */
 export const TEXT_LITERAL_SEGMENT_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof TextLiteralSegmentSchema>,
@@ -230,15 +136,7 @@ export const CONDITION_NODE_KEYS_IN_STEP: MutuallyAssignable<
   keyof ConditionNode
 > = true;
 
-/**
- * The TYPE of the fragmentation mark, which the eight key-set pairs above cannot see.
- *
- * They compare key SETS, so widening the interface to `boolean` while the schema still accepts
- * only `true` leaves all eight green -- and a `false` an editor writes would then be stripped at
- * the next parse. One pair suffices: the eight interfaces inherit the field from `NodeBase` and
- * the eight schemas share one `keepTogetherField`. The key-set pairs stay necessary to prove each
- * of the eight schemas actually spells the field out.
- */
+/** Asserts type compatibility of keepTogether property. */
 export const KEEP_TOGETHER_TYPE_IN_STEP: MutuallyAssignable<
   z.infer<typeof TextNodeSchema>['keepTogether'],
   TextNode['keepTogether']
@@ -451,9 +349,7 @@ describe('DocumentNodeSchema', () => {
       id: 't',
       content: [{ kind: 'pageField', field: 'total' }],
     });
-    // An ABSENT field yields the SAME message: an unwritten discriminator matches no member of
-    // the union, so an author who forgot the key reads which markers exist rather than
-    // "required". Exact, and misleading -- recorded for lot C8, not corrected here.
+    // An absent field yields a validation failure on the missing discriminator.
     const absentField = TextNodeSchema.safeParse({
       type: 'text',
       id: 't',
@@ -654,6 +550,15 @@ const MARKED_NODES: Readonly<Record<DocumentNodeType, unknown>> = {
     body: [],
     footer: [],
   },
+  grid: {
+    type: 'grid',
+    id: 'n',
+    keepTogether: true,
+    columns: 12,
+    rows: 8,
+    step: 4,
+    items: [{ row: 1, column: 1, content: { type: 'container', id: 'z', children: [] } }],
+  },
   tableRow: { type: 'tableRow', id: 'n', keepTogether: true, cells: [] },
   tableRowGroup: {
     type: 'tableRowGroup',
@@ -679,6 +584,7 @@ const PARSE_BY_KIND: Readonly<Record<DocumentNodeType, (raw: unknown) => Documen
   loop: (raw) => LoopNodeSchema.parse(raw),
   condition: (raw) => ConditionNodeSchema.parse(raw),
   table: (raw) => TableNodeSchema.parse(raw),
+  grid: (raw) => GridNodeSchema.parse(raw),
   tableRow: (raw) => TableRowNodeSchema.parse(raw),
   tableRowGroup: (raw) => TableRowGroupNodeSchema.parse(raw),
 };

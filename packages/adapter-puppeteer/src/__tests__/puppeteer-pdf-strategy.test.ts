@@ -57,7 +57,7 @@ function paintedColours(bytes: Uint8Array): readonly string[] {
     let inflated: string;
     try {
       inflated = inflateSync(raw).toString('latin1');
-    } catch {
+    } catch (_error: unknown) {
       /* Not every stream is deflated -- a font or an image is not -- and a stream this reader
          cannot inflate simply holds no colour operator to collect. */
       inflated = raw.toString('latin1');
@@ -587,6 +587,66 @@ describe('what the page reports about itself', () => {
       );
       const root = measurement.pages[0]?.regions.find((region) => region.region === 'root');
       expect((root?.contentHeight ?? 0) > (root?.height ?? 0)).toBe(true);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
+describe('what a grid zone reports about its content', () => {
+  /** A hand-written two-by-two grid, one zone, with the content the case injects. */
+  const gridWith = (zoneContent: string, zoneStyle = ''): string =>
+    rawPage(
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,10mm)">' +
+        `<div data-openview-grid-item="zone-a" style="grid-row:1/span 1;grid-column:1/span 1;min-width:0;min-height:0;position:relative;${zoneStyle}">` +
+        `${zoneContent}</div></div>`,
+    );
+
+  it(
+    'reports nothing for content that stays inside its zone, even exactly at the edge',
+    async () => {
+      const measurement = await measureOnly(
+        sourceWith(gridWith('<div style="height:10mm">x</div>')),
+      );
+      expect(measurement.overflowingGridItems).toStrictEqual([]);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'reports a vertical overflow by the zone id alone',
+    async () => {
+      const measurement = await measureOnly(
+        sourceWith(gridWith('<div style="height:25mm">a text the reply must not repeat</div>')),
+      );
+      expect(measurement.overflowingGridItems).toStrictEqual(['zone-a']);
+      expect(JSON.stringify(measurement)).not.toContain('a text the reply must not repeat');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'reports a horizontal overflow, past the padding of the zone',
+    async () => {
+      const measurement = await measureOnly(
+        sourceWith(gridWith('<div style="width:40mm;height:2mm"></div>', 'padding:0 2mm 0 2mm')),
+      );
+      expect(measurement.overflowingGridItems).toStrictEqual(['zone-a']);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'answers the same observation twice in one session',
+    async () => {
+      const overflowing = gridWith('<div style="height:25mm"></div>');
+      const observations = await inSession({ sheet: sheetOf(), images: [] }, async (session) => {
+        const first = await session.measure(sourceWith(overflowing));
+        await session.measure(sourceWith(rawPage('<div>elsewhere</div>')));
+        const again = await session.measure(sourceWith(overflowing));
+        return [first.overflowingGridItems, again.overflowingGridItems];
+      });
+      expect(observations[0]).toStrictEqual(['zone-a']);
+      expect(observations[1]).toStrictEqual(['zone-a']);
     },
     CHROMIUM_TIMEOUT_MS,
   );

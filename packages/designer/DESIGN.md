@@ -163,6 +163,30 @@ Les champs manipulables dans l'éditeur sont ceux du **catalogue déclaré par l
 > cellules, ni colonne conditionnelle, ni champ de total — le total d'une facture est une
 > **expression du modèle** posée dans une cellule de pied, et l'ADR 0005 explique pourquoi.
 
+> ✅ **La grille et les calques existent dans le modèle depuis le lot C11**
+> ([ADR 0016](../../docs/adr/0016-grille-colonnes-et-calques.md)). Ce que l'éditeur D5/D10
+> recevra du contrat, et rien d'autre :
+>
+> - **`GridNode`** est un bloc à part entière (`BlockType` dérivé le propose déjà) : `columns` et
+>   `rows` entiers dans `[1, 1000]`, un `step` vertical en millimètres, et des zones
+>   (`GridItem`) positionnées **1-based** avec des spans optionnels **à partir de 2** — un span
+>   écrit `1` est refusé, l'absence est la seule orthographe. Chaque zone porte un
+>   `ContainerNode content` : c'est lui qui a l'`id` stable qu'une Command adresse. Les
+>   recouvrements et les sorties de grille sont refusés **au parsing**, avec le chemin de la
+>   seconde zone fautive.
+> - **Aucune coordonnée continue** : pas de `x/y` en millimètres, pas de largeur de colonne —
+>   la largeur d'une colonne est `largeurDeContenuDuParent / columns`, et le contenu d'une zone
+>   ne redimensionne **jamais** une piste. Un contenu qui déborde sa zone est un **refus mesuré**
+>   du moteur (`grid-content-overflow`) ; l'éditeur peut prévenir avant sauvegarde avec les mêmes
+>   dimensions, mais le moteur reste la frontière finale.
+> - **`PageSetup.layers`** est une liste **optionnelle non vide** de calques : `plane`
+>   (`background` | `foreground`), `opacity` optionnelle **strictement entre 0 et 1** (0 et 1
+>   sont refusés — retirer le calque, ou omettre le champ), et un `ContainerNode content` étiré à
+>   la **feuille entière**, marges comprises. L'ordre du tableau est l'ordre arrière → avant
+>   dans un plan : pas de `zIndex` à éditer, réordonner la liste EST l'édition de profondeur.
+>   Tous les calques se répètent sur **toutes** les pages — pas de `firstOnly` de calque à
+>   proposer. L'éditeur qui vide la liste doit **retirer le champ**, jamais enregistrer `[]`.
+
 ---
 
 ## 2. Palette de Couleurs (Shadcn Slate & Indigo)

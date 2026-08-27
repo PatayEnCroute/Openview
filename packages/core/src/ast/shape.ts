@@ -6,7 +6,7 @@
  * forgotten in another.
  */
 import type { Expression, PrintableExpression } from '../expression/expression.js';
-import type { DocumentNode, TableRowNode, TextNode } from './nodes.js';
+import type { DocumentNode, GridNode, TableRowNode, TextNode } from './nodes.js';
 import type { DataExpectation } from './types.js';
 import { type NodeVisitor, type SegmentVisitor, visitNode, visitSegment } from './visitor.js';
 
@@ -29,6 +29,13 @@ export interface NodeChildSlot {
   readonly nodes: readonly DocumentNode[];
   /** Segments from the node to the array itself; a child appends its own index. */
   readonly at: readonly (string | number)[];
+  /**
+   * Set when `at` names the sole child rather than an array, so no index is appended.
+   *
+   * A grid zone hangs alone under `items[i].content`: an appended index would name an element
+   * that does not exist.
+   */
+  readonly single?: true | undefined;
 }
 
 /**
@@ -99,6 +106,15 @@ function rowReadings(node: TableRowNode): readonly NodeReading[] {
     : [{ expression: pageReport.value, expectation: 'number', at: ['pageReport', 'value'] }];
 }
 
+/** One slot per grid zone: a zone is a single container under its own item. */
+function zoneSlots(node: GridNode): readonly NodeChildSlot[] {
+  return node.items.map((item, index) => ({
+    nodes: [item.content],
+    at: ['items', index, 'content'],
+    single: true,
+  }));
+}
+
 const SHAPE: NodeVisitor<NodeShape> = {
   text: (node) => ({
     readings: () => textReadings(node),
@@ -129,6 +145,12 @@ const SHAPE: NodeVisitor<NodeShape> = {
       { nodes: node.body, at: ['body'] },
       { nodes: node.footer, at: ['footer'] },
     ],
+  }),
+  /* Grid positions are numbers of the layout, never data reads: only the zone contents read. */
+  grid: (node) => ({
+    readings: noReadings,
+    binding: NO_BINDING,
+    children: zoneSlots(node),
   }),
   tableRowGroup: (node) => ({
     readings: noReadings,

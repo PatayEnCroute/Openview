@@ -155,9 +155,7 @@ describe('pathsOf', () => {
   });
 
   it('does not demand the alias a rounding is written under', () => {
-    // The composition D7 rests on: per-line rounding inside the aggregate, then the total.
-    // If the alias context did not reach through the `round`, `collectDataPaths` would tell
-    // an integrator handing over { facture } that a key `l` is missing when nothing is.
+    // Verifies that aggregate aliases within round expressions are excluded from required data paths.
     const total: Expression = {
       kind: 'round',
       value: {

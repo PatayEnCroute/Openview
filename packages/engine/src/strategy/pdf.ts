@@ -94,6 +94,14 @@ export interface PdfLayoutMeasurement {
   /** Declaration ids whose painted box left the sheet it belongs to. */
   readonly escaping: readonly string[];
   /**
+   * Ids of grid-zone containers whose content reaches past the zone's content box, on either axis.
+   *
+   * The id and nothing else: what the content reads is render data. A zone is never clipped, so
+   * without this observation an overflowing cell would print over its neighbour with every other
+   * check still green.
+   */
+  readonly overflowingGridItems: readonly string[];
+  /**
    * How many page markers hold more than their reserved width shows.
    *
    * A count and nothing else: which value was clipped, and what it read, are render data. The

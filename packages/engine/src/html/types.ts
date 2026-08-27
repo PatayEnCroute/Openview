@@ -38,6 +38,8 @@ export interface HtmlAttributes {
   readonly 'data-openview-run'?: string | undefined;
   /** Which of the three vertical regions a box belongs to. */
   readonly 'data-openview-region'?: string | undefined;
+  /** Id of a grid zone's container, which the overflow observation is filed under. */
+  readonly 'data-openview-grid-item'?: string | undefined;
   /** One-based rank of a page, chosen by the engine and never read from the data. */
   readonly 'data-openview-page'?: string | undefined;
 }

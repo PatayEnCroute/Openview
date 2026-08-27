@@ -88,6 +88,20 @@ describe('nodeShape', () => {
     expect(shape.children).toStrictEqual([{ nodes: node.rows, at: ['rows'] }]);
   });
 
+  it('reports one slot per grid zone, each naming its sole container', () => {
+    // A zone hangs alone under `items[i].content`, so its slot is marked `single`: the analysis
+    // appends no index, and the path of a reading inside a zone names the container itself.
+    const node = ONE_NODE_PER_KIND.grid;
+    const shape = nodeShape(node);
+
+    expect(shape.readings()).toStrictEqual([]);
+    expect(shape.binding).toBeUndefined();
+    expect(shape.children).toStrictEqual([
+      { nodes: [node.items[0]?.content], at: ['items', 0, 'content'], single: true },
+      { nodes: [node.items[1]?.content], at: ['items', 1, 'content'], single: true },
+    ]);
+  });
+
   it('reports one slot per cell of a row, and requires a number of its contribution', () => {
     const node = ONE_NODE_PER_KIND.tableRow;
     const shape = nodeShape(node);

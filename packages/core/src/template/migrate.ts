@@ -66,19 +66,7 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
   {
     from: 6,
     to: 7,
-    /**
-     * Identity, except for the stamp -- and the stamp is the whole point: it is what turns a silent
-     * loss of the new table into a legible refusal.
-     *
-     * A compatibility writing is refused rather than written, and on a stronger ground than the
-     * compatibility sheet of the 4 -> 5 entry: A4 is wrong for part of the world but exists
-     * everywhere, whereas a writing would have to name a language and a money, and there is no
-     * currency that exists everywhere. So no pre-existing document declares any writing, which is
-     * what it already declared.
-     *
-     * The version guard reads the stamp and not the content, so a document stamped 6 that already
-     * carries a table parses and comes out stamped 7 with its table intact.
-     */
+    /** Stamping migration from schema version 6 to 7. */
     migrate: (input) => ({ ...input, schemaVersion: 7 }),
   },
   {
@@ -98,6 +86,15 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      * contributions in silence, or is refused on an unknown discriminator with no version named.
      */
     migrate: (input) => ({ ...input, schemaVersion: 9 }),
+  },
+  {
+    from: 9,
+    to: 10,
+    /**
+     * Stamp only. A v9 document declared exactly "no grid and no page layer", which is what it
+     * already said; adding empty structures would invent a second canonical spelling of absence.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 10 }),
   },
 ];
 

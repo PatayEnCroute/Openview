@@ -37,17 +37,7 @@ function readingBand(
   };
 }
 
-/**
- * A parsed template carrying that page and a flow that reads those paths.
- *
- * It goes through `parseTemplate` rather than being written as a `Template` literal, and
- * that is the honest shape rather than a workaround: `collectTemplateDataPaths` is called on
- * a document that came out of a parse -- the playground does exactly this -- so the test
- * feeds it one. It also sidesteps a real friction worth naming: `Template` is inferred from
- * its schema, where `z.array` yields MUTABLE arrays all the way down, while `PageSetup`
- * declares `readonly PageBand[]` over `readonly BlockNode[]`. Measured, `TS2322`, and in that
- * direction only -- which is why the type-level assertion on `PageSetup` is one-directional.
- */
+/** Creates a valid parsed Template with the specified page setup and body paths. */
 function templateWith(
   page: PageSetup,
   bodyPaths: readonly string[] = [],
@@ -82,11 +72,8 @@ const emptyPage: PageSetup = {
 };
 
 describe('collectTemplateDataPaths', () => {
-  it('reports a binding written in a HEADER, which the node-level function cannot see', () => {
-    // The `it` that would fail on the repository as it stood before this increment, which is
-    // the definition of a test that secures a contract. The symptom of the hole is not an
-    // error: the caller was told to supply `facture.total`, never told about `client.nom`,
-    // and the header prints blank.
+  it('reports a binding written in a header', () => {
+    // Tests that bindings inside page bands are collected in addition to the root flow.
     const template = templateWith(
       { ...emptyPage, header: [readingBand('every', 'hdr', 'client.nom')] },
       ['facture.total'],
@@ -172,9 +159,7 @@ describe('collectTemplateDataPaths', () => {
   });
 
   it('applies the loop-alias rule inside a band exactly as in the flow', () => {
-    // Nothing about scope is duplicated here: the descent stays written once, in
-    // `collectFrom`. A band that loops over `facture.lignes` therefore reports the SOURCE and
-    // not the alias, and the guarantee of ADR 0002 crosses the band boundary for free.
+    // Tests that loop aliases inside page bands are properly excluded from collected data paths.
     const looping: PageBand = {
       on: 'every',
       content: {

@@ -113,17 +113,7 @@ describe('roundDecimal', () => {
   });
 });
 
-/**
- * The rounding of D2, written a second time and by other means: the shortest
- * round-tripping decimal is expanded into an EXACT integer, divided by an exact power of
- * ten, and the tie is broken by comparing twice the remainder to the divisor.
- *
- * BigInt is deliberately absent from production (ADR 0003 decision 4, and D12 of the C2
- * plan). It belongs here for the opposite reason: an oracle has to be exact, and it has to
- * share as little as possible with what it checks. `Intl.NumberFormat` was refused as the
- * committed oracle because its result is indexed on an ICU build; this one is indexed on
- * nothing.
- */
+/** BigInt oracle tie breaking logic. */
 function tieGoesUp(mode: RoundMode, kept: bigint): boolean {
   switch (mode) {
     case 'halfExpand':
@@ -131,50 +121,61 @@ function tieGoesUp(mode: RoundMode, kept: bigint): boolean {
     case 'halfEven':
       return kept % 2n === 1n;
     default: {
-      // An open `else` here would default an unknown mode to half-even -- which is what the
-      // implementation used to do -- so the two would agree in LOCKSTEP and this matrix
-      // would report zero divergences for a mode neither of them rounds correctly. An
-      // oracle that shares the implementation's blind spot is not an oracle.
       const exhaustive: never = mode;
       throw new TypeError(`The oracle has no tie-break for the mode ${String(exhaustive)}`);
     }
   }
 }
 
+/** Exact oracle for decimal rounding using BigInt. */
 function referenceRound(value: number, decimals: number, mode: RoundMode): number {
   if (!Number.isFinite(value) || value === 0) {
-    return value === 0 ? 0 : value;
+    return value;
   }
-  const shortest = Math.abs(value).toExponential();
-  const marker = shortest.indexOf('e');
-  const exponent = Number(shortest.slice(marker + 1));
-  const digits = shortest.slice(0, marker).replace('.', '');
-  const shift = exponent - digits.length + 1 + decimals;
-  let scaled = BigInt(digits);
+  const text = value.toExponential();
+  const [mantissaText, expText] = text.split('e');
+  if (mantissaText === undefined || expText === undefined) {
+    throw new TypeError(`Invalid exponential format: ${text}`);
+  }
+  const exponent = Number(expText);
+  const normalized = mantissaText.replace('.', '').replace('-', '');
+  const digits = BigInt(normalized);
+  const places = mantissaText.includes('.') ? (mantissaText.split('.')[1]?.length ?? 0) : 0;
+  const power = exponent - places;
+
+  const targetPower = -decimals;
+  const shift = power - targetPower;
+  let integerPart: bigint;
+  let remainder: bigint;
+  let divisor: bigint;
+
   if (shift >= 0) {
-    scaled *= 10n ** BigInt(shift);
+    integerPart = digits * 10n ** BigInt(shift);
+    remainder = 0n;
+    divisor = 1n;
   } else {
-    const divisor = 10n ** BigInt(-shift);
-    const remainder = scaled % divisor;
-    scaled /= divisor;
+    divisor = 10n ** BigInt(-shift);
+    integerPart = digits / divisor;
+    remainder = digits % divisor;
+  }
+
+  let scaled = integerPart;
+  if (remainder !== 0n) {
     const twice = remainder * 2n;
-    if (twice > divisor || (twice === divisor && tieGoesUp(mode, scaled))) {
+    if (twice > divisor) {
       scaled += 1n;
+    } else if (twice === divisor) {
+      if (tieGoesUp(mode, integerPart)) {
+        scaled += 1n;
+      }
     }
   }
+
   const rounded = Number(`${value < 0 ? '-' : ''}${scaled}e${-decimals}`);
   return rounded === 0 ? 0 : rounded;
 }
 
-/**
- * The PRNG the whole file draws from, written here rather than imported.
- *
- * `Math.random` is refused by the machine under `packages/core/**` -- `biome.jsonc`'s
- * `noJsRestrictedProperties` override names it, and nothing there excludes a `*.test.ts`.
- * A test that drew from it would stop at gate 1. The deeper reason is the same one E6
- * states for the engine: an irreproducible test measures nothing. Seeded, a divergence
- * found in CI reproduces byte for byte in a local `-t` run of the single `it`.
- */
+/** Deterministic pseudo-random number generator (Mulberry32). */
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -186,17 +187,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/**
- * The population, in two halves that do not cover the same thing.
- *
- * - **Amounts**: `sign * integer in [0, 1e12) / 10 ** p`, `p` in `[0, 6]`. Their decimal
- *   writing is SHORT -- the real case, the one that produces exact ties and therefore makes
- *   the `mode` field work.
- * - **Arbitrary doubles**: a full 52-bit mantissa, an exponent in `[-40, 40]`. Their decimal
- *   writing is LONG -- the case that works the digit-string surgery.
- *
- * The non-finite values are not drawn: they have their own `it` above.
- */
+/** Draws pseudo-random test sample population of amounts and doubles. */
 function drawPopulation(seed: number, half: number): readonly number[] {
   const random = mulberry32(seed);
   const values: number[] = [];
@@ -216,21 +207,7 @@ function drawPopulation(seed: number, half: number): readonly number[] {
 /** Both bounds of the window, and nine positions in between. */
 const POSITIONS = [-15, -9, -5, -2, 0, 1, 2, 3, 5, 9, 15] as const;
 
-/**
- * One `it` per position, and that is a matter of ergonomics rather than style.
- *
- * The whole matrix costs a few seconds -- fine for the four gates, unbearable in an edit
- * loop. Split this way, `pnpm vitest round -t "frozen"` replays the 34 vectors in
- * milliseconds during a refactor of `keptDigits`, and the matrix only runs again at commit
- * time. Without the split the only available granularity is the file, and a developer who
- * pays for the matrix on every save ends up disabling the suite -- which is the ordinary
- * way an exact oracle dies.
- *
- * Each `it` RESTARTS FROM ITS OWN SEED. A single stream carried from one `it` to the next
- * would make every one of them depend on the execution order, which Vitest does not
- * guarantee, and `-t` on a single `it` would then replay a different population.
- */
-describe('roundDecimal -- property matrix against the BigInt reference', () => {
+describe('pseudo-random test matrix against exact oracle', () => {
   it.each(POSITIONS)('agrees with the exact reference at %o decimals', (decimals) => {
     const values = drawPopulation(0x9e3779b9 ^ (decimals + 16), 10_000);
     const divergences: string[] = [];
@@ -385,8 +362,7 @@ describe('the round kind', () => {
   });
 
   it('refuses a NaN operand with the finiteness code, not the shape one', () => {
-    // One rule, stated once: `operand-type` answers for a value's SHAPE, `not-finite` for
-    // its FINITENESS. Zero new codes -- that is what this lot owes lot C8.
+    // One rule: operand-type answers for a value's shape, not-finite for its finiteness.
     expect(
       expectEvaluationError(() =>
         evaluateExpression(round(path('broken.nan'), 2, 'halfEven'), { broken: { nan: NaN } }),
@@ -522,9 +498,7 @@ describe('the C2 acceptance criterion', () => {
   });
 
   it('makes the remedy `requireDays` now names actually writable', () => {
-    // The other half of the same frontier test, and the reason `guards.ts` changed wording:
-    // C1 rendered "the algebra has no rounding of its own" TO THE TEMPLATE AUTHOR, which
-    // becomes a lie on delivery. The remedy has to be provable, not just phrased.
+    // Tests that rounding expressions integrate directly with date arithmetic.
     const shifted: Expression = {
       kind: 'dateAdd',
       date: literal('2026-01-31'),

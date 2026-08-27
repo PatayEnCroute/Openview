@@ -19,15 +19,7 @@ const yieldsBoundary = (own: BorderEdge | undefined, other: BorderEdge | undefin
   widthOf(own) > widthOf(other) ? own : undefined;
 
 /**
- * Assigns every rule of a table to exactly one box, so two adjacent rules overlap instead of
- * adding up.
- *
- * The wider rule is the visible one. On an exact tie the boundary between two rows goes to the
- * following row's `top`, and a boundary shared with the table's own edge goes to the table. The
- * table paints its four declared edges unconditionally: its bands run the whole length of the
- * table, and a row that beat one of them paints a strictly wider band over it.
- *
- * @param borders the rows' borders in visual order -- header, then body, then footer
+ * Resolves overlapping border rules between adjacent table rows and table edges.
  */
 export function resolveRowRules(
   borders: readonly (BoxBorder | undefined)[],

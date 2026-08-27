@@ -9,13 +9,7 @@ import {
 } from '../src/examples/catalogue.js';
 
 /**
- * Le pont de rendu du serveur de DÉVELOPPEMENT du playground.
- *
- * Une application Vite tourne dans un navigateur et ne peut pas lancer Chromium ; le rendu vit
- * donc côté serveur. Ce pont n'est pas un service de rendu : il connaît un catalogue fermé, ne
- * reçoit que deux identifiants, n'est pas construit par `vite build` et n'existe que sous
- * `pnpm dev`. Le durcissement — réseau, délais, mémoire, concurrence — appartient au lot qui
- * précède toute exposition réelle.
+ * Dev server rendering bridge for the playground Vite app.
  */
 
 export const CATALOG_ROUTE = '/__openview/render-catalog';
@@ -23,7 +17,7 @@ export const RENDER_ROUTE = '/__openview/render-pdf';
 
 const port = createPdfRenderPort(createPuppeteerPdfStrategy());
 
-/** Ce qu'une route renvoie : un statut, des en-têtes et un corps déjà sérialisé. */
+/** Bridge HTTP response structure containing status code, headers, and serialized body. */
 export interface BridgeResponse {
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
@@ -36,7 +30,7 @@ const json = (status: number, payload: unknown): BridgeResponse => ({
   body: JSON.stringify(payload),
 });
 
-/** Le catalogue, réduit à des identifiants et des libellés. */
+/** Returns catalogue entries summarized as identifiers and labels. */
 export function catalogResponse(): BridgeResponse {
   return json(200, catalogueSummary());
 }
@@ -55,19 +49,13 @@ function parseChoice(body: string): RenderChoice | undefined {
     const record: Record<string, unknown> = { ...parsed };
     return { templateId: record.templateId, datasetId: record.datasetId };
   } catch (cause) {
-    /* Journalisé côté serveur avec sa cause, et refusé côté client sans elle : un corps illisible
-       ne doit pas renvoyer à l'appelant ce que l'analyseur en a compris. */
     console.warn('[openview] render-pdf received a body that is not json', cause);
     return undefined;
   }
 }
 
 /**
- * Rend le PDF d'un couple d'identifiants.
- *
- * Une méthode inattendue, un identifiant inconnu ou un corps mal formé sont refusés AVANT que
- * le moteur soit appelé. Un refus connu ressort en JSON avec son code et son message ; la cause,
- * le HTML, le modèle et les données ne sortent jamais.
+ * Handles PDF rendering requests for template and dataset identifiers.
  */
 export async function renderResponse(method: string, body: string): Promise<BridgeResponse> {
   if (method !== 'POST') {
@@ -99,8 +87,6 @@ export async function renderResponse(method: string, body: string): Promise<Brid
     };
   } catch (error) {
     if (error instanceof DocumentRenderError) {
-      /* Le code et le message, et rien de plus. `details` est sûr par construction, mais le
-         publier ferait du pont une surface d'API alors qu'il n'est qu'un pont de développement. */
       return json(422, { code: error.code, message: error.message });
     }
     console.error('[openview] the render bridge failed for an unexpected reason', error);

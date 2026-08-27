@@ -2,11 +2,7 @@ import { useEffect, useState } from 'react';
 import { type CatalogueView, downloadPdf, fetchCatalogue, RenderRefusal } from './client.js';
 
 /**
- * Le parcours de recette du lot : choisir un modèle, choisir un jeu de données, télécharger le PDF.
- *
- * Isolé dans son composant plutôt qu'ajouté à `App.tsx`, parce que c'est la seule partie de cette
- * page qui dépend d'un serveur : sous `vite build` les deux routes n'existent pas, et le panneau
- * affiche alors son refus au lieu de casser la page.
+ * Component for selecting templates/datasets and triggering PDF download via dev bridge.
  */
 
 const panelStyle = {

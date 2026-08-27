@@ -10,13 +10,7 @@ import {
 import { LOGO_PNG } from './fixtures.js';
 
 /**
- * The acceptance document: one sheet, a logo, a five-column table, computed money and dates, two
- * bands and two appearances.
- *
- * It is shaped like a bill because that is the hardest document the roadmap names, and its field
- * names are this fixture's own -- `order`, `rows`, `issuer`. Nothing in the engine or in this
- * adapter reads a name: the same structure prints a statement or a delivery note under a completely
- * different vocabulary.
+ * Reference acceptance document fixture for Puppeteer PDF rendering validation.
  */
 
 const rowAmount: PrintableExpression = {
@@ -259,7 +253,11 @@ const orUndefined = (style: Record<string, unknown>): Record<string, unknown> | 
  * paths across the two appearances are mechanical instead of a coincidence.
  */
 export function referenceDocument(appearance: Appearance): Template {
-  return parseTemplate({
+  return parseTemplate(referenceDocumentRaw(appearance));
+}
+
+function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
+  return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     id: 'tpl_reference',
     name: 'Reference document',
@@ -498,6 +496,149 @@ export function referenceDocument(appearance: Appearance): Template {
         },
       ],
     },
+  };
+}
+
+/** One zone of the heading grid: its position, its spans, and the blocks it holds. */
+function headingZone(
+  id: string,
+  position: Record<string, number>,
+  children: readonly Record<string, unknown>[],
+): Record<string, unknown> {
+  return { ...position, content: { type: 'container', id, children } };
+}
+
+/**
+ * The heading of the C11 recette: twelve columns, six rows of four millimetres.
+ *
+ * Twelve because 3, 4 and 5 columns divide it cleanly for this model -- the engine reserves
+ * neither the number nor any vocabulary. The mark spans four rows to prove `rowSpan` on a zone a
+ * bitmap really constrains.
+ */
+function headingGrid(appearance: Appearance): Record<string, unknown> {
+  return {
+    type: 'grid',
+    id: 'heading',
+    columns: 12,
+    rows: 6,
+    step: 4,
+    box: orUndefined(appearance.stripe),
+    items: [
+      headingZone('zone-mark', { row: 1, column: 1, rowSpan: 4, columnSpan: 3 }, [
+        { type: 'image', id: 'grid-mark', src: LOGO_PNG, alt: 'issuer mark' },
+      ]),
+      headingZone('zone-title', { row: 1, column: 4, rowSpan: 2, columnSpan: 5 }, [
+        {
+          type: 'text',
+          id: 'grid-title',
+          typography: { ...appearance.body, bold: true },
+          content: [{ kind: 'binding', value: title }],
+        },
+      ]),
+      headingZone('zone-reference', { row: 1, column: 9, rowSpan: 2, columnSpan: 4 }, [
+        {
+          type: 'text',
+          id: 'grid-reference',
+          typography: appearance.body,
+          align: 'end',
+          content: [
+            { kind: 'literal', text: 'Reference ' },
+            {
+              kind: 'binding',
+              value: { kind: 'path', path: 'order.reference' },
+              typography: appearance.accent,
+            },
+          ],
+        },
+      ]),
+    ],
+  };
+}
+
+/** A full-sheet layer whose content sits in one zone of a three-by-three page grid. */
+function sheetLayer(
+  plane: 'background' | 'foreground',
+  opacity: number | undefined,
+  id: string,
+  zone: { row: number; column: number },
+  children: readonly Record<string, unknown>[],
+): Record<string, unknown> {
+  return {
+    plane,
+    ...(opacity === undefined ? {} : { opacity }),
+    content: {
+      type: 'container',
+      id,
+      children: [
+        {
+          type: 'grid',
+          id: `${id}-grid`,
+          columns: 3,
+          rows: 3,
+          step: 99,
+          items: [{ ...zone, content: { type: 'container', id: `${id}-zone`, children } }],
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * The C11 recette: the same sixty-line statement, its title moved onto a twelve-column heading
+ * grid, painted over a paper background, a faint watermark and a stamped mark in front.
+ *
+ * Built from the same raw document so that adding or removing the layers is the ONLY difference
+ * the invariance oracle has to explain.
+ */
+export function layeredReferenceDocument(appearance: Appearance, layers = true): Template {
+  const raw = referenceDocumentRaw(appearance);
+  const page = raw.page;
+  const root = raw.root;
+  if (
+    typeof page !== 'object' ||
+    page === null ||
+    typeof root !== 'object' ||
+    root === null ||
+    !('children' in root) ||
+    !Array.isArray(root.children)
+  ) {
+    throw new Error('the reference document changed shape');
+  }
+  /* The plain title is replaced by the heading grid, which carries it in a zone. */
+  const [, ...afterTitle] = root.children;
+  return parseTemplate({
+    ...raw,
+    page: layers
+      ? {
+          ...page,
+          layers: [
+            {
+              plane: 'background',
+              content: {
+                type: 'container',
+                id: 'paper',
+                box: { background: '#fdfaf2' },
+                children: [],
+              },
+            },
+            sheetLayer('background', 0.12, 'watermark', { row: 2, column: 2 }, [
+              {
+                type: 'text',
+                id: 'watermark-text',
+                align: 'center',
+                /* Sized to hold 'DUPLICATA' as one unbreakable word inside a 70 mm zone: a larger
+                   size would be a horizontal overflow, and the engine refuses those. */
+                typography: { ...appearance.title, sizePt: 26 },
+                content: [{ kind: 'literal', text: 'DUPLICATA' }],
+              },
+            ]),
+            sheetLayer('foreground', 0.85, 'stamp', { row: 3, column: 3 }, [
+              { type: 'image', id: 'stamp-mark', src: LOGO_PNG, alt: 'stamp' },
+            ]),
+          ],
+        }
+      : page,
+    root: { ...root, children: [headingGrid(appearance), ...afterTitle] },
   });
 }
 

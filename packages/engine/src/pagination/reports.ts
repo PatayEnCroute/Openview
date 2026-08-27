@@ -1,6 +1,7 @@
 import type { MaterialPageReport, OccurrenceKey } from '../document/types.js';
 import { refusal } from '../errors.js';
 import type { CellFragment, MaterialFragment, TableFragment } from './types.js';
+import { wholeFragment } from './whole.js';
 
 const NOT_FINITE =
   'The contributions a page carries forward add up to something that is not a finite number, so no page report can be written from them. Read `details.pageNumber` for the page involved; the values themselves are deliberately not repeated.';
@@ -50,6 +51,11 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
       if (fragment.kind === 'table') {
         table(fragment);
       }
+      if (fragment.kind === 'grid') {
+        /* A grid is atomic, so every zone -- and every contributing row inside one -- finishes on
+           the page that holds the grid. */
+        walk(fragment.source.items.map((item) => wholeFragment(item.content)));
+      }
     }
   }
 
@@ -77,15 +83,7 @@ export interface ReportedPage {
 }
 
 /**
- * Pairs each page with the raw report it carries in.
- *
- * Cumulative and INCOMING: page `p` carries the sum of every contribution whose row finished on a
- * page strictly before it, so the first page always carries zero. Each total is recomputed from the
- * materialisation ranks rather than accumulated from the page before it, because an IEEE-754 sum
- * depends on the order of its terms and a report must not depend on the order pages were walked in.
- *
- * Rounding is not applied here: each marker declares its own, so the raw total is what travels and
- * two markers of different roundings write two spellings of one sum.
+ * Pairs each page fragment root with its incoming cumulative page report sum.
  */
 export function withIncomingReports(
   roots: readonly (readonly MaterialFragment[])[],

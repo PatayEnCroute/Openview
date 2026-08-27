@@ -7,6 +7,8 @@ export {
   PAGE_SETUP_SCHEMA_SATISFIES_TYPE,
   PageBandSchema,
   PageBandsSchema,
+  PageLayerSchema,
+  PageLayersSchema,
   PageMarginsSchema,
   PageSetupSchema,
   SheetSchema,
@@ -14,10 +16,18 @@ export {
 export type {
   PageBand,
   PageBandOccurrence,
+  PageLayer,
+  PageLayerPlane,
   PageMargins,
   PageSetup,
   PrintableArea,
   Sheet,
   StandardSheetName,
 } from './types.js';
-export { MAX_SHEET_MM, MIN_SHEET_MM, PAGE_BAND_OCCURRENCES, STANDARD_SHEETS_MM } from './types.js';
+export {
+  MAX_SHEET_MM,
+  MIN_SHEET_MM,
+  PAGE_BAND_OCCURRENCES,
+  PAGE_LAYER_PLANES,
+  STANDARD_SHEETS_MM,
+} from './types.js';

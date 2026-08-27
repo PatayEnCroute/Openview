@@ -6,8 +6,7 @@ import { validTemplate } from './compatibility-fixtures.js';
 
 describe('migrateToCurrent', () => {
   it('walks a document up the chain one step at a time', () => {
-    // The synthetic step is COMPOSED WITH THE REAL REGISTRY, and that composition is the point:
-    // the synthetic chain alone stops at version 1 and the run refuses a broken chain.
+    // The synthetic step is composed with the real registry to test chained execution.
     const chain: readonly TemplateMigration[] = [
       {
         from: 0,
@@ -37,6 +36,33 @@ describe('migrateToCurrent', () => {
 
   it('leaves an up-to-date document untouched', () => {
     expect(migrateToCurrent(validTemplate)).toStrictEqual(validTemplate);
+  });
+
+  it('stamps a hand-made v9 already carrying a grid and layers without touching either', () => {
+    // The version guard reads the stamp, never the content: a document stamped 9 that already
+    // carries the version 10 capabilities comes out stamped current with both intact.
+    const early = {
+      ...validTemplate,
+      schemaVersion: 9,
+      page: {
+        ...validTemplate.page,
+        layers: [
+          { plane: 'background', content: { type: 'container', id: 'paper', children: [] } },
+        ],
+      },
+      root: {
+        type: 'container',
+        id: 'root',
+        children: [{ type: 'grid', id: 'g', columns: 2, rows: 2, step: 5, items: [] }],
+      },
+    };
+
+    const migrated = migrateToCurrent(early);
+
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const { schemaVersion: _stamped, ...restOfMigrated } = migrated;
+    const { schemaVersion: _stored, ...restOfStored } = early;
+    expect(restOfMigrated).toStrictEqual(restOfStored);
   });
 
   it('refuses a document written by a newer release', () => {

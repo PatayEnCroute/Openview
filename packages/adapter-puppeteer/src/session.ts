@@ -11,12 +11,7 @@ import { assertPrintableImages } from './image-source.js';
 import { measureInPage } from './measure.js';
 
 /**
- * Print options, every one of them stated.
- *
- * `preferCSSPageSize` is what makes the sheet come from the template: without it Chromium prints
- * Letter whatever `@page` says. `printBackground` keeps fills and rules. `displayHeaderFooter` stays
- * off because the bands belong to the model. No `path`, so the bytes are returned without a
- * temporary file, and no `format`, because this adapter decides no sheet.
+ * Explicit Puppeteer PDF generation options ensuring CSS page dimensions and backgrounds are preserved.
  *
  * @see https://pptr.dev/api/puppeteer.pdfoptions
  */
@@ -39,11 +34,7 @@ const AFTER_CLOSE =
   'This layout session is closed. A session belongs to one render, and reopening a browser mid-render would measure a document in one environment and print it in another.';
 
 /**
- * Aborts every request the page attempts.
- *
- * The handler stays synchronous and checks `isInterceptResolutionHandled`, as the interception guide
- * requires. `data:` URIs are let through because they raise no request in the first place, and
- * about:blank is the document the page starts on.
+ * Aborts external network requests while allowing inline data URIs and blank documents.
  *
  * @see https://pptr.dev/guides/network-interception
  */
@@ -65,12 +56,7 @@ async function refuseNetwork(page: Page): Promise<void> {
 }
 
 /**
- * One browser, one context and one page, opened once and reused for every measurement and the
- * single print of one render.
- *
- * Reusing the page is not a saving, it is the contract: the cuts are chosen from heights this page
- * reported, and printing them anywhere else would print a layout nobody measured. Pooling,
- * concurrency ceilings and timeouts belong to the hardening that comes with remote resources.
+ * Opens a dedicated browser session for layout measurement and PDF printing during a single render.
  */
 export async function openPuppeteerSession(
   resources: PdfRenderResources,

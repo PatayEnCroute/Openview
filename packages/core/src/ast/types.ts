@@ -5,10 +5,7 @@ interface NodeBase {
   /** Unique and stable identifier of the node. */
   readonly id: string;
   /**
-   * Asks a renderer to keep each materialised occurrence of this node on a single page. Absence
-   * permits fragmentation without ordering it, and an occurrence no fresh page can hold falls back
-   * to the ordinary policy of its kind.
-   *
+   * Asks renderer to keep each materialised occurrence of this node on a single page.
    * @see docs/adr/0009-les-blocs-insecables.md
    */
   readonly keepTogether?: true | undefined;
@@ -183,8 +180,54 @@ export interface TableNode extends NodeBase {
   readonly box?: BoxStyle | undefined;
 }
 
+/** Minimum number of tracks a grid declares on each axis. */
+export const MIN_GRID_TRACKS = 1;
+
+/** Maximum number of tracks a grid declares on each axis. */
+export const MAX_GRID_TRACKS = 1000;
+
+/**
+ * One rectangular zone of a grid: a 1-based position, optional spans, and a container of blocks.
+ *
+ * A structural value, not a document node: the container carries the stable id, the style and the
+ * children. An absent span means one track; a written span starts at two, so one fact has one
+ * persisted spelling.
+ */
+export interface GridItem {
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan?: number | undefined;
+  readonly columnSpan?: number | undefined;
+  readonly content: ContainerNode;
+}
+
+/**
+ * Grid block node: equal-width columns, rows of a declared vertical step, and rectangular zones
+ * that never overlap.
+ *
+ * The width of a column is derived from the parent's content width; only the vertical step is
+ * stored, in millimeters. The grid's content height is exactly `rows * step`: content never
+ * resizes a track.
+ */
+export interface GridNode extends NodeBase {
+  readonly type: 'grid';
+  readonly columns: number;
+  readonly rows: number;
+  /** Height of one grid row inside the content box, in millimeters. */
+  readonly step: number;
+  readonly items: readonly GridItem[];
+  readonly box?: BoxStyle | undefined;
+}
+
 /** Nodes allowed in the block flow. */
-export type BlockNode = TextNode | ImageNode | ContainerNode | LoopNode | ConditionNode | TableNode;
+export type BlockNode =
+  | TextNode
+  | ImageNode
+  | ContainerNode
+  | LoopNode
+  | ConditionNode
+  | TableNode
+  | GridNode;
 
 /** Complete union of document AST nodes. */
 export type DocumentNode = BlockNode | TableRowNode | TableRowGroupNode;

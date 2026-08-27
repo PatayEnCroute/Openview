@@ -41,6 +41,8 @@ export function wholeFragment(block: MaterialBlock): MaterialFragment {
     }
     case 'image':
       return { kind: 'image', source: block };
+    case 'grid':
+      return { kind: 'grid', source: block };
     case 'container':
       return {
         kind: 'container',

@@ -10,12 +10,7 @@ import {
 } from './reference-invoice.js';
 
 /**
- * Le catalogue local du playground : deux apparences du même modèle et deux jeux de données
- * courts, désignés par des identifiants.
- *
- * Le pont de développement n'accepte QUE ces identifiants. Il ne reçoit jamais un modèle ni un
- * jeu de données arbitraires : ce serait un service de rendu, et un service de rendu se durcit
- * avant de s'exposer.
+ * Local playground catalogue entries for templates and datasets.
  */
 
 export interface CatalogueEntry<TPayload> {
@@ -47,7 +42,7 @@ export const DATASETS: readonly CatalogueEntry<EvaluationScope>[] = [
   },
 ];
 
-/** Ce que le client reçoit : des identifiants et des libellés, jamais une charge utile. */
+/** Summary of catalogue entries exposed to the client. */
 export interface CatalogueSummary {
   readonly templates: readonly { readonly id: string; readonly label: string }[];
   readonly datasets: readonly { readonly id: string; readonly label: string }[];
@@ -62,7 +57,7 @@ export function catalogueSummary(): CatalogueSummary {
   return { templates: summaryOf(TEMPLATES), datasets: summaryOf(DATASETS) };
 }
 
-/** Résout un identifiant, ou rien. Un identifiant inconnu est refusé avant tout rendu. */
+/** Resolves an entry by its unique identifier. */
 export function entryOf<TPayload>(
   entries: readonly CatalogueEntry<TPayload>[],
   id: unknown,
@@ -70,7 +65,7 @@ export function entryOf<TPayload>(
   return typeof id === 'string' ? entries.find((entry) => entry.id === id) : undefined;
 }
 
-/** Nom de fichier explicite, composé des deux identifiants choisis. */
+/** Generates a download filename based on selected template and dataset ids. */
 export function downloadName(templateId: string, datasetId: string): string {
   return `openview-${templateId}-${datasetId}.pdf`;
 }

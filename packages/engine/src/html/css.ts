@@ -27,6 +27,9 @@ export const CSS_CLASSES = {
   table: 'ov-table',
   cell: 'ov-cell',
   marker: 'ov-marker',
+  grid: 'ov-grid',
+  gridItem: 'ov-grid-item',
+  layer: 'ov-layer',
 } as const;
 
 /**
@@ -75,17 +78,18 @@ const COMMON = [
   /* Kerning off and no ligature, so the width of a marker is the sum of its digit advances and the
      reserve measured on one digit is a real bound. */
   `.${CSS_CLASSES.marker}{display:inline-block;font-kerning:none;font-variant-ligatures:none;overflow:hidden;vertical-align:baseline}`,
+  `.${CSS_CLASSES.grid}{display:grid}`,
+  /* No overflow:hidden anywhere: a zone whose content escapes is measured and refused, never
+     clipped. min-width 0 keeps a long word from widening a 1fr track past its equal share. */
+  `.${CSS_CLASSES.gridItem}{min-width:0;min-height:0;position:relative}`,
+  /* A layer covers the whole sheet, margins included, and consumes no place in the flow. Its
+     single container child is stretched so a background it declares paints the full sheet. */
+  `.${CSS_CLASSES.layer}{position:absolute;top:0;left:0;width:100%;height:100%}`,
+  `.${CSS_CLASSES.layer}>.${CSS_CLASSES.container}{height:100%}`,
 ];
 
 /**
- * The stylesheet of the printed document: several sheets, each with three slots of fixed height.
- *
- * Every value comes from the validated page setup or from a measurement, so no text of the template
- * ever enters a style block. `break-after` on every sheet but the last is what makes one box print
- * as one page and adds no blank one after the end.
- *
- * `overflow: hidden` stays a last barrier against a page that grew, never the guard: the session
- * measures the whole sequence and refuses before anything is printed.
+ * Generates the stylesheet for the paginated document based on page geometry.
  */
 export function documentCss(geometry: PageGeometry): string {
   const { sheet, margins, printable, headerReserve, footerReserve } = geometry;
@@ -182,6 +186,43 @@ export function runCss(typography: ResolvedTypography): string {
     `font-style:${typography.italic ? 'italic' : 'normal'}`,
     `color:${typography.color}`,
   ].join(';');
+}
+
+/**
+ * Inline declarations for a grid: its tracks, written from validated numbers alone, plus its box.
+ *
+ * Columns are equal fractions of the content width, `minmax(0, 1fr)` so content can never widen a
+ * track; rows are the declared step in millimetres, so content can never heighten one.
+ */
+export function gridCss(
+  columns: number,
+  rows: number,
+  step: number,
+  box: BoxStyle | undefined,
+): string {
+  const tracks =
+    `grid-template-columns:repeat(${cssNumber(columns)},minmax(0,1fr));` +
+    `grid-template-rows:repeat(${cssNumber(rows)},${mm(step)})`;
+  const boxDeclarations = boxCss(box);
+  return boxDeclarations === undefined ? tracks : `${tracks};${boxDeclarations}`;
+}
+
+/** Inline declarations placing one grid zone, 1-based with resolved spans. */
+export function gridItemCss(
+  row: number,
+  column: number,
+  rowSpan: number,
+  columnSpan: number,
+): string {
+  return (
+    `grid-row:${cssNumber(row)}/span ${cssNumber(rowSpan)};` +
+    `grid-column:${cssNumber(column)}/span ${cssNumber(columnSpan)}`
+  );
+}
+
+/** Inline declarations for one layer wrapper: its whole-layer opacity, when one is declared. */
+export function layerCss(opacity: number | undefined): string | undefined {
+  return opacity === undefined ? undefined : `opacity:${cssNumber(opacity)}`;
 }
 
 /** Inline declarations for a text block: its resolved alignment, plus its box. */

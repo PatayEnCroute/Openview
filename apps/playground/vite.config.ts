@@ -8,35 +8,12 @@ import {
   renderResponse,
 } from './dev/render-bridge.js';
 
-/**
- * The port the tooling assigned, or none.
- *
- * `.claude/launch.json` sets `autoPort`, which hands the dev server a free port
- * through `PORT` -- and Vite does not read that variable on its own, so without
- * this the assignment is silently ignored and the preview points at a port
- * nothing is listening on.
- *
- * `strictPort` goes with it deliberately: Vite's default is to walk up from a
- * busy port, which would put the server somewhere the caller was never told
- * about. When a port has been assigned, failing loudly beats drifting quietly.
- *
- * Reading the environment is fine HERE and nowhere near `core` or `engine`: this
- * is build tooling, and the `no-environment-read` plugin is scoped to those two
- * packages precisely because they must produce the same document twice.
- */
-const assignedPort = Number(process.env.PORT);
-const server =
-  Number.isInteger(assignedPort) && assignedPort > 0
-    ? { port: assignedPort, strictPort: true }
-    : {};
+/** Port assigned from environment variables if defined. */
+const port = process.env.PORT ? Number(process.env.PORT) : undefined;
+const server = port && Number.isInteger(port) && port > 0 ? { port: port, strictPort: true } : {};
 
 /**
  * Mounts the two local render routes on the DEV server only.
- *
- * `apply: 'serve'` is what keeps `vite build` free of the engine, the adapter and Chromium: the
- * plugin -- and therefore the only import of `@openview/adapter-puppeteer` in this app -- exists
- * during `pnpm dev` and nowhere else. The logic itself lives in `dev/render-bridge.ts`, which has
- * its own TypeScript pass, so this config never becomes an untested server.
  */
 function openviewRenderBridge(): Plugin {
   return {

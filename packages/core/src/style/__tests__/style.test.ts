@@ -33,26 +33,7 @@ import {
 import { RECIPE_BOX_COMPLETE, RECIPE_TYPOGRAPHY_COMPLETE, styleOfCase } from './fixtures.js';
 
 /**
- * ## Five shapes, TEN assertions: one `keyof` pair and one value pair each
- *
- * The two families are COMPLEMENTARY and never interchangeable, and that is measured rather than
- * asserted. On an eight-mutation matrix: `keyof` catches PRESENCE -- a field removed from the
- * schema, a field added to it -- and misses a TYPE drift; the value pair does the exact opposite.
- * A design writing only one family is half guarded.
- *
- * What was DROPPED from an earlier draft, on the same measurement: the five one-directional
- * `X_SATISFIES_TYPE` assertions. They never refuse ALONE -- they fire only where a mutual pair
- * fires too -- so they were five exported symbols for zero added coverage.
- *
- * AND THE TEN OF THEM ARE STILL BLIND TO ONE MUTATION, which is why the round trips below
- * exist. MEASURED: remove the `top` edge from `BoxBorderSchema` and all ten pass at exit 0,
- * while the parse silently drops the top rule. `BoxBorder` is all-optional, so the amputated
- * object stays mutually assignable, and `keyof BoxStyle` does not move because `border` is still
- * there. `ast/schemas.ts` already wrote the remedy -- "Only a runtime parsing test catches that,
- * and that is why there is one per node type" -- read here as ONE PER STYLE FIELD.
- *
- * `const` and not `it`, because there is nothing to run: the guard is the ANNOTATION, and
- * `pnpm run type-check` is what runs it. Exported so they are not reported unused.
+ * Type assignability assertions ensuring style schemas and interfaces match.
  */
 export const TYPOGRAPHY_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof TypographySchema>,
@@ -102,15 +83,7 @@ export const BOX_SPACING_IN_STEP: MutuallyAssignable<
 > = true;
 
 describe('the public surface of the package', () => {
-  it('exports the thirteen values lot C5 adds', () => {
-    // The only guard there is on the public surface: nothing else compares it to the intention, so
-    // a symbol forgotten in `index.ts` compiles and ships missing.
-    //
-    // By name and not by total: a total breaks on every later feature for a reason unrelated to this
-    // contract, and it misses a rename, which is the fault that actually costs an integrator.
-    //
-    // VALUES only, and that limit is stated rather than hidden: a TYPE does not appear in the keys
-    // of a JavaScript module, so the nine exported types cannot be reached this way.
+  it('exports the style schemas and helpers', () => {
     const values = Object.keys(core);
     const added = [
       'BorderEdgeSchema',
@@ -201,12 +174,8 @@ describe('a style survives the parse field by field', () => {
     expect(TextNodeSchema.parse(node)).toStrictEqual(node);
   });
 
-  it('REFUSES an empty style object, because absence is the one spelling of "no style"', () => {
-    // An editor that opens a style panel and sets nothing legitimately BUILDS an empty box; what
-    // it must not do is SAVE one. Accepting it would store two spellings of one fact, and four
-    // already-planned consumers distinguish them -- a diff, a dirty-state flag, a content hash,
-    // an undo history. NOT ONE OF THEM READS A VALUE, which is why "every field is optional so
-    // the read yields undefined either way" answered the wrong question.
+  it('refuses an empty style object', () => {
+    // An empty style object is refused to ensure single canonical representation of absent styles.
     for (const schema of [BoxStyleSchema, TypographySchema, BoxBorderSchema]) {
       const refusal = schema.safeParse({});
 
@@ -231,29 +200,18 @@ describe('a style survives the parse field by field', () => {
   });
 
   it('strips a key it does not know, so a style parse is not a persistence boundary', () => {
-    // `z.object` and not `z.strictObject`: the price is this silent loss WITHIN a version, which
-    // the schema stamp does not cover. `strictObject` was refused because its refusal reports an
-    // EMPTY path, so lot C8 could not point at the offending key from the path.
     expect(TypographySchema.parse({ sizePt: 10, letterSpacing: 0.2 })).toStrictEqual({
       sizePt: 10,
     });
   });
 
   it('accepts both letter cases of a colour, and stores them UNCHANGED', () => {
-    // The decision and its price in one assertion: nothing folds the case on parse, so an
-    // equality comparison between the two spellings fails and a consumer that compares colours
-    // folds the case itself.
     expect(ColorSchema.parse('#FFAA00')).toBe('#FFAA00');
     expect(ColorSchema.parse('#ffaa00')).toBe('#ffaa00');
     expect(ColorSchema.parse('#FFAA00')).not.toBe(ColorSchema.parse('#ffaa00'));
   });
 
   it('REFUSES a rule of zero width, and the message says how to spell "no rule"', () => {
-    // The ONE assertion of this file that turns on the shape of `BoxBorder` rather than on a
-    // bound. `PageMargins` has FOUR REQUIRED edges, so zero is its only spelling of "no margin"
-    // and refusing it "would be a rule of typography". `BoxBorder` has FOUR OPTIONAL edges, so
-    // absence already spells it and zero is a second spelling. Same repository, opposite shapes,
-    // opposite predicates -- and the message carries the remedy rather than a prescription.
     const refusal = BorderEdgeSchema.safeParse({ width: 0, color: '#1b3a6f' });
 
     expect(refusal.success).toBe(false);
@@ -262,10 +220,6 @@ describe('a style survives the parse field by field', () => {
         'A rule has a positive width; omit the edge to declare no rule',
       );
     }
-    // And the counter-check, because a predicate that refused everything would pass the test
-    // above: 0.28 mm is 0.8 pt, a standard editorial thickness, and it is the value the
-    // two-decimal formula of ADR 0006 would have REFUSED -- which is why no such formula is
-    // written here.
     expect(BorderEdgeSchema.parse({ width: 0.28, color: '#1b3a6f' }).width).toBe(0.28);
   });
 
@@ -303,17 +257,10 @@ describe('what a style refuses, with the code and the path', () => {
   });
 
   it('names ONE fault at a time: a declared-but-wrong field is not ALSO reported as empty', () => {
-    // The cut-off rule of `checkTableWiring`, applied to the emptiness check -- and it is what
-    // makes every other assertion in this block a single-element array. Without it, MEASURED,
-    // `{ color: 'red' }` yields TWO issues: the real one, plus a FALSE "An empty style object is
-    // not a style" whose path is EMPTY, because an optional field that failed its own check is
-    // DROPPED from the output the check inspects. An author who has one thing to fix is told
-    // once, and lot C8 has one thing to narrate.
     expect(issuesOf(TypographySchema, { color: 'red' })).toHaveLength(1);
     expect(
       issuesOf(BoxStyleSchema, { padding: { top: -1, right: 0, bottom: 0, left: 0 } }),
     ).toHaveLength(1);
-    // The counter-check, so the cut-off can never be read as "the emptiness check never fires".
     expect(issuesOf(TypographySchema, {})).toStrictEqual([
       { code: 'custom', path: [], message: 'An empty style object is not a style; omit the field' },
     ]);
@@ -323,7 +270,6 @@ describe('what a style refuses, with the code and the path', () => {
     expect(issuesOf(TypographySchema, { color: 'red' })[0]?.message).toBe(
       'A colour is six hexadecimal digits behind a hash, as #1b3a6f',
     );
-    // No interpolation of the document, per ADR 0003: an error payload stays safe to log.
     expect(issuesOf(BoxStyleSchema, { background: '#GGGGGG' })).toStrictEqual([
       {
         code: 'invalid_format',
@@ -341,7 +287,7 @@ describe('what a style refuses, with the code and the path', () => {
     expect(issuesOf(TypographySchema, value)).toStrictEqual([{ code, path: ['sizePt'], message }]);
   });
 
-  it('refuses NaN and Infinity, and the Infinity message is the one lot C8 inherits', () => {
+  it('refuses NaN and Infinity', () => {
     expect(issuesOf(TypographySchema, { sizePt: Number.NaN })).toStrictEqual([
       {
         code: 'invalid_type',
@@ -349,8 +295,6 @@ describe('what a style refuses, with the code and the path', () => {
         message: 'Invalid input: expected number, received NaN',
       },
     ]);
-    // MEASURED and recorded rather than fixed: "expected number, received number". Six numeric
-    // positions of this lot carry the defect, and it is a reserve already booked to lot C8.
     expect(issuesOf(TypographySchema, { sizePt: Number.POSITIVE_INFINITY })).toStrictEqual([
       {
         code: 'invalid_type',
@@ -401,14 +345,6 @@ describe('what a style refuses, with the code and the path', () => {
   });
 
   it('ACCEPTS justify on a text node and REFUSES it on a column, the whole boundary', () => {
-    // The two halves of one decision, in one `it`, because separating them would let either half
-    // pass alone -- and either half alone is the bug. `justify` is what `ast/types.ts` used to
-    // promise this lot; the lot delivers it on the tuple that has runs, and NOT on the one that
-    // states a default for a whole column.
-    //
-    // The refusal message on the column is the THIRD form of incompatibility -- an older build
-    // meets `invalid_value` on a discriminant path, with no typed error and no version named --
-    // and it is exactly why this tuple is not the one that was widened.
     expect(
       TextNodeSchema.safeParse({ type: 'text', id: 't', content: [], align: 'justify' }).success,
     ).toBe(true);
@@ -465,16 +401,7 @@ describe('what a style refuses, with the code and the path', () => {
 
 describe('the ninth accrual site, which no type assertion can guard', () => {
   it('carries a style at ALL NINE sites through a full parseTemplate round trip', () => {
-    // `Template` IS THE NINTH SITE AND IT IS STRUCTURALLY UNGUARDABLE. Its type is INFERRED from
-    // its schema, so a `TEMPLATE_KEYS_IN_STEP` pair would compare an annotation with itself --
-    // tautological. It is also one of the nine sites the mutation matrix measured at exit 0.
-    //
-    // The only net left is a JSON round trip on a literal that CARRIES the field, and the
-    // repository's two existing round trips (`table.test.ts`, `page.test.ts`) each see only the
-    // sites their own fixture happens to reach. This `it` is the one that reaches all nine: five
-    // `box` (text, image, container, table, tableRow), four `typography` (text, literal, binding,
-    // pageField) and the `align`, the last two INSIDE A PAGE BAND -- which is where the
-    // backward-compatibility measurement showed the loss running deepest.
+    // Verifies full round-trip preservation of style fields across all nine AST sites.
     const nineSites = {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       id: 'facture-c5',

@@ -30,7 +30,7 @@ const SHADOWS_ROOT_MESSAGE =
 const SHADOWS_ALIAS_MESSAGE =
   'This alias carries the name of an alias already in scope and masks it. The innermost binding wins, so the outer item is unreachable here.';
 
-/** What one call found, in the order the traversal produced it: flow first, then header, then footer. */
+/** What one call found, in traversal order: flow, then header, then footer, then page layers. */
 export interface TemplateDataCompatibility {
   readonly compatible: boolean;
   readonly reads: readonly TemplateDataRead[];
@@ -465,7 +465,11 @@ function analyseNode(
 
   for (const slot of children) {
     for (const [index, child] of slot.nodes.entries()) {
-      analyseNode(analysis, child, [...path, ...slot.at, index]);
+      analyseNode(
+        analysis,
+        child,
+        slot.single === true ? [...path, ...slot.at] : [...path, ...slot.at, index],
+      );
     }
   }
 
@@ -507,6 +511,10 @@ export function checkTemplateDataCompatibility(
   analyseNode(analysis, template.root, ['root']);
   analyseBands(analysis, template.page.header, 'header');
   analyseBands(analysis, template.page.footer, 'footer');
+  /* After the positions C10 published, so the historic order of reads is preserved. */
+  for (const [index, layer] of (template.page.layers ?? []).entries()) {
+    analyseNode(analysis, layer.content, ['page', 'layers', index, 'content']);
+  }
 
   return {
     compatible: analysis.diagnostics.length === 0,

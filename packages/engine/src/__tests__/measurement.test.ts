@@ -37,6 +37,7 @@ function reply(overrides: Partial<PdfLayoutMeasurement> = {}): PdfLayoutMeasurem
     lines: [],
     images: [],
     escaping: [],
+    overflowingGridItems: [],
     clippedMarkerCount: 0,
     ...overrides,
   };
@@ -173,6 +174,18 @@ describe('a session reply the algorithm refuses', () => {
       expect.objectContaining({ code: 'layout-measurement-failed' }),
     );
   });
+
+  it.each([
+    ['a reply missing the grid overflow observation', { overflowingGridItems: undefined }],
+    ['a grid overflow observation that is not a list', { overflowingGridItems: 'zone' }],
+    ['a grid overflow id that is not a string', { overflowingGridItems: [1] }],
+  ])('refuses %s as an incomplete reply', (_label, overrides) => {
+    // Smuggled through JSON, as a real port defect would arrive: the static type cannot write it.
+    const raw: PdfLayoutMeasurement = JSON.parse(JSON.stringify({ ...reply(), ...overrides }));
+    expect(refusalFrom(() => validateMeasurement(raw, ASKED, SHEET)).code).toBe(
+      'layout-measurement-failed',
+    );
+  });
 });
 
 describe('the final check before anything is printed', () => {
@@ -196,6 +209,7 @@ describe('the final check before anything is printed', () => {
     lines: [],
     images: [],
     escaping: [],
+    overflowingGridItems: [],
     clippedMarkerCount: 0,
     pages: document.pages.map(() => ({
       page: box(document.sheet.width * PX_PER_MM, document.sheet.height * PX_PER_MM),
@@ -299,6 +313,15 @@ describe('the final check before anything is printed', () => {
     const refusal = refusalFrom(() => verifyLayout(document, escaped, PX_PER_MM));
     expect(refusal.code).toBe('layout-measurement-failed');
     expect(refusal.details.nodeId).toBe('wide');
+  });
+
+  it('refuses a grid zone whose content reached past its box, before anything is printed', () => {
+    // A refusal, never an overflow to settle: no cut of the flow shrinks the content of a zone.
+    const document = paginated();
+    const overflowed = laidOut(document, { overflowingGridItems: ['zone-logo'] });
+    const refusal = refusalFrom(() => verifyLayout(document, overflowed, PX_PER_MM));
+    expect(refusal.code).toBe('grid-content-overflow');
+    expect(refusal.details.nodeId).toBe('zone-logo');
   });
 
   it('refuses a page marker that holds more than the width reserved for it', () => {

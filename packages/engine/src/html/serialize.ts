@@ -37,6 +37,7 @@ const ATTRIBUTE_ORDER = [
   'data-openview-key',
   'data-openview-run',
   'data-openview-region',
+  'data-openview-grid-item',
   'data-openview-page',
 ] as const;
 

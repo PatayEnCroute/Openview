@@ -1,13 +1,7 @@
 import { type DocumentImage, DocumentRenderError } from '@openview/engine';
 
 /**
- * The image sources this backend can print: base64 bitmaps embedded in the document itself.
- *
- * Narrower than what an `ImageNode` may declare, and deliberately so. An http source is a request
- * leaving the process, a path or an asset key needs a resolution channel, and svg is a document
- * with its own script and reference surface. None of the three has the allow-list, the bounds and
- * the timeouts that would make it safe here yet, so this backend refuses them rather than pretending
- * the model is invalid.
+ * Accepted embedded base64 bitmap image MIME prefixes for Puppeteer rendering.
  */
 export const ACCEPTED_IMAGE_PREFIXES = [
   'data:image/png;base64,',

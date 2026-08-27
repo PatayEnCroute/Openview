@@ -33,6 +33,8 @@ export interface FakeLayout {
   readonly overflowRounds?: number | undefined;
   /** Declaration ids the fake says painted outside their sheet. */
   readonly escaping?: readonly string[] | undefined;
+  /** Grid-zone container ids the fake says hold content past their zone. */
+  readonly overflowingGridItems?: readonly string[] | undefined;
   /** Images the fake says the page holds. */
   readonly images?: PdfLayoutMeasurement['images'] | undefined;
   /** How many page markers the fake says hold more than their reserved width shows. */
@@ -164,6 +166,7 @@ export function fakeStrategy(
               lines,
               images: layout.images ?? [],
               escaping: composed ? (layout.escaping ?? []) : [],
+              overflowingGridItems: composed ? (layout.overflowingGridItems ?? []) : [],
               clippedMarkerCount: composed ? (layout.clippedMarkers ?? 0) : 0,
               pages: pagesOf(document.html, document.sheet, layout, overflowing),
             });

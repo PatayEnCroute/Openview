@@ -48,6 +48,14 @@ function blockUnits(blocks: readonly MaterialBlock[]): number {
       case 'table':
         units += 1 + rowUnits(block.header) + rowUnits(block.body) + rowUnits(block.footer);
         break;
+      case 'grid':
+        /* Atomic for pagination, so one unit is enough; the contents still count so a marker in a
+           zone keeps its reserve bounded by the same argument as everywhere else. */
+        units += 1;
+        for (const item of block.items) {
+          units += blockUnits([item.content]);
+        }
+        break;
       default: {
         const exhaustive: never = block;
         throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
