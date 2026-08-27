@@ -2,50 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Expression } from '../../expression/expression.js';
 import { type DocumentNode, DocumentNodeSchema } from '../nodes.js';
 import { childrenOf, collectDataPaths, findNodeById, nodeReads, walk } from '../traverse.js';
-import { RECIPE_TABLE, RECIPE_TEMPLATE } from './fixtures.js';
-
-const discountApplies: Expression = {
-  kind: 'compare',
-  op: 'gt',
-  left: { kind: 'path', path: 'line.discount' },
-  right: { kind: 'literal', value: 0 },
-};
-
-const tree: DocumentNode = {
-  type: 'container',
-  id: 'root',
-  children: [
-    { type: 'text', id: 'title', content: [{ kind: 'literal', text: 'Invoice' }] },
-    {
-      type: 'loop',
-      id: 'lines',
-      each: { kind: 'path', path: 'invoice.lines' },
-      as: 'line',
-      children: [
-        { type: 'image', id: 'thumb', src: 'thumb.png' },
-        {
-          type: 'condition',
-          id: 'discounted',
-          when: discountApplies,
-          children: [
-            {
-              type: 'text',
-              id: 'label',
-              content: [
-                { kind: 'literal', text: 'Discount: ' },
-                { kind: 'binding', value: { kind: 'path', path: 'line.discount' } },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  ],
-};
+import { DISCOUNT_TREE, RECIPE_TABLE, RECIPE_TEMPLATE } from './fixtures.js';
 
 describe('nodeReads', () => {
   it('reports the expression a loop evaluates and the alias it binds', () => {
-    const loop = findNodeById(tree, 'lines');
+    const loop = findNodeById(DISCOUNT_TREE, 'lines');
     if (loop?.type !== 'loop') {
       throw new Error('the fixture should carry a loop');
     }
@@ -54,7 +15,7 @@ describe('nodeReads', () => {
   });
 
   it('reports only the binding runs of a text block', () => {
-    const label = findNodeById(tree, 'label');
+    const label = findNodeById(DISCOUNT_TREE, 'label');
     if (label?.type !== 'text') {
       throw new Error('the fixture should carry a text node');
     }
@@ -80,7 +41,7 @@ describe('childrenOf', () => {
   });
 
   it('reports the direct children of every container kind', () => {
-    expect(childrenOf(tree).map((child) => child.id)).toStrictEqual(['title', 'lines']);
+    expect(childrenOf(DISCOUNT_TREE).map((child) => child.id)).toStrictEqual(['title', 'lines']);
   });
 
   it('reports the three sections of a table in flow order', () => {
@@ -97,9 +58,10 @@ describe('childrenOf', () => {
       throw new Error('the recipe body should carry a row group');
     }
 
-    // Four of the eight branches hand back the stored array; the four others allocate. A
-    // consumer that memoised on the identity of the result would be wrong six times out of
-    // eight, and `childrenOf(text) === childrenOf(text)` is what says so.
+    // The stored array when the node keeps its children in a single run, a fresh one otherwise --
+    // so the split follows the shape of the node, not its kind. A consumer that memoised on the
+    // identity of the result would be wrong wherever a node holds more than one run, and
+    // `childrenOf(text) === childrenOf(text)` is what says so.
     expect(childrenOf(group)).toBe(group.rows);
     expect(childrenOf(RECIPE_TABLE)).not.toBe(RECIPE_TABLE.header);
     const leaf = RECIPE_TABLE.header[0]?.cells[0]?.children[0];
@@ -107,6 +69,18 @@ describe('childrenOf', () => {
       throw new Error('the recipe header should carry a cell holding a block');
     }
     expect(childrenOf(leaf)).not.toBe(childrenOf(leaf));
+  });
+
+  it('hands back the stored array for a row of one cell, and a fresh one past that', () => {
+    // The case the rule turns on: a row holds one run of children per cell, so the SAME kind
+    // answers with the stored array at one cell and with a fresh array at two.
+    const cell = { columnId: 'c', children: [{ type: 'text' as const, id: 'only', content: [] }] };
+    const single: DocumentNode = { type: 'tableRow', id: 'one', cells: [cell] };
+    const double: DocumentNode = { type: 'tableRow', id: 'two', cells: [cell, cell] };
+
+    expect(childrenOf(single)).toBe(cell.children);
+    expect(childrenOf(double)).not.toBe(cell.children);
+    expect(childrenOf(double).map((child) => child.id)).toStrictEqual(['only', 'only']);
   });
 
   it('flattens the cells of a row, so every block of a table is reachable', () => {
@@ -138,7 +112,7 @@ describe('childrenOf', () => {
 
 describe('walk', () => {
   it('yields parents before children, depth first', () => {
-    expect([...walk(tree)].map((node) => node.id)).toStrictEqual([
+    expect([...walk(DISCOUNT_TREE)].map((node) => node.id)).toStrictEqual([
       'root',
       'title',
       'lines',
@@ -157,11 +131,11 @@ describe('walk', () => {
 
 describe('findNodeById', () => {
   it('finds a deeply nested node', () => {
-    expect(findNodeById(tree, 'label')?.type).toBe('text');
+    expect(findNodeById(DISCOUNT_TREE, 'label')?.type).toBe('text');
   });
 
   it('returns undefined rather than throwing when the id is absent', () => {
-    expect(findNodeById(tree, 'nope')).toBeUndefined();
+    expect(findNodeById(DISCOUNT_TREE, 'nope')).toBeUndefined();
   });
 
   it('reaches every node of the table through childrenOf, cells included', () => {
@@ -186,7 +160,7 @@ describe('collectDataPaths', () => {
     // { invoice } was told a key was missing when nothing was. `line.discount`
     // appears twice in the tree here, in the condition and in the binding, and
     // neither occurrence may leak out.
-    expect(collectDataPaths(tree)).toStrictEqual(['invoice.lines']);
+    expect(collectDataPaths(DISCOUNT_TREE)).toStrictEqual(['invoice.lines']);
   });
 
   it('reaches inside compound expressions, not just top-level paths', () => {
@@ -264,7 +238,7 @@ describe('collectDataPaths', () => {
       'facture.numero',
       'facture.lignes',
     ]);
-    // Le tableau seul : il ne lit rien de son côté, `nodeReads(table)` est NO_READS.
+    // Le tableau seul : il ne lit rien de son côté, `nodeReads(table)` ne rend aucune lecture.
     expect(collectDataPaths(RECIPE_TABLE)).toStrictEqual(['facture.lignes']);
   });
 

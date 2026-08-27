@@ -5,29 +5,10 @@
  * to one kind reaches every consumer at once instead of being declared in one traversal and
  * forgotten in another.
  */
-import type { Expression } from '../expression/expression.js';
-import type { DocumentNode } from './nodes.js';
-import { type NodeVisitor, visitNode, visitSegment } from './visitor.js';
-
-/**
- * What the runtime requires at the exact position a value is read.
- *
- * A closed vocabulary, not a type system. It lives with the AST because a position is a property of
- * the AST; which declared natures satisfy a position is a property of the catalogue.
- */
-export const DATA_EXPECTATIONS = [
-  'any',
-  'printable',
-  'number',
-  'boolean',
-  'text',
-  'civil-date',
-  'primitive',
-  'orderable',
-  'list',
-] as const;
-
-export type DataExpectation = (typeof DATA_EXPECTATIONS)[number];
+import type { Expression, PrintableExpression } from '../expression/expression.js';
+import type { DocumentNode, TableRowNode, TextNode } from './nodes.js';
+import type { DataExpectation } from './types.js';
+import { type NodeVisitor, type SegmentVisitor, visitNode, visitSegment } from './visitor.js';
 
 /** One expression a node reads, under the expectation its position imposes. */
 export interface NodeReading {
@@ -50,9 +31,15 @@ export interface NodeChildSlot {
   readonly at: readonly (string | number)[];
 }
 
-/** Everything a traversal needs of one node: what it reads, the alias it opens, its children. */
+/**
+ * Everything a traversal needs of one node: what it reads, the alias it opens, its children.
+ *
+ * `readings` is a function rather than an array so that a structural traversal -- `childrenOf`,
+ * `walk`, `findNodeById` -- never pays for the per-segment analysis of the text nodes it passes.
+ * It is not memoised: call it once and keep the result.
+ */
 export interface NodeShape {
-  readonly readings: readonly NodeReading[];
+  readonly readings: () => readonly NodeReading[];
   readonly binding: NodeBinding | undefined;
   readonly children: readonly NodeChildSlot[];
 }
@@ -61,9 +48,11 @@ const NO_READINGS: readonly NodeReading[] = [];
 const NO_BINDING = undefined;
 const NO_CHILDREN: readonly NodeChildSlot[] = [];
 
+const noReadings = (): readonly NodeReading[] => NO_READINGS;
+
 /** Shared by every node that reads nothing, opens nothing and holds nothing. */
 const EMPTY_SHAPE: NodeShape = {
-  readings: NO_READINGS,
+  readings: noReadings,
   binding: NO_BINDING,
   children: NO_CHILDREN,
 };
@@ -78,38 +67,62 @@ function blockSlot(children: readonly DocumentNode[]): readonly NodeChildSlot[] 
   return [{ nodes: children, at: ['children'] }];
 }
 
+/** The expression a segment binds, or nothing when it reads no data. */
+const SEGMENT_BINDING: SegmentVisitor<PrintableExpression | undefined> = {
+  literal: () => undefined,
+  binding: (segment) => segment.value,
+  pageField: () => undefined,
+};
+
+/** One reading per binding segment, at the index of the segment carrying it. */
+function textReadings(node: TextNode): readonly NodeReading[] {
+  const found: NodeReading[] = [];
+  for (const [index, segment] of node.content.entries()) {
+    const bound = visitSegment(segment, SEGMENT_BINDING);
+    if (bound !== undefined) {
+      found.push({ expression: bound, expectation: 'printable', at: ['content', index, 'value'] });
+    }
+  }
+  return found;
+}
+
+/**
+ * The contribution a row makes to the report the pages carry forward, when it declares one.
+ *
+ * Read in the row's own scope, so its paths belong to the row and not to the group that repeats it:
+ * an alias bound above still masks them.
+ */
+function rowReadings(node: TableRowNode): readonly NodeReading[] {
+  const { pageReport } = node;
+  return pageReport === undefined
+    ? NO_READINGS
+    : [{ expression: pageReport.value, expectation: 'number', at: ['pageReport', 'value'] }];
+}
+
 const SHAPE: NodeVisitor<NodeShape> = {
   text: (node) => ({
-    readings: node.content.flatMap((segment, index) =>
-      visitSegment<readonly NodeReading[]>(segment, {
-        literal: () => NO_READINGS,
-        binding: (bound) => [
-          { expression: bound.value, expectation: 'printable', at: ['content', index, 'value'] },
-        ],
-        pageField: () => NO_READINGS,
-      }),
-    ),
+    readings: () => textReadings(node),
     binding: NO_BINDING,
     children: NO_CHILDREN,
   }),
   image: () => EMPTY_SHAPE,
   container: (node) => ({
-    readings: NO_READINGS,
+    readings: noReadings,
     binding: NO_BINDING,
     children: blockSlot(node.children),
   }),
   loop: (node) => ({
-    readings: NO_READINGS,
+    readings: noReadings,
     binding: repeats(node.each, node.as),
     children: blockSlot(node.children),
   }),
   condition: (node) => ({
-    readings: [{ expression: node.when, expectation: 'boolean', at: ['when'] }],
+    readings: () => [{ expression: node.when, expectation: 'boolean', at: ['when'] }],
     binding: NO_BINDING,
     children: blockSlot(node.children),
   }),
   table: (node) => ({
-    readings: NO_READINGS,
+    readings: noReadings,
     binding: NO_BINDING,
     children: [
       { nodes: node.header, at: ['header'] },
@@ -118,23 +131,12 @@ const SHAPE: NodeVisitor<NodeShape> = {
     ],
   }),
   tableRowGroup: (node) => ({
-    readings: NO_READINGS,
+    readings: noReadings,
     binding: repeats(node.each, node.as),
     children: [{ nodes: node.rows, at: ['rows'] }],
   }),
-  /* A contribution is read in the row's own scope, so its paths belong to the row and not to the
-     group that repeats it: an alias bound above still masks them. */
   tableRow: (node) => ({
-    readings:
-      node.pageReport === undefined
-        ? NO_READINGS
-        : [
-            {
-              expression: node.pageReport.value,
-              expectation: 'number',
-              at: ['pageReport', 'value'],
-            },
-          ],
+    readings: () => rowReadings(node),
     binding: NO_BINDING,
     children: node.cells.map((cell, index) => ({
       nodes: cell.children,

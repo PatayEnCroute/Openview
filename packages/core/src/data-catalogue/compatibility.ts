@@ -446,7 +446,7 @@ function analyseNode(
   const { readings, binding, children } = nodeShape(node);
   const nodeId = node.id;
 
-  for (const reading of readings) {
+  for (const reading of readings()) {
     visitExpression(reading.expression, READING_VISITOR, {
       analysis,
       expectation: reading.expectation,

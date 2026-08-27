@@ -51,7 +51,7 @@ export interface NodeReads {
  */
 export function nodeReads(node: DocumentNode): NodeReads {
   const { readings, binding } = nodeShape(node);
-  const read = readings.map((reading) => reading.expression);
+  const read = readings().map((reading) => reading.expression);
   return binding === undefined
     ? { reads: read, binds: undefined }
     : { reads: [...read, binding.source.expression], binds: binding.alias };
@@ -74,14 +74,19 @@ function addCallerPaths(
 }
 
 function collectFrom(node: DocumentNode, aliases: ReadonlySet<string>, into: Set<string>): void {
-  const { reads, binds } = nodeReads(node);
-  for (const expression of reads) {
-    addCallerPaths(expression, aliases, into);
+  const { readings, binding, children } = nodeShape(node);
+  for (const reading of readings()) {
+    addCallerPaths(reading.expression, aliases, into);
+  }
+  if (binding !== undefined) {
+    addCallerPaths(binding.source.expression, aliases, into);
   }
 
-  const inner = binds === undefined ? aliases : new Set(aliases).add(binds);
-  for (const child of childrenOf(node)) {
-    collectFrom(child, inner, into);
+  const inner = binding === undefined ? aliases : new Set(aliases).add(binding.alias);
+  for (const slot of children) {
+    for (const child of slot.nodes) {
+      collectFrom(child, inner, into);
+    }
   }
 }
 

@@ -1,71 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import type { Expression } from '../../expression/expression.js';
-import type { DocumentNode, TextSegment } from '../nodes.js';
-import { walk } from '../traverse.js';
+import type { DocumentNode, DocumentNodeType, TextSegment } from '../nodes.js';
 import { visitNode, visitSegment } from '../visitor.js';
+import { DISCOUNT_TREE, ONE_NODE_PER_KIND } from './fixtures.js';
 
-const discountApplies: Expression = {
-  kind: 'compare',
-  op: 'gt',
-  left: { kind: 'path', path: 'line.discount' },
-  right: { kind: 'literal', value: 0 },
-};
-
-const tree: DocumentNode = {
-  type: 'container',
-  id: 'root',
-  children: [
-    { type: 'text', id: 'title', content: [{ kind: 'literal', text: 'Invoice' }] },
-    {
-      type: 'loop',
-      id: 'lines',
-      each: { kind: 'path', path: 'invoice.lines' },
-      as: 'line',
-      children: [
-        { type: 'image', id: 'thumb', src: 'thumb.png' },
-        {
-          type: 'condition',
-          id: 'discounted',
-          when: discountApplies,
-          children: [
-            {
-              type: 'text',
-              id: 'label',
-              content: [
-                { kind: 'literal', text: 'Discount: ' },
-                { kind: 'binding', value: { kind: 'path', path: 'line.discount' } },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  ],
-};
+const describeNode = (node: DocumentNode): string =>
+  visitNode(node, {
+    text: (n) => `text:${n.content.map((segment) => segment.kind).join('+')}`,
+    image: (n) => `image:${n.src}`,
+    container: (n) => `container:${n.children.length}`,
+    loop: (n) => `loop:${n.each.kind}`,
+    condition: (n) => `condition:${n.when.kind}`,
+    table: (n) => `table:${n.columns.length}`,
+    tableRowGroup: (n) => `tableRowGroup:${n.as}`,
+    tableRow: (n) => `tableRow:${n.cells.length}`,
+  });
 
 describe('visitNode', () => {
-  it('dispatches each node type to its own branch', () => {
-    const describeNode = (node: DocumentNode): string =>
-      visitNode(node, {
-        text: (n) => `text:${n.content.map((segment) => segment.kind).join('+')}`,
-        image: (n) => `image:${n.src}`,
-        container: (n) => `container:${n.children.length}`,
-        loop: (n) => `loop:${n.each.kind}`,
-        condition: (n) => `condition:${n.when.kind}`,
-        table: (n) => `table:${n.columns.length}`,
-        tableRowGroup: (n) => `tableRowGroup:${n.as}`,
-        tableRow: (n) => `tableRow:${n.cells.length}`,
-      });
+  it('dispatches each of the eight node types to its own branch', () => {
+    // Keyed by kind rather than walked, so this file needs nothing from the traversal module: a
+    // broken `nodeShape` branch must not be able to redden the test of the dispatch itself.
+    const described: Readonly<Record<DocumentNodeType, string>> = {
+      text: describeNode(ONE_NODE_PER_KIND.text),
+      image: describeNode(ONE_NODE_PER_KIND.image),
+      container: describeNode(ONE_NODE_PER_KIND.container),
+      loop: describeNode(ONE_NODE_PER_KIND.loop),
+      condition: describeNode(ONE_NODE_PER_KIND.condition),
+      table: describeNode(ONE_NODE_PER_KIND.table),
+      tableRowGroup: describeNode(ONE_NODE_PER_KIND.tableRowGroup),
+      tableRow: describeNode(ONE_NODE_PER_KIND.tableRow),
+    };
 
-    expect(describeNode(tree)).toBe('container:2');
-    expect([...walk(tree)].map(describeNode)).toStrictEqual([
-      'container:2',
-      'text:literal',
-      'loop:path',
-      'image:thumb.png',
-      'condition:compare',
-      'text:literal+binding',
-    ]);
+    expect(described).toStrictEqual({
+      text: 'text:literal+binding+pageField',
+      image: 'image:asset-key',
+      container: 'container:2',
+      loop: 'loop:path',
+      condition: 'condition:path',
+      table: 'table:1',
+      tableRowGroup: 'tableRowGroup:poste',
+      tableRow: 'tableRow:2',
+    });
+    expect(describeNode(DISCOUNT_TREE)).toBe('container:2');
   });
 
   it('throws on a node type it does not know', () => {

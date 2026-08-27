@@ -189,21 +189,34 @@ rangés.* `childrenOf` en prend les enfants, `nodeReads` en prend les expression
 La direction est celle que l'analyse impose : `SHAPE` est le sur-ensemble strict, donc c'est lui
 qui monte dans `ast/`, et non les deux autres qui descendent.
 
-**Le coût, dit franchement :** `childrenOf` construit désormais la forme *entière* — y compris les
-lectures — pour n'en lire que les enfants. `walk` et `findNodeById` paient donc, par nœud de texte,
-un parcours de ses segments dont ils n'ont pas l'usage. C'est accepté pour trois raisons
-mesurables :
+**Les lectures se construisent à la demande, et ce n'est pas un détail d'optimisation.**
+`NodeShape.readings` est une **fonction**, pas un tableau :
+
+```ts
+readonly readings: () => readonly NodeReading[];
+```
+
+Sans cela, `childrenOf` construirait la forme *entière* pour n'en lire que les enfants, et
+`walk`/`findNodeById` paieraient par nœud de texte un parcours de ses segments dont ils n'ont pas
+l'usage. Le premier jet du chantier l'a fait, l'a justifié par trois arguments, et **les trois
+étaient faux ou faibles** — la revue de la PR l'a mesuré et §16.1 le consigne : ×6,77 sur un arbre
+riche en texte. Avec les lectures paresseuses, le même arbre est à **×1,28**, et le facteur devient
+identique sur un arbre sans aucun segment — le coût résiduel est l'allocation de la forme, plus
+l'analyse des segments.
+
+Ce qui reste vrai de l'argumentaire d'origine, une fois vérifié :
 
 - **la boucle de rendu ne passe pas par là.** `engine/document/materialize.ts` appelle `visitNode`
-  directement ; `childrenOf` sert `walk`, `findNodeById` et `collectDataPaths`, qui sont des
-  parcours d'outillage et d'analyse, pas de rendu ([AGENTS.md §1.2](../../AGENTS.md), « coût du
-  parsing ») ;
-- **la description par tranches (D4) supprime une allocation par enfant** que `SHAPE` payait
-  jusqu'ici — un objet `{ node, at }` et un tableau `at` de deux éléments, pour chaque enfant de
-  chaque nœud. Sur un document réel, ce que `childrenOf` perd d'un côté, `analyseNode` le rend de
-  l'autre ;
-- **`collectDataPaths` y gagne franchement** : il appelait `nodeReads` **puis** `childrenOf`, donc
-  visitait deux fois chaque nœud. Il n'en visite plus qu'une.
+  directement. Mais `childrenOf` sert `walk` et `findNodeById`, que le playground appelle et que le
+  `designer` appellera par rendu avec son historique : « ce n'est pas le rendu du moteur » ne
+  suffisait pas à conclure.
+- **la description par tranches (D4) supprime une allocation par enfant** que `SHAPE` payait — un
+  objet `{ node, at }` et un tableau `at` par enfant. Compensation réelle, mais très insuffisante
+  seule.
+- **`collectDataPaths` ne visite plus chaque nœud qu'une fois.** Le premier jet **affirmait** ce
+  gain sans l'avoir écrit : `collectFrom` appelait `nodeReads(node)` puis `childrenOf(node)`, soit
+  deux constructions de forme par nœud. Corrigé en un seul `nodeShape` : **×1,23** mesuré, à chemins
+  identiques.
 
 ### D2 — `nodeShape` réemploie `visitNode` plutôt que d'écrire un neuvième `switch`
 
@@ -282,15 +295,24 @@ aucun comportement.
 
 ### D6 — L'attente de position descend dans `ast/`, la table d'acceptation reste au catalogue
 
-`DATA_EXPECTATIONS` et `DataExpectation` sont déclarés dans `ast/shape.ts` et **réexportés** par
+`DATA_EXPECTATIONS` et `DataExpectation` sont déclarés dans **`ast/types.ts`** et **réexportés** par
 `data-catalogue/types.ts`. `ACCEPTED`, `satisfies` et `acceptedKindsOf` ne bougent pas.
+
+**Dans `types.ts` et non dans `shape.ts`**, et la nuance est mesurable. `ast/types.ts` est là où les
+autres vocabulaires fermés de l'AST vivent déjà — `PAGE_FIELDS`, `TEXT_ALIGNMENTS`,
+`TABLE_COLUMN_ALIGNMENTS` — et il n'a que des imports **de type**, donc aucun import à l'exécution.
+Le premier jet l'avait mis dans `shape.ts`, ce qui faisait de `data-catalogue/types.ts` — un module
+qui n'importait *rien* — le point d'entrée d'une chaîne `shape.js` → `visitor.js` →
+`value-type.js`, table `SHAPE` de huit closures construite au chargement, pour un tuple de neuf
+chaînes. Le JS émis dit maintenant : `data-catalogue/types.js` importe `ast/types.js`, qui
+n'importe rien.
 
 Le partage est celui que l'analyse décrit : *« le `when` d'une condition est booléen »* est une
 propriété de l'AST — c'est la position qui l'impose, pas le catalogue ; *« un `civil-date` déclaré
 satisfait `text` »* est une propriété du catalogue, et n'a rien à faire dans `ast/`.
 
 **Ce que l'autre choix coûtait.** Laisser `DataExpectation` dans `data-catalogue/types.ts` et
-l'importer depuis `ast/shape.ts` marche techniquement — l'import est un `import type`, donc effacé,
+l'importer depuis `ast/` marche techniquement — l'import est un `import type`, donc effacé,
 et `data-catalogue/types.ts` n'importe rien, donc il n'y a pas de cycle de fichiers. Mais le graphe
 de **dossiers** devient cyclique (`ast → data-catalogue → ast`) alors que rien dans l'outillage ne
 l'interdit : `noRestrictedImports` ne porte que sur les frontières de paquets. C'est précisément le
@@ -375,17 +397,21 @@ son accord). Les `describe` existants sont **déplacés sans être réécrits** 
 
 ## 4. Contrat cible
 
-### 4.1 `ast/shape.ts` — la description
+### 4.1 `ast/types.ts` — le vocabulaire d'attente
 
 ```ts
-/** The natures a position accepts. Closed vocabulary; the acceptance table belongs to the catalogue. */
+/** What the runtime requires at the exact position a value is read. */
 export const DATA_EXPECTATIONS = [
   'any', 'printable', 'number', 'boolean', 'text',
   'civil-date', 'primitive', 'orderable', 'list',
 ] as const;
 
 export type DataExpectation = (typeof DATA_EXPECTATIONS)[number];
+```
 
+### 4.2 `ast/shape.ts` — la description
+
+```ts
 /** One expression a node reads, under the expectation its position imposes. */
 export interface NodeReading {
   readonly expression: Expression;
@@ -407,9 +433,14 @@ export interface NodeChildSlot {
   readonly at: readonly (string | number)[];
 }
 
-/** Everything a traversal needs of one node: what it reads, the alias it opens, its children. */
+/**
+ * Everything a traversal needs of one node: what it reads, the alias it opens, its children.
+ *
+ * `readings` is a function so a structural traversal never pays for the per-segment analysis of the
+ * text nodes it passes. It is not memoised: call it once and keep the result (D1).
+ */
 export interface NodeShape {
-  readonly readings: readonly NodeReading[];
+  readonly readings: () => readonly NodeReading[];
   readonly binding: NodeBinding | undefined;
   readonly children: readonly NodeChildSlot[];
 }
@@ -417,7 +448,7 @@ export interface NodeShape {
 export function nodeShape(node: DocumentNode): NodeShape;
 ```
 
-### 4.2 `ast/traverse.ts` — les parcours dérivés
+### 4.3 `ast/traverse.ts` — les parcours dérivés
 
 Signatures **inchangées**, à l'octet :
 
@@ -434,24 +465,24 @@ export function nodeReads(node: DocumentNode): NodeReads;
 export function collectDataPaths(root: DocumentNode): readonly string[];
 ```
 
-### 4.3 `ast/visitor.ts` — le dispatch, réduit
+### 4.4 `ast/visitor.ts` — le dispatch, réduit
 
 `NodeVisitor`, `visitNode`, `SegmentVisitor`, `visitSegment`. Inchangés. Le fichier passe de
 **191** à **90** lignes et n'importe plus `Expression`, `pathsOf` ni `rootSegment`.
 
-### 4.4 `data-catalogue/types.ts` — la réexportation
+### 4.5 `data-catalogue/types.ts` — la réexportation
 
 ```ts
 /* The expectation vocabulary is a property of the AST -- a position imposes it. What a declared
    nature satisfies is a property of the catalogue and stays in `expectations.ts`. */
-export { DATA_EXPECTATIONS } from '../ast/shape.js';
-export type { DataExpectation } from '../ast/shape.js';
+import { DATA_EXPECTATIONS, type DataExpectation } from '../ast/types.js';
+export { DATA_EXPECTATIONS, type DataExpectation };
 ```
 
 `data-catalogue/data-catalogue.ts` et `packages/core/src/index.ts` continuent de les exporter
 depuis `./types.js` : **aucune ligne à changer** dans les deux façades.
 
-### 4.5 Surface publique
+### 4.6 Surface publique
 
 **283 noms, inchangés.** Ce qu'on compare est la **liste triée des noms exportés**, extraite de
 `packages/core/dist/index.d.ts`, et non le fichier lui-même : un `.d.ts` de barrel nomme le module
@@ -510,7 +541,7 @@ retombe sur l'aplatissement.
 
 ```
 forme ← nodeShape(node)
-lectures ← forme.readings mappées sur leur `expression`
+lectures ← forme.readings() mappées sur leur `expression`
 si forme.binding est absent → { reads: lectures, binds: undefined }
 sinon                       → { reads: [...lectures, binding.source.expression], binds: binding.alias }
 ```
@@ -524,7 +555,7 @@ L'ordre des effets est **exactement** celui de la baseline, parce que l'ordre de
 rapportées est un contrat testé (`data-catalogue/__tests__/compatibility.test.ts:107` et `:115`) :
 
 ```
-1. les lectures, dans l'ordre de `shape.readings`, chacune sous son attente et à son chemin
+1. les lectures, dans l'ordre de `shape.readings()`, chacune sous son attente et à son chemin
 2. la liaison si elle existe : lire la source sous SON attente, puis empiler l'alias au chemin ['as']
 3. les enfants, tranche par tranche, dans l'ordre, chacun à [...path, ...slot.at, index]
 4. dépiler l'alias si une liaison l'a empilé
@@ -582,19 +613,28 @@ opérateurs.
 
 | Fichier | Changement |
 | :--- | :--- |
-| `ast/__tests__/visitor.test.ts` | ne garde que `visitNode` et `visitSegment` |
+| `ast/__tests__/visitor.test.ts` | ne garde que `visitNode` et `visitSegment`, et exerce les **huit** *kinds* par clé plutôt que six via `walk` |
 | `ast/__tests__/traverse.test.ts` | **nouveau** : `nodeReads`, `childrenOf`, `walk`, `findNodeById`, `collectDataPaths`, `keepTogether` — déplacés tels quels |
-| `ast/__tests__/shape.test.ts` | **nouveau** : la forme par *kind*, les chemins, et la preuve d'accord (§7.4) |
-
-`shape.test.ts` réemploie les fabriques de `data-catalogue/__tests__/fixtures.ts` — `container`,
-`binding`, `loop`, `condition`, `rowGroupTable`, `image`, `staticText`, `templateOf`, `field`,
-`record`, `listOf` — plutôt que d'en écrire une seconde série. Un test de `ast/` importe donc une
-fixture de `data-catalogue/`, ce qui est délibéré : la preuve de §7.4 porte sur l'accord de deux
-sous-systèmes, et [AGENTS.md §5](../../AGENTS.md) demande de vérifier l'existant avant d'écrire un
-utilitaire. L'import est à sens unique et ne concerne que des fichiers de test.
+| `ast/__tests__/shape.test.ts` | **nouveau** : la forme par *kind*, les chemins, la paresse des lectures, et le vocabulaire d'attente |
+| `template/__tests__/readers-agree.test.ts` | **nouveau** : la preuve d'accord des deux fonctions publiques (§7.4) |
+| `ast/__tests__/fixtures.ts` | gagne `DISCOUNT_TREE` et `ONE_NODE_PER_KIND`, partagés par les fichiers ci-dessus |
 | `ast/__tests__/page-report.test.ts` | un chemin d'import |
 | `template/__tests__/compatibility.test.ts` | un import scindé (`visitSegment` d'un côté, `findNodeById`/`walk` de l'autre) |
 | `template/__tests__/paths.test.ts` | un chemin d'import |
+
+Deux fixtures vivent dans `ast/__tests__/fixtures.ts` plutôt que dans un fichier de test, parce que
+plusieurs fichiers les lisent : deux copies laisseraient l'une des deux tester une autre forme en
+silence. `ONE_NODE_PER_KIND` est typé `{ [K in DocumentNodeType]: Extract<DocumentNode, { type: K }> }`,
+donc la clé tient le discriminant à la compilation — une entrée ne peut pas mentir sur son *kind*,
+et un lecteur récupère le nœud déjà rétréci.
+
+La preuve d'accord vit chez `template/` parce que c'est de `collectTemplateDataPaths` et de
+`checkTemplateDataCompatibility` qu'elle parle. Elle réemploie les fabriques de
+`data-catalogue/__tests__/fixtures.ts` — `container`, `binding`, `loop`, `condition`,
+`rowGroupTable`, `image`, `staticText`, `templateOf`, `field`, `record`, `listOf` — plutôt que d'en
+écrire une seconde série ([AGENTS.md §5](../../AGENTS.md) demande de vérifier l'existant). Les tests
+de `ast/` n'en dépendent pas : c'est la direction que le code de production de `ast/` refuse, et
+§16.3 dit pourquoi elle a été corrigée.
 
 ### 6.4 Documentation
 
@@ -652,7 +692,8 @@ pas — et non l'inverse.
 
 ### 7.4 La preuve d'accord (D12)
 
-Un modèle où **chaque position déclarable lit une racine distincte du catalogue**, sans alias :
+Dans `packages/core/src/template/__tests__/readers-agree.test.ts`. Un modèle où **chaque position
+déclarable lit une racine distincte du catalogue**, sans alias :
 
 | Position | Chemin lu | Attente |
 | :--- | :--- | :--- |
@@ -692,7 +733,7 @@ diff <baseline>/core-surface.txt <apres>/core-surface.txt   # doit être vide
 
 283 noms avant, 283 après, **le même ensemble**. Le `.d.ts` lui-même diffère de quatre lignes — les
 réexports de `./ast/visitor.js` se scindent en `./ast/traverse.js` et `./ast/visitor.js` — et c'est
-attendu (§4.5). C'est la vérification de D8.
+attendu (§4.6). C'est la vérification de D8.
 
 ### 7.7 Les quatre portes
 
@@ -794,17 +835,18 @@ fois.
 Chaque ablation est une modification temporaire, exécutée, **mesurée**, puis annulée. Une ablation
 qui ne fait rien rougir désigne un test manquant, pas une ablation ratée.
 
-**Exécutées le 2026-08-27** sur `pnpm vitest run --project @openview/core` — 38 fichiers,
-1 155 tests verts avant chaque ablation, source restaurée après chacune. La colonne de droite est
-relevée, pas prévue.
+**Exécutées le 2026-08-27** sur `pnpm vitest run --project @openview/core`, puis **rejouées après la
+revue de la PR** (§16) parce que `shape.ts` avait changé — 39 fichiers, 1 157 tests verts avant
+chaque ablation, source restaurée après chacune. Les chiffres ci-dessous sont ceux du second
+passage. La colonne de droite est relevée, pas prévue.
 
 | # | Ablation | Attendu | Mesuré |
 | :-- | :--- | :--- | :--- |
-| A1 | Retirer la lecture `pageReport` de la branche `tableRow` de `nodeShape` | rouge dans les **deux** familles à la fois | **4 fichiers, 10 tests.** `ast/__tests__/page-report.test.ts` (« *is read by the row that declares it and by no other node* ») **et** `data-catalogue/__tests__/compatibility.test.ts` (« *reads a row group alias inside its rows, its cells and its page report* »), plus `recipe.test.ts` et `shape.test.ts` |
+| A1 | Retirer la lecture `pageReport` de la branche `tableRow` de `nodeShape` | rouge dans les **deux** familles à la fois | **5 fichiers, 10 tests.** `ast/__tests__/page-report.test.ts` (« *is read by the row that declares it and by no other node* ») **et** `data-catalogue/__tests__/compatibility.test.ts` (« *reads a row group alias inside its rows, its cells and its page report* »), plus `recipe.test.ts`, `shape.test.ts` et `template/__tests__/readers-agree.test.ts` |
 | A2 | Retirer la tranche `footer` de la branche `table` | comptage de nœuds, recherche par id, ordre de l'analyse | **3 fichiers, 5 tests.** `traverse.test.ts`, `data-catalogue/__tests__/compatibility.test.ts`, `shape.test.ts` |
 | A3 | Changer `at` d'une tranche de `['cells', ci, 'children']` en `['cells', ci]` | les positions de l'analyse, et **rien** dans `traverse.test.ts` | **2 fichiers, 2 tests.** « *walks the header rows, the body and the footer rows of a table, in that order* » et le cas de tranches de `shape.test.ts`. `traverse.test.ts` **reste vert** |
-| A4 | Faire rendre à `childrenOf` un tableau neuf dans tous les cas | le contrat d'identité de D5 | **1 fichier, 1 test.** « *reports the rows of a group as the STORED reference, and computes the rest* » |
-| A5 | Remplacer l'attente `boolean` de `ConditionNode.when` par `any` | le cas d'incompatibilité de l'analyse | **2 fichiers, 3 tests.** « *reads a string in a condition as compatible: false* », « *requires a boolean of the guard of a condition* », « *carry the expectation of each position, and not merely an expectation* » |
+| A4 | Faire rendre à `childrenOf` un tableau neuf dans tous les cas | le contrat d'identité de D5 | **1 fichier, 2 tests.** « *reports the rows of a group as the STORED reference, and computes the rest* » et « *hands back the stored array for a row of one cell, and a fresh one past that* » — le second est le cas que la revue a fait ajouter (§16.2) |
+| A5 | Remplacer l'attente `boolean` de `ConditionNode.when` par `any` | le cas d'incompatibilité de l'analyse | **3 fichiers, 3 tests.** « *reads a string in a condition as compatible: false* », « *requires a boolean of the guard of a condition* », « *carry the expectation of each position, and not merely an expectation* » |
 
 ### 10.1 La contre-mesure : la même ablation, faite sur la baseline
 
@@ -817,7 +859,7 @@ fichiers que CH3 ajoute retirés, 1 139 tests verts au départ — en ablatant c
 | :--- | ---: | :--- |
 | Retirer la lecture `pageReport` de `READS_VISITOR` **seul** | **2** | `ast/__tests__/page-report.test.ts` uniquement. `data-catalogue/__tests__/compatibility.test.ts` reste **intégralement vert** — y compris son cas nommé « *reads a row group alias inside its rows, its cells and its page report* », qui est précisément celui qui aurait dû le voir |
 | Retirer la lecture `pageReport` de `SHAPE` **seul** | **4** | `data-catalogue/__tests__/compatibility.test.ts` et `recipe.test.ts` uniquement. `ast/__tests__/page-report.test.ts` reste **intégralement vert** |
-| *(après CH3)* retirer la lecture du site unique | **10** | les **deux** familles, 4 fichiers |
+| *(après CH3)* retirer la lecture du site unique | **10** | les **deux** familles, 5 fichiers |
 
 **C'est la mesure du chantier.** Avant, la moitié du système ne voyait rien, et laquelle des deux
 moitiés dépendait de la table qu'on avait éditée. Ni erreur de compilation, ni test rouge dans
@@ -868,13 +910,14 @@ CH3 est fini quand **tout** ce qui suit est vrai, et vérifié plutôt qu'affirm
    en extraire une expression.
 3. `childrenOf`, `nodeReads` et `analyseNode` dérivent tous de `nodeShape`. Aucune table par
    *kind* ne subsiste dans `data-catalogue/compatibility.ts`.
-4. `DATA_EXPECTATIONS` et `DataExpectation` sont déclarés dans `ast/shape.ts` et réexportés par
-   `data-catalogue/types.ts`. Aucun import de `ast/` vers `data-catalogue/`.
+4. `DATA_EXPECTATIONS` et `DataExpectation` sont déclarés dans `ast/types.ts` et réexportés par
+   `data-catalogue/types.ts`, qui n'importe rien d'autre. Aucun import de `ast/` vers
+   `data-catalogue/` en production.
 5. Les **quatre portes** passent : `lint`, `build`, `type-check`, `CI=1 test:coverage`.
 6. **Aucune assertion de comportement n'a été réécrite** dans les tests existants. Le `git diff`
    des fichiers de test ne montre que des déplacements et des chemins d'import.
 7. **L'ensemble des noms exportés par `packages/core/dist/index.d.ts` est identique** à celui de
-   la baseline : 283 noms, `diff` vide sur la liste triée (§4.5, §7.6).
+   la baseline : 283 noms, `diff` vide sur la liste triée (§4.6, §7.6).
 8. `ast/` et `data-catalogue/` sont à **100 %** sur les quatre métriques, `shape.ts` et
    `traverse.ts` compris. Sur l'agrégat, le critère est le **nombre de lignes non couvertes**, pas
    le pourcentage : supprimer du code dupliqué et intégralement couvert fait *baisser* un
@@ -945,7 +988,7 @@ Cinq questions, à repasser avant d'ouvrir un fichier. Une réponse « oui » ar
 
 1. Le changement modifie-t-il la sortie d'une fonction publique de `@openview/core` pour une entrée
    valide ? → hors périmètre (§2.3).
-2. Ajoute-t-il ou retire-t-il un nom du barrel public ? → hors périmètre (D8, §4.5).
+2. Ajoute-t-il ou retire-t-il un nom du barrel public ? → hors périmètre (D8, §4.6).
 3. Touche-t-il un fichier de [AGENTS.md §7](../../AGENTS.md) ? → hors périmètre, mandat non accordé
    (D11).
 4. Réécrit-il l'assertion d'un test existant, plutôt que de la déplacer ? → c'est le signal que la
@@ -962,27 +1005,29 @@ Mesuré le 2026-08-27, après exécution, sur la branche `claude/premier-refacto
 
 | Porte | Baseline | Sortie |
 | :--- | :--- | :--- |
-| `pnpm run lint` | 215 fichiers, aucune correction | **219** fichiers, aucune correction |
+| `pnpm run lint` | 215 fichiers, aucune correction | **220** fichiers, aucune correction |
 | `pnpm run build` | 6/6 | **6/6** |
 | `pnpm run type-check` | 11/11 | **11/11** |
-| `CI=1 pnpm run test:coverage` | 1 576 tests, 55 fichiers | **1 592** tests, **57** fichiers |
+| `CI=1 pnpm run test:coverage` | 1 576 tests, 55 fichiers | **1 594** tests, **58** fichiers |
 
-Les 16 tests de plus sont ceux de `shape.test.ts` : les 1 576 de la baseline sont tous encore là.
+Les 18 tests de plus sont ceux de `shape.test.ts`, de `template/__tests__/readers-agree.test.ts` et
+les deux cas ajoutés par la revue : les 1 576 de la baseline sont tous encore là.
 
 ### 14.2 Couverture : lire les non-couvertes, pas les pourcentages
 
 | Métrique | Baseline | Sortie | Non couvertes, baseline → sortie |
 | :--- | :--- | :--- | :--- |
-| statements | 93,70 % (2 517/2 686) | 93,66 % (2 499/2 668) | **169 → 169** |
-| branches | 90,74 % (1 245/1 372) | 90,77 % (1 249/1 376) | **127 → 127** |
-| functions | 98,34 % (655/666) | 98,28 % (632/643) | **11 → 11** |
-| lines | 93,60 % (2 446/2 613) | 93,56 % (2 429/2 596) | **167 → 167** |
+| statements | 93,70 % (2 517/2 686) | 93,71 % (2 521/2 690) | **169 → 169** |
+| branches | 90,74 % (1 245/1 372) | 90,79 % (1 253/1 380) | **127 → 127** |
+| functions | 98,34 % (655/666) | 98,30 % (637/648) | **11 → 11** |
+| lines | 93,60 % (2 446/2 613) | 93,61 % (2 450/2 617) | **167 → 167** |
 
-**Le nombre de non-couvertes est identique sur les quatre métriques.** Trois pourcentages baissent de
-quatre à six centièmes, et c'est de l'arithmétique, pas une régression : CH3 supprime 18 statements,
-23 fonctions et 17 lignes **toutes couvertes** — la duplication — et zéro non couverte. Le
-dénominateur rétrécit, le numérateur avec, et le reste non couvert du dépôt pèse marginalement plus.
-Les branches, elles, montent de trois centièmes : la dérivation en ajoute quatre, toutes couvertes.
+**Le nombre de non-couvertes est identique sur les quatre métriques**, et il l'est resté à chaque
+tour : ce chantier n'a jamais rendu une ligne moins testée. Les pourcentages, eux, ont bougé dans les
+deux sens selon le dénominateur — le premier jet supprimait 18 statements tous couverts et faisait
+donc *baisser* trois pourcentages de quelques centièmes ; les tests ajoutés par la revue les
+ramènent au-dessus de la baseline. C'est exactement pourquoi le critère est le nombre de
+non-couvertes et non le pourcentage.
 
 `ast/shape.ts` et `ast/traverse.ts` sortent à **100 %** sur les quatre métriques, comme le reste de
 `ast/` et de `data-catalogue/`.
@@ -996,26 +1041,28 @@ visiteurs, sans branche morte.
 
 **283 noms avant, 283 après, `diff` vide** sur la liste triée extraite de
 `packages/core/dist/index.d.ts`. Le `.d.ts` lui-même diffère de quatre lignes, qui sont le
-dédoublement du réexport de `./ast/visitor.js` (§4.5).
+dédoublement du réexport de `./ast/visitor.js` (§4.6).
 
 ### 14.4 Volumes
 
 | Fichier | Avant | Après |
 | :--- | ---: | ---: |
 | `ast/visitor.ts` | 191 | **90** |
-| `ast/shape.ts` | — | **149** |
-| `ast/traverse.ts` | — | **96** |
+| `ast/types.ts` | 173 | **193** |
+| `ast/shape.ts` | — | **151** |
+| `ast/traverse.ts` | — | **101** |
 | `data-catalogue/compatibility.ts` | 616 | **517** |
 | `data-catalogue/types.ts` | 130 | **118** |
 
-`ast/` passe de 191 lignes en un fichier à **335** en trois, soit +144. Il faut le dire plutôt que
-de vendre une déduplication qui réduirait le code : ce que CH3 supprime, c'est la **divergence
-possible**, pas le volume.
+Les parcours de `ast/` passent de 191 lignes en un fichier à **342** en trois. Il faut le dire
+plutôt que de vendre une déduplication qui réduirait le code : ce que CH3 supprime, c'est la
+**divergence possible**, pas le volume.
 
-Le solde sur l'ensemble des cinq fichiers est de **+33 lignes** — 245 ajoutées (`shape.ts` 149,
-`traverse.ts` 96) contre 212 retirées (`visitor.ts` −101, `compatibility.ts` −99, `types.ts` −12).
-Trente-trois lignes pour trois tables ramenées à une : c'est le prix des types nommés que
-`compatibility.ts` déclarait en local, plus trois en-têtes de fichier.
+Le solde sur l'ensemble des six fichiers est de **+55 lignes** — 252 ajoutées (`shape.ts` 151,
+`traverse.ts` 101) et 20 dans `ast/types.ts` pour le vocabulaire, contre 212 retirées
+(`visitor.ts` −101, `compatibility.ts` −99, `data-catalogue/types.ts` −12). Cinquante-cinq lignes
+pour trois tables ramenées à une : c'est le prix des types nommés que `compatibility.ts` déclarait
+en local, plus trois en-têtes de fichier.
 
 ### 14.5 Les tests déplacés, prouvés déplacés
 
@@ -1102,3 +1149,87 @@ quatre ablations, la carte position → attente rouge dans les quatre cas.
 - **Le contenu déplacé des tests est verbatim** (§14.5), vérifié par comparaison de chaînes.
 - **Aucun `any`, `!`, `@ts-ignore`, `as unknown as`, `catch` vide** ni assertion en chevrons dans
   les fichiers nouveaux.
+
+---
+
+## 16. La revue de la PR
+
+Onze findings, dont **dix réels**. Aucun ne portait sur la correction : la revue a reconstruit les
+implémentations supprimées de `childrenOf` et `READS_VISITOR` depuis `origin/main` et les a
+comparées nœud par nœud aux nouvelles sur les fixtures du dépôt — 36 nœuds, **zéro divergence**
+d'ordre des enfants ni de sortie de `nodeReads`. Le refactor était déjà équivalent ; ce qu'il
+n'était pas, c'est frugal, et son plan n'était pas exact.
+
+### 16.1 Une régression de performance, mesurée puis corrigée
+
+`childrenOf` construisait la forme entière — lectures comprises — pour n'en lire que les enfants.
+Mesuré sur `[...walk(root)]`, 2 000 itérations, contre l'implémentation de `origin/main` :
+
+| Arbre | avant CH3 | CH3, premier jet | CH3 corrigé |
+| :--- | ---: | ---: | ---: |
+| 301 nœuds, 10 segments de texte chacun | 70 ms | 474 ms (**×6,77**) | 90 ms (**×1,28**) |
+| 601 nœuds, aucun segment | 147 ms | 188 ms (×1,27) | 188 ms (×1,28) |
+
+La deuxième ligne était le diagnostic : le surcoût était **entièrement** dans l'analyse des segments
+de texte, que `walk` calculait puis jetait. Après correction les deux lignes convergent, et le
+facteur résiduel est l'allocation de la forme et de ses tranches — le prix de la description unique,
+qui est ce que le chantier achète.
+
+Trois correctifs, tous dans le sens du chantier plutôt qu'en retrait :
+
+1. **`NodeShape.readings` devient une fonction** (D1). Une seule table énumère toujours les huit
+   *kinds* ; ce qui change, c'est le moment où le travail par segment a lieu.
+2. **Le visiteur de segment est hissé au niveau module.** Le premier jet construisait un objet
+   visiteur et trois closures **par segment** — le `SEGMENT_EXPRESSIONS` supprimé faisait justement
+   l'inverse. C'était l'amplificateur du ×6,77.
+3. **`collectFrom` ne construit plus qu'une forme par nœud.** Il appelait `nodeReads(node)` **puis**
+   `childrenOf(node)` : deux constructions. Le plan affirmait le contraire (§15.2 le consigne) ;
+   c'est maintenant vrai et mesuré à **×1,23**, à chemins identiques.
+
+### 16.2 Cinq défauts réels et petits
+
+| Défaut | Correction |
+| :--- | :--- |
+| Un commentaire citait `NO_READS`, constante que ce chantier supprime — seule occurrence restante de ce nom dans l'arbre | reformulé sans nommer de symbole disparu |
+| `ONE_PER_KIND` typé `Record<DocumentNodeType, DocumentNode>` : une image sous la clé `tableRow` **compilait** (vérifié : le type mappé la refuse, TS2322) | devient `{ [K in DocumentNodeType]: Extract<DocumentNode, { type: K }> }`, et migre dans `fixtures.ts` sous le nom `ONE_NODE_PER_KIND` |
+| Le commentaire du contrat d'identité affirmait un partage 4/4 par *kind*, que les tranches ont rendu dépendant de la forme du nœud ; le cas ligne-à-une-cellule restait non testé, ce que D5 admettait | commentaire réénoncé sur la règle réelle, **et le cas ajouté** : une ligne à une cellule rend le tableau stocké, à deux cellules un tableau neuf |
+| 38 lignes de fixture dupliquées à l'identique dans deux fichiers de test | `DISCOUNT_TREE` rejoint `fixtures.ts` |
+| « What a declared nature satisfies stays **here**, in `expectations.ts` » — « ici », c'était `types.ts`, où la table n'est pas | reformulé |
+
+Un effet secondaire du deuxième point vaut d'être noté : `visitor.test.ts` n'importe plus rien du
+module de parcours. Il exerçait ses branches via `walk`, donc **six** *kinds* sur huit, et une
+branche cassée de `nodeShape` pouvait rougir le test du dispatch pur. Il exerce maintenant les
+**huit**, par clé, sans traversée.
+
+### 16.3 Deux remises en cause de conception, retenues
+
+**Le vocabulaire d'attente descend dans `ast/types.ts`** et non `ast/shape.ts` (D6 réécrit).
+`data-catalogue/types.ts` n'importait *rien* ; le premier jet en faisait le point d'entrée d'une
+chaîne `shape.js` → `visitor.js` → `value-type.js`, avec la table `SHAPE` de huit closures
+construite au chargement, pour un tuple de neuf chaînes. Le JS émis dit maintenant :
+`data-catalogue/types.js` importe `ast/types.js`, qui n'importe rien.
+
+**La preuve d'accord déménage** dans `packages/core/src/template/__tests__/readers-agree.test.ts`.
+Elle tirait douze fabriques depuis `data-catalogue/__tests__/`, ce qui faisait dépendre les tests de
+l'AST des fixtures du catalogue — la direction exacte que le code de production de `ast/` refuse.
+Elle parle de `collectTemplateDataPaths` et de `checkTemplateDataCompatibility` : elle est chez eux.
+`shape.test.ts` ne teste plus que `nodeShape` contre l'AST, et le seul reliquat croisé est le
+contrôle en deux lignes que la réexportation du vocabulaire n'a pas dédoublé la constante.
+
+### 16.4 Un finding écarté, avec son motif
+
+**Les commentaires français de `traverse.test.ts`.** La revue les compte comme une infraction à
+[AGENTS.md §1.6](../../AGENTS.md), au motif qu'un fichier neuf est le moment où la règle s'applique.
+Le relevé : **12 lignes, exactement les 12 qui existaient dans `visitor.test.ts` sur `main`**,
+déplacées telles quelles — ce chantier n'en introduit aucune. `limits-scope.test.ts` en porte 20
+autres, intouchées.
+
+C'est de la dette §1.6 préexistante et transverse aux tests, pas un manquement de ce diff. La
+traduire ici détruirait la propriété que §14.5 établit et qui rend le refactor auditable — le
+déplacement verbatim — pour refermer une dette que le chantier n'a pas creusée. Elle vaut son
+propre passage, sur tous les fichiers concernés à la fois.
+
+**Ce que ce tour coûte à §14.5, et il faut le dire :** deux commentaires déplacés ont malgré tout
+été touchés — celui qui citait `NO_READS` et celui du contrat d'identité. La propriété « verbatim »
+vaut donc pour le commit `9255c51`, et deux corrections de péremption s'y ajoutent ensuite. Le
+`git diff` le montre ; le prétendre intact ne tiendrait pas.

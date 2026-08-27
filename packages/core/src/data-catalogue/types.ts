@@ -7,7 +7,7 @@
  *
  * @see docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md
  */
-import { DATA_EXPECTATIONS, type DataExpectation } from '../ast/shape.js';
+import { DATA_EXPECTATIONS, type DataExpectation } from '../ast/types.js';
 
 /** Terminal natures a declared value can have. */
 export const DATA_SCALAR_KINDS = ['string', 'number', 'boolean', 'civil-date'] as const;
@@ -65,8 +65,8 @@ export interface DataCatalogueEntry {
 
 /*
  * The expectation vocabulary is a property of the AST -- a position imposes it -- so it is declared
- * beside the node shape that carries it. What a declared nature satisfies stays here, in
- * `expectations.ts`.
+ * with the AST's other closed vocabularies. What a declared nature satisfies belongs to the
+ * catalogue and stays in `expectations.ts`.
  */
 export { DATA_EXPECTATIONS, type DataExpectation };
 
