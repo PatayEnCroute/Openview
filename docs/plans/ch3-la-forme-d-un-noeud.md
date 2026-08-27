@@ -96,12 +96,14 @@ Ces faits sont vérifiés à la baseline et ne doivent pas bouger d'un caractèr
   première divergence, pas après.
 - **`collectDataPaths` filtre les alias par deux mécanismes distincts** — `binds` au niveau du
   nœud, et le contexte d'alias propre de `pathsOf` au niveau de l'expression. Le test
-  `ast/__tests__/visitor.test.ts:339` dit que si l'un tombait, l'autre ne rattraperait rien. CH3
-  touche au premier ; ce test est l'un des garde-fous à garder verts.
+  test « *asks the integrator for two keys, and for no per-item field* » dit que si l'un tombait,
+  l'autre ne rattraperait rien (baseline `ast/__tests__/visitor.test.ts:339` ; aujourd'hui dans
+  `ast/__tests__/traverse.test.ts`). CH3 touche au premier ; ce test est l'un des garde-fous à
+  garder verts.
 - **`ast/` et `data-catalogue/` sont à 100 %** sur les quatre métriques. Un fichier neuf mal
   couvert se verrait immédiatement.
 - **Les positions rapportées par `checkTemplateDataCompatibility` sont testées nommément** —
-  `data-catalogue/__tests__/compatibility.test.ts` compte 46 cas, dont « walks the header rows,
+  `data-catalogue/__tests__/compatibility.test.ts` compte **40** cas, dont « walks the header rows,
   the body and the footer rows of a table, in that order » et « reads a row group alias inside its
   rows, its cells and its page report ». Ces chemins (`['cells', i, 'children', j]`,
   `['pageReport', 'value']`, …) sont un contrat vérifié : les reproduire **au segment près** est
@@ -156,7 +158,7 @@ qui est son rôle.
 | Exclu | Motif |
 | :--- | :--- |
 | CH1 (`MaterialBlock` sans Visiteur, dans `engine`) | Chantier distinct, paquet distinct. CH3 ne lui apporte rien et ne lui coûte rien : l'analyse les déclare indépendants. |
-| CH7 (découpage de `compatibility.ts` et `materialize.ts`) | **Suit** CH3 par ordonnancement explicite. CH3 sort ~95 lignes de `compatibility.ts` ; découper ce qui reste est le travail de CH7, pas d'ici. |
+| CH7 (découpage de `compatibility.ts` et `materialize.ts`) | **Suit** CH3 par ordonnancement explicite. CH3 sort 99 lignes de `compatibility.ts` ; découper ce qui reste est le travail de CH7, pas d'ici. |
 | Le renommage `ast/nodes.ts` → `ast/ast.ts` | La convention de façade du dépôt est `<dossier>/<dossier>.ts` (`expression/expression.ts`, `style/style.ts`, …) et `ast/` y échappe. Corriger cela touche tous les importateurs pour zéro garantie gagnée. Hors périmètre. |
 | Élargir la surface publique à `nodeShape` | D8. Aucun consommateur hors `core` n'en a besoin, et CH6 documente déjà le coût d'un barrel qui grossit. |
 | Toucher `ACCEPTED` / `satisfies` / `acceptedKindsOf` (`data-catalogue/expectations.ts`) | La table d'acceptation est une propriété du **catalogue**, pas de l'AST (D6). Elle ne bouge pas. |
@@ -251,7 +253,9 @@ boucle, une condition et un groupe de lignes en ont une ; un texte et une image,
 
 ### D5 — `childrenOf` garde **exactement** son contrat d'identité
 
-`ast/__tests__/visitor.test.ts:177` épingle un fait, avec son motif écrit :
+Un test épingle un fait, avec son motif écrit — baseline `ast/__tests__/visitor.test.ts:177`,
+aujourd'hui « *reports the rows of a group as the STORED reference, and computes the rest* » dans
+`ast/__tests__/traverse.test.ts` :
 
 > Four of the eight branches hand back the stored array; the four others allocate. A consumer that
 > memoised on the identity of the result would be wrong six times out of eight.
@@ -433,7 +437,7 @@ export function collectDataPaths(root: DocumentNode): readonly string[];
 ### 4.3 `ast/visitor.ts` — le dispatch, réduit
 
 `NodeVisitor`, `visitNode`, `SegmentVisitor`, `visitSegment`. Inchangés. Le fichier passe de
-**191** à environ **120** lignes et n'importe plus `Expression`, `pathsOf` ni `rootSegment`.
+**191** à **90** lignes et n'importe plus `Expression`, `pathsOf` ni `rootSegment`.
 
 ### 4.4 `data-catalogue/types.ts` — la réexportation
 
@@ -535,10 +539,23 @@ La variable locale `site`, aujourd'hui construite pour n'être lue que par `site
 par `checkTemplateDataCompatibility` **sans qu'on ait à y penser**. Un enfant nouveau est descendu
 par `walk`, `findNodeById`, `collectDataPaths` et l'analyse de catalogue, tous les quatre.
 
-**Non garanti, et il faut le dire :** rien ne force l'auteur d'une fente nouvelle à choisir la
-*bonne* attente. Écrire `expectation: 'text'` là où le runtime veut un nombre reste une erreur que
-seul un test attrape. CH3 supprime la classe « déclaré une fois sur deux » ; il ne crée pas de
-vérificateur d'attentes, et §5 de l'analyse de dette ne le lui demande pas.
+**Non garanti — et l'ADR 0015 l'avait déjà consigné comme dette ouverte :**
+
+> **Rien ne tient la table d'attentes au compilateur.** Un opérateur ajouté à l'algèbre casse la
+> compilation du visiteur — donc on n'oublie pas de le *parcourir* — mais rien n'oblige à lui
+> donner une attente juste : écrire `'any'` compile. […] le remède, s'il en faut un, est une
+> matrice qui énumère les kinds plutôt que les attentes.
+>
+> — [ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md), « Ce qui reste ouvert »
+
+CH3 ne referme pas cette dette et ne prétend pas la refermer : elle porte sur la table de
+l'**algèbre d'expressions** (`READING_VISITOR`), que ce chantier ne touche pas. Écrire une mauvaise
+attente sur un opérateur compile toujours.
+
+Ce qu'il change, et c'est mesuré en §10.2 : pour les **positions de nœud**, l'attente cesse d'être
+libre. Écrire `'any'` à l'une d'elles rend rouge la carte position → attente de §7.4. La matrice que
+l'ADR appelait de ses vœux existe donc pour les huit *kinds* de nœud ; elle reste à écrire pour les
+opérateurs.
 
 ---
 
@@ -568,6 +585,13 @@ vérificateur d'attentes, et §5 de l'analyse de dette ne le lui demande pas.
 | `ast/__tests__/visitor.test.ts` | ne garde que `visitNode` et `visitSegment` |
 | `ast/__tests__/traverse.test.ts` | **nouveau** : `nodeReads`, `childrenOf`, `walk`, `findNodeById`, `collectDataPaths`, `keepTogether` — déplacés tels quels |
 | `ast/__tests__/shape.test.ts` | **nouveau** : la forme par *kind*, les chemins, et la preuve d'accord (§7.4) |
+
+`shape.test.ts` réemploie les fabriques de `data-catalogue/__tests__/fixtures.ts` — `container`,
+`binding`, `loop`, `condition`, `rowGroupTable`, `image`, `staticText`, `templateOf`, `field`,
+`record`, `listOf` — plutôt que d'en écrire une seconde série. Un test de `ast/` importe donc une
+fixture de `data-catalogue/`, ce qui est délibéré : la preuve de §7.4 porte sur l'accord de deux
+sous-systèmes, et [AGENTS.md §5](../../AGENTS.md) demande de vérifier l'existant avant d'écrire un
+utilitaire. L'import est à sens unique et ne concerne que des fichiers de test.
 | `ast/__tests__/page-report.test.ts` | un chemin d'import |
 | `template/__tests__/compatibility.test.ts` | un import scindé (`visitSegment` d'un côté, `findNodeById`/`walk` de l'autre) |
 | `template/__tests__/paths.test.ts` | un chemin d'import |
@@ -597,13 +621,16 @@ comportement réécrite. Un `git diff --stat` sur les fichiers de test doit ne m
 déplacements et des chemins d'import.
 
 Cinq d'entre eux portent la charge et sont nommés ici parce qu'ils sont les plus susceptibles de
-révéler une erreur de dérivation :
+révéler une erreur de dérivation. Ils sont désignés par leur **intitulé** et non par un numéro de
+ligne : les trois premiers vivaient dans `ast/__tests__/visitor.test.ts` à la baseline et vivent
+dans `ast/__tests__/traverse.test.ts` après le découpage de D13, ce qui périmerait tout renvoi
+chiffré écrit ici.
 
 | Test | Ce qu'il tient |
 | :--- | :--- |
-| `visitor.test.ts:177` « reports the rows of a group as the STORED reference » | le contrat d'identité de D5, dans ses trois cas |
-| `visitor.test.ts:250` « reaches every node of the table through childrenOf, cells included » | 17 et 19 nœuds : une tranche oubliée se voit au comptage |
-| `visitor.test.ts:339` « asks the integrator for two keys, and for no per-item field » | les deux mécanismes de filtrage d'alias, dont `binds` |
+| « reports the rows of a group as the STORED reference » | le contrat d'identité de D5, dans ses trois cas |
+| « reaches every node of the table through childrenOf, cells included » | 17 et 19 nœuds : une tranche oubliée se voit au comptage |
+| « asks the integrator for two keys, and for no per-item field » | les deux mécanismes de filtrage d'alias, dont `binds` |
 | `compatibility.test.ts:115` et `:130` (data-catalogue) | l'ordre flux → header → footer, et header → body → footer dans un tableau |
 | `compatibility.test.ts:220` « reads a row group alias inside its rows, its cells and its page report » | les chemins `['cells', ci, 'children', chi]` et `['pageReport', 'value']` |
 
@@ -710,6 +737,11 @@ Chaque incrément passe les quatre portes avant le suivant. Aucun n'est un point
 intermédiaire livrable seul : le chantier est atomique du point de vue de la revue, mais découpé du
 point de vue de l'exécution pour que la porte dise *où* ça casse.
 
+**Ce qui a été livré :** un commit pour INC-1 à INC-4, un second pour les mesures de INC-5. Les
+incréments ci-dessous ont servi d'ordre d'exécution et de points de contrôle des portes, pas de
+découpage de l'historique — INC-1 seul laisse `shape.ts` partiellement couvert et INC-2 seul casse
+les imports, donc aucun des deux n'est un commit qui passe les portes.
+
 ### INC-0 — Baseline et oracles
 
 Rejouer les quatre portes sans rien modifier. Archiver `packages/core/dist/index.d.ts` et la liste
@@ -739,7 +771,7 @@ Portes : les quatre, plus le `diff` du `.d.ts` (§7.6).
 Remplacer `SHAPE` et ses quatre interfaces locales par `nodeShape`. Réécrire `analyseNode` sur les
 tranches. Supprimer `blockChildren`, `NO_BINDING` et l'import de `visitSegment`.
 
-Portes : les quatre. Les 46 cas de `data-catalogue/__tests__/compatibility.test.ts` sont l'oracle,
+Portes : les quatre. Les 40 cas de `data-catalogue/__tests__/compatibility.test.ts` sont l'oracle,
 et aucun ne doit être touché.
 
 ### INC-4 — `shape.test.ts` et la preuve d'accord
@@ -750,7 +782,8 @@ Portes : les quatre, couverture de `ast/` et `data-catalogue/` à 100 %.
 
 ### INC-5 — Ablations, statut de l'analyse, clôture
 
-Exécuter les cinq ablations de §10 et consigner leur résultat **mesuré** dans ce fichier. Mettre à
+Exécuter les ablations de §10 — les cinq du tableau, la contre-mesure sur la baseline (§10.1) et la
+série d'attentes (§10.2) — et consigner leur résultat **mesuré** dans ce fichier. Mettre à
 jour le bloc de statut de `refactoring-huit-chantiers.md`. Rejouer les quatre portes une dernière
 fois.
 
@@ -762,8 +795,8 @@ Chaque ablation est une modification temporaire, exécutée, **mesurée**, puis 
 qui ne fait rien rougir désigne un test manquant, pas une ablation ratée.
 
 **Exécutées le 2026-08-27** sur `pnpm vitest run --project @openview/core` — 38 fichiers,
-1 155 tests verts avant chaque ablation, source restaurée après chacune. Les cinq colonnes de
-droite sont relevées, pas prévues.
+1 155 tests verts avant chaque ablation, source restaurée après chacune. La colonne de droite est
+relevée, pas prévue.
 
 | # | Ablation | Attendu | Mesuré |
 | :-- | :--- | :--- | :--- |
@@ -790,6 +823,25 @@ fichiers que CH3 ajoute retirés, 1 139 tests verts au départ — en ablatant c
 moitiés dépendait de la table qu'on avait éditée. Ni erreur de compilation, ni test rouge dans
 l'autre famille, dans les deux sens. Après, il n'y a plus qu'une table et les deux familles
 rougissent ensemble. C'est la dérive silencieuse de §1.2, devenue impossible à produire.
+
+### 10.2 L'attente de chaque position de nœud, tenue par un test
+
+L'ADR 0015 laissait ouvert qu'« *écrire `'any'` compile* » (§5.5). Pour les positions de nœud, ce
+n'est plus vrai sans qu'un test le dise. Chaque position a été affaiblie à `'any'` — l'attente que
+la table d'acceptation accorde à **toute** nature déclarée, donc celle qui laisse `compatible` à
+`true` et que seule une assertion sur l'attente *rapportée* peut voir :
+
+| Position affaiblie à `'any'` | Tests rouges |
+| :--- | ---: |
+| `TextNode.content[i].value` (`printable`) | **3** |
+| `ConditionNode.when` (`boolean`) | **3** |
+| `LoopNode.each` et `TableRowGroupNode.each` (`list`) | **4** |
+| `TableRowNode.pageReport.value` (`number`) | **3** |
+
+Quatre ablations pour cinq positions — les deux `each` partagent la fabrique `repeats`. Dans les
+quatre cas, « *carry the expectation of each position, and not merely an expectation* » rougit. Les
+positions de nœud sont donc couvertes ; les attentes de l'algèbre d'expressions, elles, restent
+libres, et c'est la dette que l'ADR 0015 garde ouverte.
 
 **Ce que A3 établit :** les chemins n'existent que pour l'analyse. `traverse.test.ts` reste vert
 sous une ablation qui casse toutes les positions, ce qui confirme que `childrenOf` et `nodeReads`
@@ -828,8 +880,8 @@ CH3 est fini quand **tout** ce qui suit est vrai, et vérifié plutôt qu'affirm
    le pourcentage : supprimer du code dupliqué et intégralement couvert fait *baisser* un
    pourcentage sans que rien ne soit moins testé (§14 le mesure). Les quatre pourcentages restent
    au-dessus du plancher de 90 %.
-9. Les cinq ablations de §10 ont été exécutées et leur résultat mesuré est consigné dans ce
-   fichier.
+9. Les ablations de §10 ont été exécutées — les cinq du tableau, la contre-mesure sur la baseline
+   et les quatre de la série d'attentes — et leur résultat mesuré est consigné dans ce fichier.
 10. `CURRENT_SCHEMA_VERSION` vaut toujours **9**, et aucun fichier §7 n'a été modifié.
 11. Le bloc de statut de `refactoring-huit-chantiers.md` ne dit plus « aucun chantier engagé ».
 
@@ -875,7 +927,7 @@ qu'il faut un second Visiteur, pas un champ de plus.** C'est exactement l'arbitr
 
 ### CH3 dérive vers CH7
 
-`compatibility.ts` perd ~95 lignes et la tentation de finir le découpage dans le même commit est
+`compatibility.ts` perd 99 lignes et la tentation de finir le découpage dans le même commit est
 réelle. **Réponse :** §2.2 l'exclut nommément, et l'ordonnancement de l'analyse dit pourquoi — CH7
 a son propre plan à écrire, et sa portée dépasse `compatibility.ts`.
 
@@ -951,18 +1003,18 @@ dédoublement du réexport de `./ast/visitor.js` (§4.5).
 | Fichier | Avant | Après |
 | :--- | ---: | ---: |
 | `ast/visitor.ts` | 191 | **90** |
-| `ast/shape.ts` | — | **145** |
+| `ast/shape.ts` | — | **149** |
 | `ast/traverse.ts` | — | **96** |
 | `data-catalogue/compatibility.ts` | 616 | **517** |
 | `data-catalogue/types.ts` | 130 | **118** |
 
-`ast/` passe de 191 lignes en un fichier à **331** en trois, soit +140. Il faut le dire plutôt que
+`ast/` passe de 191 lignes en un fichier à **335** en trois, soit +144. Il faut le dire plutôt que
 de vendre une déduplication qui réduirait le code : ce que CH3 supprime, c'est la **divergence
 possible**, pas le volume.
 
-Le solde sur l'ensemble des cinq fichiers est de **+29 lignes** — 241 ajoutées (`shape.ts` 145,
+Le solde sur l'ensemble des cinq fichiers est de **+33 lignes** — 245 ajoutées (`shape.ts` 149,
 `traverse.ts` 96) contre 212 retirées (`visitor.ts` −101, `compatibility.ts` −99, `types.ts` −12).
-Vingt-neuf lignes pour trois tables ramenées à une : c'est le prix des types nommés que
+Trente-trois lignes pour trois tables ramenées à une : c'est le prix des types nommés que
 `compatibility.ts` déclarait en local, plus trois en-têtes de fichier.
 
 ### 14.5 Les tests déplacés, prouvés déplacés
@@ -997,3 +1049,56 @@ grep -rn "from '../data-catalogue" packages/core/src/ast/
 
 `CURRENT_SCHEMA_VERSION` vaut **9**. Aucun fichier de [AGENTS.md §7](../../AGENTS.md) n'apparaît
 dans `git diff --name-only`.
+
+---
+
+## 15. Ce que la relecture a trouvé
+
+Une relecture qui ne laisse pas de trace ne se distingue pas d'une relecture qui n'a pas eu lieu.
+Six défauts trouvés après la première exécution, tous corrigés, aucun dans le comportement livré.
+
+### 15.1 Deux défauts de code
+
+**Une assertion qui ne pouvait pas échouer.** `shape.test.ts` vérifiait le chemin de la source d'une
+liaison par `expect(shape.binding?.source.at.length ?? 1).toBeGreaterThan(0)`. Le `?? 1` rendait
+l'assertion **vraie d'office** pour les six *kinds* qui ne lient rien : elle avait l'air de vérifier
+huit cas et n'en vérifiait que deux. Remplacé par une garde `if (binding !== undefined)`, puis
+vérifié par ablation — vider le chemin de `repeats` rend bien le test rouge. C'est exactement le
+test tautologique que [AGENTS.md §5](../../AGENTS.md) refuse, et il a fallu le relire pour le voir.
+
+**Un commentaire hors §1.6.** Le même fichier écrivait « *The test CH3 exists for. Before the
+refactor…* » : un numéro de chantier et l'historique du brouillon, tous deux nommés comme interdits
+par [AGENTS.md §1.6](../../AGENTS.md). Réécrit sur l'invariant plutôt que sur son histoire.
+
+### 15.2 Quatre défauts de plan
+
+| Défaut | Correction |
+| :--- | :--- |
+| « 40 cas » écrit **46** dans `data-catalogue/__tests__/compatibility.test.ts`, deux fois | compté, corrigé |
+| `ast/visitor.ts` annoncé à « environ 120 lignes » en §4.3 | **90**, mesuré |
+| « ~95 lignes » sorties de `compatibility.ts`, deux fois | **99**, mesuré |
+| Cinq renvois vers `visitor.test.ts:177`, `:250`, `:339` — un fichier que **ce chantier scinde** | tests désignés par leur intitulé, avec la mention de leur emplacement d'origine et actuel |
+
+Le dernier vaut d'être noté pour lui-même : le plan avait écrit en §7 « les numéros de ligne
+périment », puis en avait cité cinq dans un fichier qu'il déplaçait lui-même.
+
+### 15.3 Ce que la relecture a ajouté
+
+**Un ancrage qui manquait.** §5.5 énonçait comme un constat personnel que rien ne force une attente
+juste. L'[ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md) l'avait déjà consigné
+comme dette ouverte, avec le remède qu'elle appelait — « une matrice qui énumère les kinds plutôt
+que les attentes ». §5.5 la cite désormais, et dit ce que CH3 en referme et ce qu'il laisse : les
+positions de nœud, oui ; l'algèbre d'expressions, non.
+
+**La mesure qui va avec** (§10.2) : les cinq positions de nœud affaiblies à `'any'` une par une,
+quatre ablations, la carte position → attente rouge dans les quatre cas.
+
+### 15.4 Ce que la relecture a vérifié sans rien trouver
+
+- **`DataExpectation` ne contredit aucune décision d'ADR.** L'ADR 0015 fixe le *contenu* du
+  vocabulaire (D8) et la *sémantique* de la table d'acceptation (D9) ; elle ne dit rien de leur
+  module. Aucun schéma Zod n'est construit dessus. D6 est donc un choix de placement, pas un
+  amendement d'ADR.
+- **Le contenu déplacé des tests est verbatim** (§14.5), vérifié par comparaison de chaînes.
+- **Aucun `any`, `!`, `@ts-ignore`, `as unknown as`, `catch` vide** ni assertion en chevrons dans
+  les fichiers nouveaux.

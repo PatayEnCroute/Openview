@@ -61,10 +61,14 @@ const NO_READINGS: readonly NodeReading[] = [];
 const NO_BINDING = undefined;
 const NO_CHILDREN: readonly NodeChildSlot[] = [];
 
-/** A node that reads nothing, opens nothing and holds nothing. */
-const LEAF: NodeShape = { readings: NO_READINGS, binding: NO_BINDING, children: NO_CHILDREN };
+/** Shared by every node that reads nothing, opens nothing and holds nothing. */
+const EMPTY_SHAPE: NodeShape = {
+  readings: NO_READINGS,
+  binding: NO_BINDING,
+  children: NO_CHILDREN,
+};
 
-/** A sequence source, read under the only expectation a repeated value can satisfy. */
+/** The `each` source of a repeating node, under the only expectation a sequence can satisfy. */
 function repeats(source: Expression, alias: string): NodeBinding {
   return { source: { expression: source, expectation: 'list', at: ['each'] }, alias };
 }
@@ -88,7 +92,7 @@ const SHAPE: NodeVisitor<NodeShape> = {
     binding: NO_BINDING,
     children: NO_CHILDREN,
   }),
-  image: () => LEAF,
+  image: () => EMPTY_SHAPE,
   container: (node) => ({
     readings: NO_READINGS,
     binding: NO_BINDING,

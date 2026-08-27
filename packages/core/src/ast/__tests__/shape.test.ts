@@ -189,7 +189,10 @@ describe('nodeShape', () => {
       for (const reading of shape.readings) {
         expect(reading.at.length, `${type} reading`).toBeGreaterThan(0);
       }
-      expect(shape.binding?.source.at.length ?? 1, `${type} binding`).toBeGreaterThan(0);
+      const { binding } = shape;
+      if (binding !== undefined) {
+        expect(binding.source.at.length, `${type} binding`).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -249,9 +252,9 @@ function proofTemplate() {
 
 describe('the two public readers of the AST', () => {
   it('report the same paths, from the same five positions', () => {
-    // The test CH3 exists for. Before the refactor, `collectDataPaths` read `READS_VISITOR` and
-    // `checkTemplateDataCompatibility` read a separate table, and a position declared in one but
-    // not the other produced no compilation error, no red test and no trace at runtime.
+    // Two public functions, two independent contracts, one set of positions. A position reaching
+    // only one of them would leave a model declaring a reading that `collectDataPaths` does not
+    // restitute, which is the promise AGENTS.md 1.2 makes for it.
     const template = proofTemplate();
     const found = checkTemplateDataCompatibility(template, PROOF_CATALOGUE);
 
