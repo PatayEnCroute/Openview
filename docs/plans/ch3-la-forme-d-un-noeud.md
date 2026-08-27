@@ -675,8 +675,10 @@ Dans l'ordre, sans exception :
 pnpm run lint && pnpm run build && pnpm run type-check && CI=1 pnpm run test:coverage
 ```
 
-Cible de couverture : `ast/` et `data-catalogue/` **restent à 100 %** sur les quatre métriques.
-L'agrégat ne doit pas régresser sous la baseline (93,70 / 90,74 / 98,34 / 93,60).
+Cible de couverture : `ast/` et `data-catalogue/` **restent à 100 %** sur les quatre métriques, et
+le **nombre de lignes non couvertes** de l'agrégat ne monte pas. Comparer les pourcentages à ceux de
+la baseline serait trompeur ici : le chantier supprime du code dupliqué et couvert, donc il rétrécit
+le dénominateur sans rien découvrir (§14).
 
 ---
 
@@ -771,10 +773,23 @@ droite sont relevées, pas prévues.
 | A4 | Faire rendre à `childrenOf` un tableau neuf dans tous les cas | le contrat d'identité de D5 | **1 fichier, 1 test.** « *reports the rows of a group as the STORED reference, and computes the rest* » |
 | A5 | Remplacer l'attente `boolean` de `ConditionNode.when` par `any` | le cas d'incompatibilité de l'analyse | **2 fichiers, 3 tests.** « *reads a string in a condition as compatible: false* », « *requires a boolean of the guard of a condition* », « *carry the expectation of each position, and not merely an expectation* » |
 
-**Ce que A1 établit, et c'est le chantier entier :** une seule ligne retirée d'un seul fichier rend
-rouges *les deux* fonctions publiques. À la baseline, retirer la même chose de `READS_VISITOR`
-seul laissait `checkTemplateDataCompatibility` intégralement vert — et l'inverse aussi. C'est la
-dérive silencieuse de §1.2, devenue impossible.
+### 10.1 La contre-mesure : la même ablation, faite sur la baseline
+
+A1 n'établit rien tout seul. Ce qui l'établit, c'est la comparaison avec ce que la **même** ablation
+donnait **avant** le chantier. Elle a donc été rejouée sur `HEAD~1`, arbre propre — les quatre
+fichiers que CH3 ajoute retirés, 1 139 tests verts au départ — en ablatant chaque table
+**séparément** :
+
+| Ablation, sur la baseline | Tests rouges | Où |
+| :--- | ---: | :--- |
+| Retirer la lecture `pageReport` de `READS_VISITOR` **seul** | **2** | `ast/__tests__/page-report.test.ts` uniquement. `data-catalogue/__tests__/compatibility.test.ts` reste **intégralement vert** — y compris son cas nommé « *reads a row group alias inside its rows, its cells and its page report* », qui est précisément celui qui aurait dû le voir |
+| Retirer la lecture `pageReport` de `SHAPE` **seul** | **4** | `data-catalogue/__tests__/compatibility.test.ts` et `recipe.test.ts` uniquement. `ast/__tests__/page-report.test.ts` reste **intégralement vert** |
+| *(après CH3)* retirer la lecture du site unique | **10** | les **deux** familles, 4 fichiers |
+
+**C'est la mesure du chantier.** Avant, la moitié du système ne voyait rien, et laquelle des deux
+moitiés dépendait de la table qu'on avait éditée. Ni erreur de compilation, ni test rouge dans
+l'autre famille, dans les deux sens. Après, il n'y a plus qu'une table et les deux familles
+rougissent ensemble. C'est la dérive silencieuse de §1.2, devenue impossible à produire.
 
 **Ce que A3 établit :** les chemins n'existent que pour l'analyse. `traverse.test.ts` reste vert
 sous une ablation qui casse toutes les positions, ce qui confirme que `childrenOf` et `nodeReads`
@@ -808,8 +823,11 @@ CH3 est fini quand **tout** ce qui suit est vrai, et vérifié plutôt qu'affirm
    des fichiers de test ne montre que des déplacements et des chemins d'import.
 7. **L'ensemble des noms exportés par `packages/core/dist/index.d.ts` est identique** à celui de
    la baseline : 283 noms, `diff` vide sur la liste triée (§4.5, §7.6).
-8. `ast/` et `data-catalogue/` sont à **100 %** sur les quatre métriques ; l'agrégat n'est pas
-   sous la baseline.
+8. `ast/` et `data-catalogue/` sont à **100 %** sur les quatre métriques, `shape.ts` et
+   `traverse.ts` compris. Sur l'agrégat, le critère est le **nombre de lignes non couvertes**, pas
+   le pourcentage : supprimer du code dupliqué et intégralement couvert fait *baisser* un
+   pourcentage sans que rien ne soit moins testé (§14 le mesure). Les quatre pourcentages restent
+   au-dessus du plancher de 90 %.
 9. Les cinq ablations de §10 ont été exécutées et leur résultat mesuré est consigné dans ce
    fichier.
 10. `CURRENT_SCHEMA_VERSION` vaut toujours **9**, et aucun fichier §7 n'a été modifié.
@@ -881,3 +899,101 @@ Cinq questions, à repasser avant d'ouvrir un fichier. Une réponse « oui » ar
 4. Réécrit-il l'assertion d'un test existant, plutôt que de la déplacer ? → c'est le signal que la
    dérivation est fausse, pas le test (§2.3, §11.6).
 5. Découpe-t-il `compatibility.ts` ou `materialize.ts` en modules ? → c'est CH7 (§2.2).
+
+---
+
+## 14. Relevé de sortie
+
+Mesuré le 2026-08-27, après exécution, sur la branche `claude/premier-refactor-complet-lbs9tr`.
+
+### 14.1 Les quatre portes
+
+| Porte | Baseline | Sortie |
+| :--- | :--- | :--- |
+| `pnpm run lint` | 215 fichiers, aucune correction | **219** fichiers, aucune correction |
+| `pnpm run build` | 6/6 | **6/6** |
+| `pnpm run type-check` | 11/11 | **11/11** |
+| `CI=1 pnpm run test:coverage` | 1 576 tests, 55 fichiers | **1 592** tests, **57** fichiers |
+
+Les 16 tests de plus sont ceux de `shape.test.ts` : les 1 576 de la baseline sont tous encore là.
+
+### 14.2 Couverture : lire les non-couvertes, pas les pourcentages
+
+| Métrique | Baseline | Sortie | Non couvertes, baseline → sortie |
+| :--- | :--- | :--- | :--- |
+| statements | 93,70 % (2 517/2 686) | 93,66 % (2 499/2 668) | **169 → 169** |
+| branches | 90,74 % (1 245/1 372) | 90,77 % (1 249/1 376) | **127 → 127** |
+| functions | 98,34 % (655/666) | 98,28 % (632/643) | **11 → 11** |
+| lines | 93,60 % (2 446/2 613) | 93,56 % (2 429/2 596) | **167 → 167** |
+
+**Le nombre de non-couvertes est identique sur les quatre métriques.** Trois pourcentages baissent de
+quatre à six centièmes, et c'est de l'arithmétique, pas une régression : CH3 supprime 18 statements,
+23 fonctions et 17 lignes **toutes couvertes** — la duplication — et zéro non couverte. Le
+dénominateur rétrécit, le numérateur avec, et le reste non couvert du dépôt pèse marginalement plus.
+Les branches, elles, montent de trois centièmes : la dérivation en ajoute quatre, toutes couvertes.
+
+`ast/shape.ts` et `ast/traverse.ts` sortent à **100 %** sur les quatre métriques, comme le reste de
+`ast/` et de `data-catalogue/`.
+
+Ce que CH3 **ne** fait **pas**, et l'analyse de dette ne le lui demandait pas : rendre de la marge
+sur la porte des branches. C'est l'argument de **CH1**, qui collapse sept `default:` inatteignables
+dans `engine`. Ici les sept `default:` n'existaient pas — les trois tables étaient des objets
+visiteurs, sans branche morte.
+
+### 14.3 Surface publique
+
+**283 noms avant, 283 après, `diff` vide** sur la liste triée extraite de
+`packages/core/dist/index.d.ts`. Le `.d.ts` lui-même diffère de quatre lignes, qui sont le
+dédoublement du réexport de `./ast/visitor.js` (§4.5).
+
+### 14.4 Volumes
+
+| Fichier | Avant | Après |
+| :--- | ---: | ---: |
+| `ast/visitor.ts` | 191 | **90** |
+| `ast/shape.ts` | — | **145** |
+| `ast/traverse.ts` | — | **96** |
+| `data-catalogue/compatibility.ts` | 616 | **517** |
+| `data-catalogue/types.ts` | 130 | **118** |
+
+`ast/` passe de 191 lignes en un fichier à **331** en trois, soit +140. Il faut le dire plutôt que
+de vendre une déduplication qui réduirait le code : ce que CH3 supprime, c'est la **divergence
+possible**, pas le volume.
+
+Le solde sur l'ensemble des cinq fichiers est de **+29 lignes** — 241 ajoutées (`shape.ts` 145,
+`traverse.ts` 96) contre 212 retirées (`visitor.ts` −101, `compatibility.ts` −99, `types.ts` −12).
+Vingt-neuf lignes pour trois tables ramenées à une : c'est le prix des types nommés que
+`compatibility.ts` déclarait en local, plus trois en-têtes de fichier.
+
+### 14.5 Les tests déplacés, prouvés déplacés
+
+Vérifié par comparaison de chaînes contre `HEAD~1`, et non par lecture du diff :
+
+| Bloc | Verbatim ? |
+| :--- | :--- |
+| le bloc de fixtures, dans `visitor.test.ts` | **oui** |
+| le bloc de fixtures, dans `traverse.test.ts` | **oui** |
+| les deux `describe` de dispatch | **oui**, à une ligne vide finale près |
+| les six `describe` dérivés | **oui** |
+
+Aucune assertion de comportement n'a été réécrite. Les seules modifications de tests hors
+déplacement sont quatre chemins d'import, dans `page-report.test.ts`, `limits-scope.test.ts`,
+`template/__tests__/compatibility.test.ts` et `template/__tests__/paths.test.ts`.
+
+### 14.6 Ce que la définition de fini donne, point par point
+
+Les onze points de §11 sont vérifiés. Les quatre qui se vérifient par commande :
+
+```
+grep -rln "tableRow:" packages/core/src --include='*.ts' | grep -v __tests__
+  -> ast/visitor.ts, ast/shape.ts                          (§11.1, deux sites, dispatch + description)
+grep -rn "NodeVisitor<" packages/core/src | grep -v __tests__ | grep "= {"
+  -> une seule implémentation, SHAPE                        (§11.1)
+grep -rn "SEGMENT_EXPRESSIONS" packages/
+  -> absent                                                 (§11.2)
+grep -rn "from '../data-catalogue" packages/core/src/ast/
+  -> aucun                                                  (§11.4)
+```
+
+`CURRENT_SCHEMA_VERSION` vaut **9**. Aucun fichier de [AGENTS.md §7](../../AGENTS.md) n'apparaît
+dans `git diff --name-only`.
