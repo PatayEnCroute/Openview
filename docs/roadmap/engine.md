@@ -181,7 +181,24 @@ un PDF qui sort, avec les sites correctement choisis.
 [ADR 0008](../adr/0008-langue-devise-et-formats.md) l'a **scindé** le 2026-08-20 —
 `core` **déclare**, ce lot **produit**. La moitié déclarative est livrée.
 
-**Poids :** M — **Dépend de :** E3
+**Poids :** M — **Dépend de :** E3 — **Jalon : J3** —
+**✅ livré le 2026-08-27**, [ADR 0017](../adr/0017-langue-et-devise-au-rendu.md).
+La même facture de soixante lignes sort en français/euros et en anglais/dollars depuis **un
+seul objet template**, sur quatre feuilles A4 dans les deux cas. E4-1 est tranché : un site
+stocke `{ kind, profile }` — quelle fonction écrit la position, et sous quel profil logique —
+et l'appelant associe les profils aux écritures déclarées **à la construction du port**.
+`20260016` reste `20260016`, parce qu'un identifiant ne déclare rien. E4-10 est tenu :
+`resolvePresentation` est le seul chemin vers un formateur, et les deux tables sont lues avec
+`Object.hasOwn`. Un report est arrondi **puis** écrit, et une écriture dont l'échelle
+contredirait l'arrondi déclaré est refusée plutôt que corrigée.
+
+> ⚠️ **J3 n'est pas atteint pour autant.** Les deux PDF existent et sont valides, mais la
+> **relecture par un gestionnaire ou un comptable n'a pas eu lieu**. Le lot est techniquement
+> livré ; le jalon reste ouvert sur cette seule condition.
+
+> ⛔ **Ce que E4 n'a PAS livré et qui revient à E5 / viewer :** l'attente **E4-9**, « le même
+> ICU à l'aperçu et au rendu ». E4 vérifie le PDF avec l'ICU du processus qui construit
+> l'HTML ; aucun aperçu public n'existe encore, donc l'égalité n'est pas déclarée livrée.
 
 ### E5. Le moteur sait dire où il coupe
 

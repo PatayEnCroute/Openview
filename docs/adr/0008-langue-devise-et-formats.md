@@ -648,14 +648,14 @@ qu'un rappel.
 
 | # | Attente | Propriétaire | Vérifiable à |
 | :-- | :--- | :--- | :--- |
-| **E4-1** | ⛔ **Choisir les SITES** et la fonction, valeur par valeur. C'est la faiblesse structurelle du lot, et elle est écrite en tête plutôt qu'enterrée | **E4**, avec arbitrage produit s'il faut ouvrir un champ de segment | E4 |
+| **E4-1** | ✅ **TRANCHÉ par E4** ([ADR 0017](0017-langue-et-devise-au-rendu.md), décision 1) : un site stocke `{ kind, profile }` — la fonction, et un profil logique que l'auteur du modèle possède. Le champ de segment a bien été ouvert, sous estampille **11** | **E4** | E4 |
 | **E4-2** | **Arrondir PUIS formater**, jamais l'inverse — 4,9275 % de divergence en `halfEven`, 0,0000 % en `halfExpand` | **E4** | E4, sur une facture à `halfEven` |
 | **E4-3** | Résoudre chaque écriture employée **au plus une fois par rendu**, jamais une fois par valeur. ⚠️ Un rendu peut légitimement en employer **plusieurs** — montants, quantités, prix unitaires — ce qui est proscrit est de résoudre **la même** deux fois | **E4** | E4 |
 | **E4-4** | La clé d'écriture est un **argument** — jamais une lecture de machine, jamais une clé réservée dans `data` | **E4**, et l'intégrateur | E4 |
 | **E4-5** | Une devise inconnue **mais bien formée s'imprime elle-même** ; **aucune table de secours** | **E4** | E4 |
 | **E4-6** | **L'espace insécable et sa version CLDR** — `1 234,50 €` en `fr-FR` porte **U+202F** entre les chiffres et **U+00A0** avant le symbole, et le U+202F est arrivé avec **CLDR 42 / ICU 72**. Un moteur qui normalise les espaces, ou un test d'or qui fige la chaîne rendue, casse sur l'une des deux versions de Node de la CI | **E4** (rendu), **E2/E5** (mise en page), **QA** (tests d'or) | E2, E4 |
 | **E4-7** | Le calendrier et le système de chiffres sont **épinglés par le contrat** : ne pas les repasser, ne pas les surcharger | **E4** | E4 |
-| **E4-8** | Le résolveur rend `{ ok: false, refusal }` — **la cause survit** —, un formateur rend `undefined` (une cause). Reste à E4 : « blanc ou échec », question 2 d'ADR 0001, **toujours ouverte** ; et un `switch` clos par `const exhaustive: never` | **E4** / **E3** | E3 |
+| **E4-8** | ✅ **TRANCHÉ par E4** ([ADR 0017](0017-langue-et-devise-au-rendu.md), décision 5) : **échec, jamais blanc**, sous les deux codes `presentation-refused` et `unformattable-binding-value`. La question 2 d'[ADR 0001](0001-expression-language.md) est fermée par la même décision | **E4** / **E3** | E3 |
 | **E4-9** | Le viewer et le moteur emploient le **même ICU**, ou la promesse d'aperçu identique au PDF tombe | **lots V**, **E5** | J4 |
 | **E4-10** | ⛔ **Le moteur ne construit JAMAIS une `Presentation` à la main** — il n'emploie que la branche `ok: true` du résolveur. Les **cinq familles** de fautes atteignables autrement sont recopiées ci-dessus, **verbatim et exprès**, pour rendre cette obligation opposable | **E4** | E4 |
 | **E4-11** | **Tenir cohérents les DEUX commutateurs** — les mots basculent par un `if` lisant une **donnée**, les valeurs par le **nom** passé au résolveur. Ils sont indépendants **par conception**, et rien dans Openview ne voit `rendu.langue = 'fr'` servi avec l'écriture `en-usd` : **libellés français, montants en dollars**, parse vert, rendu vert | **E4** + **intégrateur** ; avertissement **Designer** | E4 |
@@ -709,9 +709,25 @@ personne n'y prend garde.
 
 > **« Une seconde estampille » est un coût, pas un numéro.** Le plan de ce lot chiffrait cette
 > seconde estampille en écrivant `7 → 8`. Elle prend en réalité la **prochaine version disponible
-> au jour de sa livraison** : la roadmap plaçant C7 avant E4, **C7 a pris `7 → 8`** et le coût
-> d'E4 est **`8 → 9`**. Le chiffrage est inchangé — **une** estampille, **une** migration
-> d'identité —, seul le numéro se décale.
+> au jour de sa livraison**, et le décalage a continué : C7, C8, C9, C10 et C11 sont passés avant
+> E4, qui a donc payé **`10 → 11`** le 2026-08-27. Le chiffrage annoncé ici était exact —
+> **une** estampille, **une** migration d'identité — et seul le numéro s'est décalé quatre fois
+> de plus.
+
+> ⚠️ **Le croquis `format?: string` de ce lot est AMENDÉ, pas simplement livré.** Pris comme « nom
+> direct dans `presentations` », il figeait le site sur une écriture : changer de langue aurait
+> obligé à **modifier le modèle**, ce que le critère de recette interdit. E4 a donc ouvert
+> `format?: { kind, profile }`, et la sélection profil → clé d'écriture est un argument de
+> construction du port ([ADR 0017](0017-langue-et-devise-au-rendu.md), décisions 1 et 2). La
+> conséquence redoutée ici — « `20260014` peut s'imprimer `20 260 014` si personne n'y prend
+> garde » — est levée par construction : un identifiant ne déclare **rien**, et un site sans
+> déclaration garde exactement sa forme canonique.
+
+> **Une contrainte qu'E4 a dû ajouter, et qui n'est pas dans ce lot :** l'écriture choisie pour un
+> **report de page** doit vérifier `maxFractionDigits === max(decimals, 0)`. Le marqueur déclare
+> déjà son arrondi ; une écriture plus grossière réarrondirait la figure et une plus fine
+> imprimerait des chiffres que l'arrondi venait de retirer. L'incompatibilité est un refus, jamais
+> une correction silencieuse.
 
 ### La cardinalité, moins grave et plus visible
 
