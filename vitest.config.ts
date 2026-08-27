@@ -1,20 +1,7 @@
 /**
- * The single Vitest config for the monorepo.
+ * Central Vitest configuration for the Openview monorepo.
  *
- * It deliberately lives at the root rather than one per package, because the LCOV
- * report is only usable from here. A per-package run writes `SF:src/index.ts`
- * paths, relative to that package; Sonar resolves `SF` against `sonar.projectBaseDir`
- * -- the repository root -- so it looked for `<root>/src/index.ts`, found nothing,
- * and recorded 0% for every file while the scan stayed green. Worse, core and engine
- * both emitted the identical `SF:src/index.ts`, so even a suffix match was ambiguous.
- * Running once from here emits `SF:packages/core/src/index.ts`, which resolves.
- *
- * Being a real `vitest.config.ts` also puts this object under the compiler. The
- * previous shared config was a plain literal in `tools/`, exported from a file where
- * `vitest` was not resolvable and included in no tsconfig, so `thresholds` misspelt
- * as `threshold` type-checked clean and silently disabled the coverage gate with
- * every CI gate still green. `tsconfig.tooling.json` now type-checks this file, and
- * `defineConfig` rejects an unknown key.
+ * Configures cross-package test execution and enforces the strict 90% coverage threshold.
  */
 import { defineConfig } from 'vitest/config';
 

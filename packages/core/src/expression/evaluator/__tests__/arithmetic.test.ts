@@ -130,10 +130,7 @@ describe('arithmetic', () => {
   });
 
   it('raises not-finite at the ENTRY and at the EXIT, with the same code', () => {
-    // One rule, stated once: operand-type answers for a value's shape, not-finite for its
-    // finiteness -- everywhere, both ends. Two codes for one situation would have forced
-    // lot C8 to write two messages for the same fault, and the policy would re-fracture at
-    // the first copy-paste.
+    // One rule: operand-type answers for a value's shape, not-finite for its finiteness.
     const entry = expectEvaluationError(() => compute('add', path('broken.nan'), literal(1)));
     const exit = expectEvaluationError(() => compute('mul', path('broken.huge'), literal(10)));
 

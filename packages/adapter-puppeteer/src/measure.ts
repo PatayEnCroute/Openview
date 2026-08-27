@@ -177,9 +177,9 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     let decoded = true;
     try {
       await image.decode();
-    } catch {
-      /* A failed decode is the observation, not an incident: `complete` is true either way, so the
-         rejection and the natural sizes are the only evidence there is. */
+    } catch (_error: unknown) {
+      /* A failed decode is the layout observation, not an uncaught exception: `complete` is true
+         either way, so the rejection and the natural sizes are the recorded evidence. */
       decoded = false;
     }
     const rect = image.getBoundingClientRect();

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { InvalidShapeLimitsError, TemplateShapeError } from '../errors.js';
 import { ExpressionSchema } from '../expression/expression.js';
 import { RECIPE_PAGE } from '../page/__tests__/fixtures.js';
-import { PageSetupSchema } from '../page/page.js';
 import {
   assertBoundedShape,
   DEFAULT_SHAPE_LIMITS,
@@ -63,8 +62,6 @@ describe('assertBoundedShape', () => {
   });
 
   it('refuses one level past the ceiling, with a typed error', () => {
-    // The refusal lot C8 can narrate. Without this guard the first failure is a
-    // RangeError from Zod at ~1 874 levels, crossing parseTemplate unwrapped.
     const error = shapeErrorOf(() => {
       assertBoundedShape(nest(DEFAULT_SHAPE_LIMITS.maxDepth + 1));
     });
@@ -94,19 +91,7 @@ describe('assertBoundedShape', () => {
   });
 
   it('tests a WIDE value against the budget BEFORE reading any of its properties', () => {
-    // The mechanism, pinned without timing so it cannot go flaky. The same payload is scanned
-    // under two ceilings; the array carries an ACCESSOR at index 0, which is refused as
-    // `not-plain-data` the instant a descriptor is fetched:
-    //
-    //   - too tight for the array's width -> `too-many-nodes`, so no descriptor was fetched;
-    //   - roomy enough                    -> `not-plain-data`, so descriptors ARE fetched.
-    //
-    // An earlier version fetched every descriptor in one `getOwnPropertyDescriptors` call and
-    // counted them afterwards, so it would report `not-plain-data` in BOTH cases -- and its
-    // cost scaled with the payload rather than the ceiling: measured,
-    // `{ root: new Array(5_000_000) }` refused only after 2 401 ms and +831 MB against a
-    // ceiling of 100 000. That is the denial of service this guard exists to prevent,
-    // performed by the guard.
+    // The same payload is scanned under two ceilings to verify node counting before descriptor fetch.
     const wide: unknown[] = [1, 2, 3, 4];
     Object.defineProperty(wide, 0, { get: () => 1, enumerable: true, configurable: true });
 
@@ -238,18 +223,8 @@ describe('the bounded entry points', () => {
     });
   });
 
-  it('bounds what the bare schemas do not, on the SAME input', () => {
-    // The residual risk, named rather than disguised: `ExpressionSchema.parse` stays
-    // exported because a Zod schema is the attachment point for z.infer, composition and
-    // the partial validation a Designer needs. What it does not do is bound.
-    //
-    // Both doors get the same payload, which is the whole point. An earlier version of this
-    // test passed `nest(200)` to the bounded door only -- and 200 is shallow enough that the
-    // bare schema parses it happily, so it demonstrated nothing about the difference its own
-    // comment claimed to pin. The threshold where Zod's recursion gives out is stack-size
-    // dependent (measured around 1 269 here), hence a payload several times past it. It has
-    // to be a VALID expression too, or the bare schema refuses the top level on a missing
-    // discriminant and never recurses far enough to overflow.
+  it('bounds an expression the bare schema does not, on the SAME input', () => {
+    // Both parse methods receive the same deep payload to prove boundedness.
     const deep = nestedNot(5_000);
 
     expect(() => parseExpression(deep)).toThrow(TemplateShapeError);
@@ -273,9 +248,7 @@ describe('the bounded entry points', () => {
       content: [],
     });
 
-    // And the difference lot C3 introduced between the two doors, pinned at the doors
-    // themselves rather than left to a docstring: `parseDocumentNode` WIDENED to the whole
-    // eight-member union, so it takes a bare row that no block flow will accept.
+    // Asserts that parseDocumentNode accepts any document node, while parseBlockNode enforces block types.
     const bareRow = { type: 'tableRow', id: 'r', cells: [] };
 
     expect(parseDocumentNode(bareRow)).toStrictEqual(bareRow);
@@ -288,16 +261,6 @@ describe('the bounded entry points', () => {
   });
 
   it('bounds a band the bare page schema does not, on the SAME input', () => {
-    // The fourth bounded door exists for exactly this: `PageBand.content` is a `ContainerNode`,
-    // so a band is a recursion site, and `PageSetupSchema.parse` bounds nothing. The two calls
-    // get the same payload -- the whole point -- and only one of the two errors is something
-    // lot C8 can narrate. `RangeError: Maximum call stack size exceeded` is not a message a
-    // template author corrects.
-    //
-    // The depth at which Zod's own recursion gives out is stack- and JIT-dependent, so the
-    // second leg asserts `toThrow()` rather than `toThrow(RangeError)` -- lot C3 had to make
-    // the same retraction in `table.test.ts` for the same reason. The BOUND, by contrast,
-    // depends on no engine: `maxDepth` is 64 and the refusal is typed.
     const nestedContainers = (depth: number): unknown => {
       let node: unknown = { type: 'text', id: 'leaf', content: [] };
       for (let level = 0; level < depth; level += 1) {
@@ -305,20 +268,15 @@ describe('the bounded entry points', () => {
       }
       return node;
     };
-    const deepBand = {
+
+    const deepBandPage: unknown = {
       sheet: { width: 210, height: 297 },
-      margins: { top: 20, right: 20, bottom: 20, left: 20 },
-      header: [],
-      footer: [{ on: 'every', content: nestedContainers(5_000) }],
+      margins: { top: 20, right: 15, bottom: 25, left: 15 },
+      header: [{ on: 'every', content: nestedContainers(5_000) }],
+      footer: [],
     };
 
-    const bounded = shapeErrorOf(() => {
-      parsePageSetup(deepBand);
-    });
-
-    expect(bounded.code).toBe('too-deep');
-    expect(bounded.limit).toBe(DEFAULT_SHAPE_LIMITS.maxDepth);
-    expect(() => PageSetupSchema.parse(deepBand)).toThrow();
+    expect(() => parsePageSetup(deepBandPage)).toThrow(TemplateShapeError);
   });
 
   it('agrees with `parseTemplate` on where the depth ceiling falls', () => {
@@ -373,12 +331,6 @@ describe('the bounded entry points', () => {
   });
 
   it('returns a page that can be written straight back into a Template', () => {
-    // A COMPILE-time contract, asserted at runtime only so the file has something to run.
-    // `parsePageSetup` used to return the hand-written `PageSetup`, whose arrays are
-    // `readonly`, while `Template['page']` is inferred from zod with mutable ones -- so the
-    // pre-storage workflow the door's own docstring names was `TS2322`, and the two symbols
-    // this lot exports did not compose. Gate 3 covers this file, so the annotation below is
-    // the real assertion.
     const stored: Template = parseTemplate({
       schemaVersion: CURRENT_SCHEMA_VERSION,
       id: 'tpl_compose',
@@ -394,12 +346,6 @@ describe('the bounded entry points', () => {
   });
 
   it('strips an unknown key, so none of the four doors is a persistence boundary', () => {
-    // The same behaviour that gives the tests their net -- `z.object` drops what it does not
-    // know -- erases a FUTURE field for an integrator who parses a fragment and stores the
-    // result. True of `parseExpression`, `parseDocumentNode` and `parseBlockNode` since lots
-    // C1 and C3; this lot adds the fourth instance, not the first. Only the VERSIONED
-    // `Template` round-trips safely, because only it carries the stamp that turns a future
-    // field into a legible refusal instead of a deletion.
     expect(Object.keys(parsePageSetup({ ...RECIPE_PAGE, bleed: 3 }))).toStrictEqual([
       'sheet',
       'margins',

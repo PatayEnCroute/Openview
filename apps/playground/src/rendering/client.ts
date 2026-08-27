@@ -1,5 +1,5 @@
 /**
- * Le client du pont local. Il ne connaît que deux identifiants et ne construit aucun modèle.
+ * Client for local dev rendering bridge.
  */
 
 export const CATALOG_URL = '/__openview/render-catalog';
@@ -15,7 +15,7 @@ export interface CatalogueView {
   readonly datasets: readonly CatalogueChoice[];
 }
 
-/** Un refus lisible : le code et la phrase que le serveur a jugés sûrs. */
+/** Error representing a structured render refusal from the backend. */
 export class RenderRefusal extends Error {
   readonly code: string;
 
@@ -43,7 +43,7 @@ const choicesOf = (value: unknown): readonly CatalogueChoice[] => {
   return kept;
 };
 
-/** Les identifiants et les libellés du catalogue local. */
+/** Fetches template and dataset identifiers from the local catalogue. */
 export async function fetchCatalogue(): Promise<CatalogueView> {
   const response = await fetch(CATALOG_URL);
   if (!response.ok) {
@@ -65,8 +65,6 @@ async function refusalOf(response: Response): Promise<RenderRefusal> {
       typeof record.message === 'string' ? record.message : 'The render was refused.',
     );
   } catch (cause) {
-    /* Journalisé plutôt qu'avalé : un refus qui n'est pas du JSON est une anomalie du pont, et
-       la trace doit rester lisible dans la console du développeur. */
     console.warn('[openview] a refusal arrived without a json body', cause);
     return new RenderRefusal('unexpected', 'The render was refused without a readable reason.');
   }
@@ -76,10 +74,7 @@ const nameFrom = (disposition: string | null): string | undefined =>
   disposition?.match(/filename="([^"]+)"/)?.[1];
 
 /**
- * Demande le PDF et déclenche son téléchargement.
- *
- * L'URL objet est révoquée dans un `finally` : sans cela chaque téléchargement laisserait le
- * blob vivant pour la durée de l'onglet.
+ * Requests PDF rendering from the bridge and triggers browser download.
  */
 export async function downloadPdf(templateId: string, datasetId: string): Promise<string> {
   const response = await fetch(RENDER_URL, {

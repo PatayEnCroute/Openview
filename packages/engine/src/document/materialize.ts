@@ -620,14 +620,9 @@ export interface MaterializedDocument {
 }
 
 /**
- * Turns a validated template and the host's data into a document with no expression left to run.
+ * Evaluates template bindings with host data into a materialized document without pending expressions.
  *
- * One budget is created here and threaded through the applicable bands and the root flow: a bound
- * spent by a band is a bound the flow no longer has, which is what makes the ceiling a property of
- * the document rather than of a position in it.
- *
- * @param reachable the band domains the caller knows can appear, widened at most once by
- * {@link extendBands} when a document paginated as one page turns out to need several
+ * @param reachable The band domains that can appear across pages.
  */
 export function materializeDocument(
   template: Template,

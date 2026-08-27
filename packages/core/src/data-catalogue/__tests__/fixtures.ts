@@ -1,12 +1,5 @@
 /**
- * Builders and the proof declaration shared by `compatibility.test.ts` and `recipe.test.ts`.
- *
- * Carries constants and factories only: it holds no `it`, imports nothing from `vitest`, and every
- * export it declares is called somewhere -- an uncalled one would be instrumented, never covered,
- * and would lower this package's function coverage with no test going red.
- *
- * The business keys below are a proof set. None of them exists in the production sources: the
- * catalogue contract names no field, and `recipe.test.ts` renames the whole set to show it.
+ * Test fixtures and factories for data catalogue tests.
  */
 
 import type { Expression, PrintableExpression } from '../../expression/expression.js';

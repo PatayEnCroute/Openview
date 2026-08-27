@@ -36,17 +36,7 @@ type MutuallyAssignable<TLeft, TRight> = [TLeft] extends [TRight]
     : false
   : false;
 
-/**
- * The members of the union body, enumerated one by one.
- *
- * `z.infer<typeof ExpressionSchema>` would be a tautology here: it returns the
- * `z.ZodType<Expression>` ANNOTATION, not what the `z.lazy` body actually builds. Only
- * naming each member schema reaches the body.
- *
- * The schemas are imported type-only because they appear nowhere but inside
- * `z.infer<typeof X>`; `useImportType` is an error in this repo, and `z.infer` works
- * perfectly well on a type-only import.
- */
+/** Enumerates inferred member types from expression schemas. */
 type EnumeratedMembers =
   | z.infer<typeof LiteralExpressionSchema>
   | z.infer<typeof PathExpressionSchema>
@@ -355,9 +345,8 @@ describe('the texts-and-dates schemas', () => {
   });
 
   it('stops at its own level, and that boundary is worth writing down', () => {
-    // Both refinements inspect only the operand AT THEIR OWN LEVEL, so a bad literal tucked
-    // inside a conditional still reaches the evaluator. Save-time validation buys the literal
-    // in the position itself and nothing further.
+    // Both refinements inspect only the operand at their own level, so expressions nested
+    // inside conditionals are evaluated at runtime.
     expect(() =>
       ExpressionSchema.parse({
         kind: 'endOfMonth',
@@ -419,18 +408,7 @@ describe('RoundExpressionSchema', () => {
     ],
     [{ mode: 'halfUp' }, 'Invalid option: expected one of "halfExpand"|"halfEven"'],
   ])('refuses %o AT SAVE TIME, and says why', (patch, message) => {
-    // Everything a rounding can get wrong about ITSELF is settled here, which is what lets
-    // this lot introduce zero new error codes -- worth more to lot C8 than any wording.
-    //
-    // The `error` argument on `z.number()` is what makes the last two legible: without it,
-    // `Infinity` yields `Invalid input: expected number, received number`, a payload that
-    // contradicts itself. That is the exact defect lot C1 fixed by creating
-    // `not-a-whole-number`, and it would have landed in the one lot whose promise is "no
-    // new message".
-    //
-    // Asserted on the ISSUE and not on `toThrow(...)`: a ZodError's `message` is a JSON dump
-    // of its issues, so a wording carrying a quote -- the mode one does -- never matches as
-    // a substring, and the test would pass or fail for reasons unrelated to the wording.
+    // Validates that invalid rounding configurations produce legible Zod issues at parse time.
     const result = RoundExpressionSchema.safeParse(rounding(patch));
     if (result.success) {
       expect.unreachable('the rounding should have been refused at save time');

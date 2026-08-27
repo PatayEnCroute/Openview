@@ -6,8 +6,7 @@ import { validTemplate } from './compatibility-fixtures.js';
 
 describe('migrateToCurrent', () => {
   it('walks a document up the chain one step at a time', () => {
-    // The synthetic step is COMPOSED WITH THE REAL REGISTRY, and that composition is the point:
-    // the synthetic chain alone stops at version 1 and the run refuses a broken chain.
+    // The synthetic step is composed with the real registry to test chained execution.
     const chain: readonly TemplateMigration[] = [
       {
         from: 0,

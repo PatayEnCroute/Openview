@@ -13,16 +13,10 @@ import {
 } from '@openview/core';
 import { LOGO_PNG } from './logo.js';
 
-// La facture de référence du dépôt, et le seul endroit où elle est décrite.
-//
-// Ses noms de champs — `commande`, `lignes`, `societe` — sont ceux d'une application
-// intégratrice : Openview n'en réserve aucun et n'en attend aucun. Aucun de ces noms
-// n'apparaît dans `packages/engine` ni dans l'adaptateur, et c'est vérifiable au grep.
-//
-// Le modèle est une FONCTION de son apparence : la structure, les identifiants et les
-// chemins de données sont donc mécaniquement identiques d'une apparence à l'autre, et
-// l'égalité des deux listes de `collectTemplateDataPaths` est un résultat plutôt qu'une
-// coïncidence.
+// The reference invoice template for the playground.
+// Field names (e.g. commande, lignes, societe) are chosen by the host integration.
+// Openview reserves no field names or data shapes.
+// The template is a function of its style appearance.
 
 const discountApplies: Expression = {
   kind: 'compare',
@@ -62,10 +56,7 @@ export const remise: PrintableExpression = {
 };
 
 /**
- * La remise ARRONDIE, avec son mode et ses décimales déclarés PAR LE MODÈLE.
- *
- * C'est le témoin d'arrondi de la facture : le moteur n'arrondit rien de lui-même, et il ne
- * reconnaît pas un montant. Reconnaître celui-ci réserverait un sens métier.
+ * Rounded discount, with mode and decimal places declared by the model.
  */
 const remiseArrondie: PrintableExpression = {
   kind: 'round',
@@ -144,13 +135,7 @@ const lignesRemisees: PrintableExpression = {
   },
 };
 
-/**
- * Un bloc texte d'un seul segment littéral — un intitulé de colonne, un libellé de total.
- *
- * La typographie est passée EXPLICITEMENT : le moteur n'hérite rien d'un conteneur, et un libellé
- * qui n'en déclare aucune sort dans le défaut du moteur — visiblement différent du corps du
- * document. C'est le défaut correct, et c'est aussi la raison de le déclarer ici.
- */
+/** Single literal segment text node with explicit typography. */
 const txt = (id: string, text: string, typography: Typography): TextNode => ({
   type: 'text',
   id,
@@ -158,17 +143,7 @@ const txt = (id: string, text: string, typography: Typography): TextNode => ({
   content: [{ kind: 'literal', text }],
 });
 
-/**
- * « Page ⟨number⟩ / ⟨count⟩ » — quatre segments, dont deux MARQUEURS.
- *
- * Rien ici n'est calculé : un `pageField` déclare OÙ un numéro s'imprime, jamais sa valeur.
- * Celle-ci vient du paginateur (lot E2), et la langue autour — « / », « sur », « of » — est
- * du lot C6, qui se branchera sur ces `literal` sans position de contenu nouvelle.
- *
- * Écrit une fois et partagé par les deux pieds : sur une facture d'UNE page, seule la bande
- * `lastOnly` est rendue, donc un modèle qui ne numéroterait que le pied courant sortirait
- * une facture sans numéro de page.
- */
+/** Standard page numbering segment tuple with markers. */
 const PAGINATION: readonly TextSegment[] = [
   { kind: 'literal', text: 'Page ' },
   { kind: 'pageField', field: 'number' },
@@ -187,13 +162,7 @@ const titreFrancais: PrintableExpression = {
   ],
 };
 
-/**
- * La moitié anglaise du même titre, et elle RÉORDONNE.
- *
- * C'est l'argument qui distingue le `if` d'une table de traductions : le client passe devant, et
- * « n° » devient « no. » à une autre place de la phrase. Une table clé → texte ne sait pas faire
- * ça ; un `if` le fait parce qu'il porte l'expression entière et non un mot.
- */
+/** English title variant with reordered components. */
 const titreAnglais: PrintableExpression = {
   kind: 'concat',
   parts: [
@@ -203,14 +172,7 @@ const titreAnglais: PrintableExpression = {
   ],
 };
 
-/**
- * Le titre, BASCULÉ PAR UNE DONNÉE — c'est le premier des deux commutateurs de la vitrine.
- *
- * Ce mécanisme est intégralement celui du lot C1 : le lot C6 n'ajoute RIEN pour les libellés, et
- * c'est la première chose à dire de lui. Ce qu'il ajoute est l'écriture d'une VALEUR, et elle
- * bascule par un tout autre canal — le NOM passé à `resolvePresentation`. Les deux sont
- * indépendants par conception, et la section C6 plus bas montre les quatre combinaisons.
- */
+/** Title expression switched conditionally based on host data. */
 export const titre: PrintableExpression = {
   kind: 'if',
   when: {
@@ -223,37 +185,19 @@ export const titre: PrintableExpression = {
   whenFalse: titreAnglais,
 };
 
-// Le modèle s'appelle « Facture Exemple » parce que la facture est le document de
-// référence du projet — celui qui concentre les contraintes les plus dures — et
-// non le périmètre du produit. Les noms de champs ci-dessous (`commande`, `lignes`,
-// `prixUnitaire`) sont ceux qu'une application intégratrice aurait choisis : Openview
-// n'en réserve aucun et n'en attend aucun. Le même moteur rend un relevé, un bon de
-// livraison ou un courrier avec un tout autre vocabulaire.
-/**
- * Ce qu'une apparence déclare, et RIEN d'autre — lot C5.
- *
- * Sept entrées, toutes des formes du contrat : trois `BoxStyle`, trois `Typography` et un
- * `TextAlignment`. Aucune n'est une propriété CSS : le CSS est DÉRIVÉ du nœud par
- * `styleCssDe`, jamais l'inverse, et c'est ce sens de dérivation qui fait de cette page une
- * démonstration du contrat plutôt qu'une feuille de style qui lui ressemble.
- */
+/** Visual appearance options for styling template instances. */
 export interface Apparence {
   readonly nom: string;
-  /** La boîte du conteneur racine : le cadre du document. */
   readonly cadre: BoxStyle;
-  /** La bande d'en-tête du tableau — le SECOND dispositif de différenciation d'une facture. */
   readonly bandeau: BoxStyle;
-  /** La boîte du tableau lui-même : c'est sa largeur de CONTENU que les poids se partagent. */
   readonly tableau: BoxStyle;
   readonly titre: Typography;
   readonly corps: Typography;
-  /** Posée sur UN SEGMENT, jamais sur le bloc : c'est ce qui rend « Total : 1 200 € » exprimable. */
   readonly accent: Typography;
-  /** `justify` n'est légal QUE sur un bloc de texte, jamais sur une colonne. */
   readonly alignementMentions: TextAlignment;
 }
 
-/** Apparence A — bleu marine, un cadre complet, une bande claire, une serif. */
+/** Appearance A -- navy corporate style with frame and serif typography. */
 export const APPARENCE_A: Apparence = {
   nom: 'A — marine, encadrée, serif',
   cadre: {
@@ -274,18 +218,10 @@ export const APPARENCE_A: Apparence = {
   alignementMentions: 'start',
 };
 
-/**
- * Apparence B — rouille, aucun cadre, un seul filet, une sans-serif, mentions JUSTIFIÉES.
- *
- * La casse HAUTE des couleurs est délibérée : les deux casses sont légales, et une fixture est
- * l'endroit où cette décision s'exerce plutôt que de rester écrite. Le contrat ne replie pas la
- * casse au parse — un consommateur qui compare deux couleurs la replie lui-même.
- */
+/** Appearance B -- rust modern style without outer frame, sans-serif typography. */
 export const APPARENCE_B: Apparence = {
   nom: 'B — rouille, sans cadre, sans-serif, mentions justifiées',
   cadre: { padding: { top: 2, right: 0, bottom: 2, left: 0 } },
-  // Un filet est peint À L'INTÉRIEUR de la boîte : sans padding, il recouvrirait la dernière
-  // ligne de son propre contenu. Une boîte qui déclare un filet déclare aussi son padding.
   bandeau: {
     border: { bottom: { width: 1.2, color: '#8C3A1B' } },
     padding: { top: 0.6, right: 1, bottom: 2, left: 1 },
@@ -297,49 +233,19 @@ export const APPARENCE_B: Apparence = {
   alignementMentions: 'justify',
 };
 
-/**
- * Le modèle, PARAMÉTRÉ PAR SON APPARENCE — et c'est le geste central de cette démonstration.
- *
- * Le critère de recette demande « deux factures visuellement très différentes à partir d'un seul
- * jeu de données ». Écrire deux littéraux à la main le satisferait à l'œil et prouverait moins :
- * rien ne garantirait que la structure, les identifiants et les liaisons soient les mêmes. Une
- * FONCTION rend l'identité structurelle MÉCANIQUE — un seul arbre, un seul jeu de liaisons, et la
- * seule chose qui varie est ce que le lot C5 a ajouté. C'est aussi ce qui fait de l'égalité des
- * deux listes de `collectTemplateDataPaths` un résultat plutôt qu'une coïncidence.
- *
- * ⚠️ `tableau` vaut `{}` dans l'apparence B, et le contrat REFUSE un objet de style vide : la
- * forme canonique de « aucun style » est le champ ABSENT. C'est pourquoi les champs ci-dessous
- * passent par `siNonVide`, qui est exactement le normalisateur que le contrat demande au
- * PRODUCTEUR — « un producteur qui normalise vaut mieux que N consommateurs qui normalisent ».
- */
+/** Returns the style object only if it contains at least one defined property. */
 const siNonVide = (style: BoxStyle | Typography): BoxStyle | Typography | undefined =>
   Object.values(style).some((entree) => entree !== undefined) ? style : undefined;
 
-/**
- * Le bandeau d'un domaine de page, avec la ligne que ce domaine porte en plus — ou aucune.
- *
- * Les deux domaines d'en-tête montrent la même marque et la même référence, donc le bandeau est
- * construit une fois et écrit deux fois. Ce qui diffère est la ligne dessous : les pages autres que
- * la première portent le report des lignes achevées avant elles.
- */
+/** Builds the header band for a page setup. */
 const bandeauDe = (
   a: Apparence,
   report: Record<string, unknown> | undefined,
 ): Record<string, unknown> => ({
   type: 'container',
   id: 'bandeau',
-  // Une bande a le style GRATUITEMENT : `PageBand.content` EST un `ContainerNode`,
-  // donc pas une ligne de `page/` n'a bougé pour que ceci soit exprimable.
   box: siNonVide(a.bandeau),
   children: [
-    // Le logo et la référence, côte à côte DANS UN TABLEAU — et le tableau est là
-    // pour une raison précise.
-    //
-    // Une image sans dimension déclarée prend la largeur de CONTENU de son parent et
-    // garde son ratio intrinsèque : posée directement dans la bande, elle occuperait
-    // toute la largeur imprimable. Le contrat d'apparence ne porte aucune largeur de
-    // boîte, donc la seule façon d'en contraindre une aujourd'hui est un POIDS DE
-    // COLONNE. C'est la réponse d'un auteur de modèle, pas un contournement.
     {
       type: 'table',
       id: 'bandeau-grille',
@@ -397,22 +303,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
     id: 'tpl_demo_1',
     name: 'Facture Exemple',
     version: '1.0.0',
-    // La feuille, ses marges et ses bandes — lot C4. Les dimensions ci-dessous sont celles
-    // d'une A4 PARCE QUE L'AUTEUR DU MODÈLE L'A ÉCRIT : Openview n'impose aucun format, n'en
-    // réserve aucun nom et n'en déduit aucun d'une locale — même règle que pour les noms de
-    // champs et les identifiants de colonnes. `STANDARD_SHEETS_MM` est une COMMODITÉ
-    // D'ÉCRITURE : elle est étalée ici, et le document, lui, n'enregistre que deux nombres.
-    // Ajouter un format à cette table ne change ni le schéma, ni la version, ni un document.
-    // Les DEUX écritures que ce modèle déclare — lot C6. Elles vivent dans le DOCUMENT, pas dans
-    // le code React, et c'est tout l'objet du lot : rien de ce qui suit ne lit la machine.
-    //
-    // Les noms de clés appartiennent à l'AUTEUR du modèle. Openview n'en réserve aucun : pas de
-    // « default », pas de « fr », aucune convention liant une clé à une langue. Un modèle qui
-    // écrirait montants, quantités et prix unitaires dans deux langues déclarerait SIX entrées.
-    //
-    // La devise est requise même dans une écriture qui n'imprime pas d'argent, et c'est ce qui
-    // rend `formatMoney` totale sur toute écriture déclarée : son `undefined` a UNE cause, la
-    // valeur non finie, et non deux.
     presentations: {
       'fr-eur': {
         locale: 'fr-FR',
@@ -433,10 +323,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
       sheet: { ...STANDARD_SHEETS_MM.a4 },
       margins: { top: 18, right: 15, bottom: 18, left: 15 },
       header: [
-        // `firstOnly` + `exceptFirst` plutôt qu'un seul `every` : les pages suivantes portent le
-        // report entrant, et la première n'a rien à reporter. Le bandeau est donc écrit deux fois —
-        // c'est le coût qu'un domaine de bande fait payer, assumé ici plutôt que caché derrière un
-        // helper qui inventerait un troisième domaine.
         { on: 'firstOnly', content: bandeauDe(a, undefined) },
         {
           on: 'exceptFirst',
@@ -447,8 +333,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
             align: 'end',
             content: [
               { kind: 'literal', text: 'Report ' },
-              // Le marqueur déclare OÙ le report s'imprime et À QUEL ARRONDI ; sa valeur vient du
-              // paginateur, qui seul sait quelles lignes se sont achevées avant cette page.
               {
                 kind: 'pageField',
                 field: 'report',
@@ -460,10 +344,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
           }),
         },
       ],
-      // Un pied COURANT et un pied de DERNIÈRE page. `every` + `lastOnly` serait refusé par le
-      // schéma — les deux tomberaient sur la dernière feuille —, donc le pied courant est
-      // `exceptLast`. C'est la seule écriture licite de cette intention, et c'est la raison
-      // d'exister de la troisième occurrence.
       footer: [
         {
           on: 'exceptLast',
@@ -480,10 +360,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
             id: 'pied-dernier',
             children: [
               { type: 'text', id: 'pied-dernier-num', content: PAGINATION },
-              // Cette liaison est lue PAR LA BANDE ET PAR ELLE SEULE : aucun bloc du flux ne la
-              // porte. C'est ce qui rend visible, sur l'écran « Données requises » plus haut, la
-              // différence entre `collectTemplateDataPaths` et `collectDataPaths(root)` — sans
-              // elle, l'appelant ne fournirait pas la clé et le pied s'imprimerait vide.
               {
                 type: 'text',
                 id: 'pied-mentions',
@@ -491,9 +367,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
                   { kind: 'binding', value: { kind: 'path', path: 'societe.mentionsLegales' } },
                 ],
               },
-              // Les coordonnées de paiement que le MODÈLE choisit de ne montrer que sur la dernière
-              // feuille. Le moteur ne connaît aucun vocabulaire légal : il applique le domaine de
-              // bande et mesure la hauteur, rien de plus.
               {
                 type: 'text',
                 id: 'pied-paiement',
@@ -505,9 +378,7 @@ export const factureAvecApparence = (a: Apparence): Template =>
           },
         },
       ],
-      // Les CALQUES — lot C11. Répétés à l'identique sur toutes les pages, hors flux : ils ne
-      // réservent aucune hauteur et ne déplacent aucune coupure. Dans un plan, l'ordre du tableau
-      // est l'ordre arrière → avant ; l'opacité porte sur le calque ENTIER, jamais sur `Color`.
+      // Layers: repeated across pages out-of-flow without consuming height or affecting layout cuts.
       layers: [
         {
           plane: 'background',
@@ -591,10 +462,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
       id: 'root',
       box: siNonVide(a.cadre),
       children: [
-        // L'en-tête sur une GRILLE — lot C11. Douze colonnes parce que 3, 4 et 5 la divisent
-        // proprement POUR CE MODÈLE ; le moteur ne réserve ni ce nombre, ni aucun vocabulaire.
-        // La largeur d'une colonne dérive du parent, seul le pas vertical est déclaré, et le
-        // contenu d'une zone ne redimensionne AUCUNE piste : un débordement mesuré est un refus.
         {
           type: 'grid',
           id: 'en-tete',
@@ -666,17 +533,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
             },
           ],
         },
-        // Les cinq identifiants de colonne ci-dessous — `sku`, `quantite`, `prixUnitaire`,
-        // `montant`, `remise` — appellent le même avertissement que les noms de champs plus
-        // haut, adapté : ce sont un JEU D'ÉPREUVE, choisis par l'auteur du modèle. Openview
-        // n'impose aucun identifiant de colonne, et le premier tableau réellement décrit est
-        // celui qui sera recopié — le dépôt nomme déjà ce mécanisme, « position par défaut de
-        // fait ». Un relevé bancaire ou un bordereau se décrivent avec un tout autre
-        // vocabulaire, et le contrat est le même.
-        //
-        // Avant le lot C3, une ligne entière de facture était UN SEUL nœud texte dont les
-        // segments mimaient des colonnes (`line-label`). Rien ne disait qu'il y avait des
-        // colonnes, aucune largeur, aucun alignement, et l'en-tête n'existait pas.
         {
           type: 'table',
           id: 'lignes',
@@ -712,13 +568,7 @@ export const factureAvecApparence = (a: Apparence): Template =>
                 {
                   type: 'tableRow',
                   id: 'ligne-detail',
-                  // Ce que cette ligne apporte au report des pages suivantes. Le moteur décide sur
-                  // quelle page l'occurrence s'achève ; le modèle ne décide que le montant, et
-                  // c'est la même formule que la colonne « Montant » imprime.
                   pageReport: { value: lineAmount },
-                  // Le padding d'une LIGNE insète le contenu de chaque cellule à l'identique et ne
-                  // déplace aucune frontière de colonne : sans lui, deux colonnes voisines se
-                  // touchent et « 30 » colle à « Remise appliquée ».
                   box: { padding: { top: 0.6, right: 1, bottom: 0.6, left: 1 } },
                   cells: [
                     {
@@ -769,9 +619,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
                         },
                       ],
                     },
-                    // Une cellule contient des BLOCS, pas des segments : la condition qui
-                    // portait la note de remise vit désormais DANS la cellule, et le parcours
-                    // l'atteint quand même — `childrenOf` aplatit la frontière de cellule.
                     {
                       columnId: 'remise',
                       children: [
@@ -802,12 +649,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
             },
           ],
           footer: [
-            // UNE LIGNE COURTE : deux cellules pour cinq colonnes. Licite par construction, et
-            // c'est exactement la forme d'une ligne de total — l'appariement positionnel que ce
-            // contrat a refusé aurait exigé trois cellules de remplissage vides ici.
-            //
-            // Le total est une EXPRESSION DU MODÈLE, visible dans l'arbre. Le tableau ne somme
-            // rien : son `footer` n'a nulle part où poser un agrégat.
             {
               type: 'tableRow',
               id: 'ligne-total',
@@ -833,8 +674,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
           id: 'totals',
           typography: a.corps,
           align: 'end',
-          // Un cadre de totaux coupé en deux est illisible : la marque demande qu'il reste entier,
-          // et il retombe sur la politique ordinaire si aucune page neuve ne peut le porter.
           keepTogether: true,
           content: [
             { kind: 'literal', text: 'Total HT ' },
@@ -873,9 +712,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
             { kind: 'binding', value: lignesRemisees, typography: a.accent },
           ],
         },
-        // Un cadre encadré qui demande à rester entier. Sur le jeu long il atterrit là où les
-        // lignes s'arrêtent : c'est exactement le cas pour lequel la marque existe, puisqu'un cadre
-        // coupé reste ouvert derrière le bord de page.
         {
           type: 'container',
           id: 'paiement',
@@ -891,8 +727,6 @@ export const factureAvecApparence = (a: Apparence): Template =>
             },
           ],
         },
-        // Assez long pour être coupé par un bord de page : c'est le bloc sur lequel la préférence
-        // de deux lignes de part et d'autre de la coupure s'exerce sur un document réel.
         {
           type: 'text',
           id: 'conditions',
@@ -905,19 +739,13 @@ export const factureAvecApparence = (a: Apparence): Template =>
   });
 
 /**
- * Les deux factures. MÊME structure, MÊMES identifiants, MÊME jeu de données — et le seul écart
- * est l'apparence, ce que le lot C5 vient d'ajouter au contrat.
+ * The reference invoice templates using appearance variants A and B.
  */
 export const sampleTemplate = factureAvecApparence(APPARENCE_A);
 export const factureVariante = factureAvecApparence(APPARENCE_B);
 
-// Le jeu de données de l'application hôte. Sa structure et ses noms de champs lui
-// appartiennent ; `core` ne les connaît pas et ne les valide pas. AUCUN MONTANT n'y
-// figure : tous ceux affichés plus bas sont calculés par le modèle.
+// Sample host data for rendering.
 export const renderData = {
-  // La langue des MOTS, et c'est une DONNÉE que l'intégrateur nomme — pas une clé réservée par
-  // Openview, pas une lecture de la machine. Le `if` du titre la lit ; l'écriture des VALEURS,
-  // elle, se choisit par un argument passé à `resolvePresentation`. Deux canaux, indépendants.
   rendu: { langue: 'fr' },
   commande: {
     numero: 20_260_014,
@@ -931,15 +759,6 @@ export const renderData = {
       { sku: 'C-3', quantite: 4, prixUnitaire: 2.5, discount: 5 },
     ],
   },
-  // Un SECOND jeu de lignes, dédié à la démonstration d'arrondi. La facture ci-dessus
-  // n'est pas touchée : ses quatre montants (60 / 6 / 54 / 20) sont cités nommément par
-  // l'ADR 0003, et les étendre aurait périmé quatre chiffres d'un document qui fait foi.
-  //
-  // Deux de ces cinq lignes portent des valeurs DYADIQUES — 0,125 vaut 2⁻³ et 0,375 vaut
-  // 3·2⁻³, et leurs produits par 17 et par 3 le sont aussi. Le demi y est donc LE demi, et
-  // non un artefact de représentation : c'est la seule façon de montrer que le mode décide
-  // quelque chose. Comme au-dessus, aucune ligne ne porte de montant — seulement une
-  // quantité et un prix unitaire.
   arrondi: {
     lignes: [
       { sku: 'A-1', quantite: 2, prixUnitaire: 10 },
@@ -949,10 +768,7 @@ export const renderData = {
       { sku: 'E-5', quantite: 3, prixUnitaire: 0.375 },
     ],
   },
-  // « Aujourd'hui » est une donnée, sous un nom que l'intégrateur choisit.
   traitement: { effectueLe: '2026-03-10' },
-  // Lu par le PIED DE DERNIÈRE PAGE et par lui seul. Aucun bloc du flux ne le lit, donc cette
-  // clé n'apparaît dans « Données requises » que parce que l'analyse descend dans les bandes.
   societe: {
     mentionsLegales: 'Escompte pour paiement anticipé : néant.',
     reglement:
@@ -963,13 +779,7 @@ export const renderData = {
   },
 };
 
-/**
- * Un SECOND jeu de données, court, et compatible avec le même modèle.
- *
- * Il fait varier le nombre de lignes, la langue des libellés, la condition de remise et donc
- * tous les montants calculés — sans changer une seule clé. C'est ce qui rend visible que le
- * modèle ne connaît pas ses valeurs : il ne connaît que les chemins qu'il déclare lire.
- */
+/** Short sample data set. */
 export const renderDataCourt = {
   rendu: { langue: 'en' },
   commande: {
@@ -992,7 +802,7 @@ export const renderDataCourt = {
   },
 };
 
-/** Ce que chaque ligne longue désigne, cyclé pour que la recette se lise comme un document. */
+/** Description lines for sample long data. */
 const TRAVAUX = [
   'Relevé mesuré de la façade nord et de ses deux retours',
   'Dépose du rejointoiement défaillant des rangs quatre à onze',
@@ -1002,12 +812,7 @@ const TRAVAUX = [
   'Démontage de la souche instable et tri des briques saines',
 ];
 
-/**
- * Un TROISIÈME jeu de données, long : soixante lignes sous les mêmes clés.
- *
- * Rien du nombre soixante n'est connu du moteur ni de l'adaptateur. Le nombre de feuilles est
- * celui que le flux mesuré demande, et il se voit dans le pied « page n / N ».
- */
+/** Multi-page dataset with 60 lines. */
 export const renderDataLong = {
   rendu: { langue: 'fr' },
   commande: {

@@ -1,4 +1,4 @@
-﻿import type { MaterialBlock, MaterialDocument, MaterialPageLayer } from '../document/types.js';
+import type { MaterialBlock, MaterialDocument, MaterialPageLayer } from '../document/types.js';
 import { CANONICAL_NUMBER_ALPHABET } from '../pagination/markers.js';
 import type { MarkerReserve, MaterialPage, PaginatedDocument } from '../pagination/types.js';
 import { wholeFragment } from '../pagination/whole.js';
@@ -113,13 +113,7 @@ function keysOf(tree: HtmlTree): ReadonlySet<string> {
 }
 
 /**
- * The measuring probe: the same widths as the printed document, and no height constraint anywhere.
- *
- * Every box carries its occurrence key, so a reply can be filed against the ask and a missing or
- * doubled answer is caught before a height of it decides a cut. Bands are laid out one after the
- * other in their region: only the height of each is read, never where the probe happened to put it.
- * Page layers are absent on purpose: they reserve no height and decide no cut, so no box of theirs
- * is ever asked for.
+ * Builds the unconstrained HTML probe tree for natural layout measurement.
  */
 export function buildProbeTree(document: MaterialDocument, markers: MarkerReserve): ProbeTree {
   const context: PaintContext = { markers, page: undefined, keyed: true };

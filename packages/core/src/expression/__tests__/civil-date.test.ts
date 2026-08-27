@@ -17,13 +17,7 @@ function requireDayNumber(value: string): number {
 
 describe('the round trip', () => {
   it('holds for EVERY day number in the supported range', () => {
-    // Exhaustive, not sampled. An earlier version stepped by 97 -- about 1% of the range --
-    // while its name and its comment both claimed a property, and credited that stride with
-    // catching the one real bug in this file: the last term of the year-of-era formula
-    // divides by the last day INDEX of an era, not by its length, so reusing the era length
-    // was off by one exactly once per era. A fixed stride can miss a once-per-era defect
-    // entirely, depending on phase, so the claim was writing a cheque the test could not
-    // cash. All 3.65 M day numbers cost well under a second.
+    // Exhaustive test across every day number in the supported range.
     const first = requireDayNumber('0001-01-01');
     const last = requireDayNumber('9999-12-31');
     const mismatches: string[] = [];

@@ -66,7 +66,7 @@ import { catalogueFacture, catalogueSansPrix, catalogueValide } from './examples
 // It is also the ONLY real consumer of the package barrel, so it is what reveals an
 // export forgotten in index.ts -- a blind spot of all four gates on the core side.
 
-// La facture de référence vit dans son propre module : cette page la CONSOMME.
+// The reference invoice lives in its own module: this page consumes it.
 import {
   APPARENCE_A,
   APPARENCE_B,
@@ -79,30 +79,10 @@ import {
 } from './examples/reference-invoice.js';
 import { RenderDownloadPanel } from './rendering/RenderDownloadPanel.js';
 
-/**
- * Le budget de CE document, créé une fois — comme le fera le pipeline.
- *
- * Deux erreurs symétriques, et la page les évite toutes les deux. Un budget par *appel* se
- * réinitialiserait à chaque liaison, et un document de 500 liaisons obtiendrait 500 fois
- * l'allocation : la borne serait décorative. Un budget par *page* ferait dépendre le
- * compteur d'un document de ce qu'un autre a déjà consommé, donc de l'ordre de la
- * démonstration. L'unité juste est le DOCUMENT : les trois modèles d'arrondi plus bas
- * partagent le jeu de données et portent chacun le sien.
- */
+/** Document evaluation budget for the reference invoice template. */
 const budgetFacture: EvaluationBudget = createBudget();
 
-/**
- * Valeurs brutes, volontairement : transformer une liaison en texte imprimable
- * est le travail de `DataBindingStep` (étape 2), et l'ADR 0001 laisse ouverte la
- * politique de la valeur absente. Le playground ne la tranche pas à sa place.
- *
- * Cela vaut aussi pour les dates : `YYYY-MM-DD` est une représentation d'ÉCHANGE, pas
- * un format d'affichage. Les rendre en `31/03/2026` appartient au lot C6, au même
- * endroit que la mise en forme des nombres.
- *
- * Le parcours passe par `visitSegment` : c'est la deuxième traversée de segments
- * du dépôt, et une nouvelle sorte de segment doit casser la compilation ici.
- */
+/** Evaluates text segments into raw string representations. */
 function rawSegments(
   segments: readonly TextSegment[],
   scope: EvaluationScope,
@@ -115,19 +95,13 @@ function rawSegments(
         const value = evaluateExpression(binding.value, scope, { budget });
         return value === undefined ? '(absent)' : JSON.stringify(value);
       },
-      // Cette page N'A PAS DE PAGINATEUR : elle ne coupe rien, donc elle ne connaît ni le
-      // rang d'une page ni leur nombre. `1` est un ESPACE RÉSERVÉ affiché honnêtement, pas
-      // une valeur calculée — c'est le moteur (lot E2) qui substituera la vraie.
+      // Placeholder for page number marker before backend pagination.
       pageField: (marker) => `⟨${marker.field}⟩`,
     }),
   );
 }
 
-/**
- * Tombe plutôt que de dégrader. Chaque nœud lu ci-dessous figure dans le littéral
- * de template au-dessus : s'il manque, c'est le contrat de core qui est cassé, et
- * une section vide le dirait beaucoup moins bien qu'une exception.
- */
+/** Finds a node by id in the AST or throws if missing. */
 function requireNode(root: DocumentNode, id: string): DocumentNode {
   const node = findNodeById(root, id);
   if (node === undefined) {
@@ -144,13 +118,7 @@ function requireTextNode(root: DocumentNode, id: string): readonly TextSegment[]
   return node.content;
 }
 
-/**
- * La même discipline, pour un tableau — et le TYPE DE RETOUR compte.
- *
- * Un `const` module dont on rétrécit le type par un `if` ne reste pas rétréci dans le corps
- * du composant : une fermeture ne porte pas le flux de contrôle du module. Une fonction qui
- * rend `TableNode` le fait, elle.
- */
+/** Requires and narrows a TableNode by id. */
 function requireTableNode(root: DocumentNode, id: string): TableNode {
   const node = requireNode(root, id);
   if (node.type !== 'table') {
@@ -159,17 +127,7 @@ function requireTableNode(root: DocumentNode, id: string): TableNode {
   return node;
 }
 
-/**
- * Les racines d'un modèle : `root`, puis le contenu de chaque bande.
- *
- * Écrit une fois parce que `walk(sampleTemplate.root)` seul MENTAIT sur cet écran — il
- * omettait les sept nœuds des bandes (`bandeau`, `bandeau-titre`, `pied`, `pied-num`,
- * `pied-dernier`, `pied-dernier-num`, `pied-mentions`) alors que la section « La page »
- * plus bas affiche le texte résolu de ces mêmes nœuds. Le trou n'est pas propre au
- * playground : `collectTemplateDataPaths` existe précisément parce que `collectDataPaths`
- * le rencontre aussi, et `template/paths.ts` note qu'aucun `findNodeInTemplate` ne le
- * ferme encore côté `core`.
- */
+/** Document roots including page band contents. */
 const racines: readonly DocumentNode[] = [
   sampleTemplate.root,
   ...sampleTemplate.page.header.map((bande) => bande.content),
@@ -180,41 +138,15 @@ const nodeIds = racines.flatMap((racine) =>
   [...walk(racine)].map((node) => `${node.id} (${node.type})`),
 );
 
-/**
- * `collectTemplateDataPaths` et NON `collectDataPaths(sampleTemplate.root)`.
- *
- * Depuis le lot C4 les bandes vivent hors de `root`, donc la seconde forme omettrait
- * `societe.mentionsLegales` — lu par le pied de dernière page et par lui seul. Et c'est
- * bien cette clé-là : `commande.numero`, que l'en-tête lit aussi, est déjà portée par
- * `titre` dans le flux, donc la forme sur `root` la rendrait de toute façon. Une
- * justification qui nomme la mauvaise clé ne démontre rien.
- *
- * Le symptôme ne serait pas une erreur mais un BLANC : l'appelant ne fournirait pas la
- * clé, et le pied s'imprimerait vide.
- */
+/** Data paths collected from the complete template. */
 const dataPaths = collectTemplateDataPaths(sampleTemplate);
 
-/**
- * Le lot C10 vu de l'hôte : les libellés proposables, et la compatibilité du modèle.
- *
- * Trois faits sont calculés ici et JAMAIS écrits en dur plus bas — le catalogue complet
- * accepte la facture, la variante privée du prix unitaire la refuse à l'emplacement exact
- * de chaque lecture, et aucun jeu de données n'entre dans l'appel : `renderData` n'est
- * mentionné nulle part dans ce bloc.
- */
+/** Data catalogue entries and compatibility checks for template demonstration. */
 const champsDeclares: readonly DataCatalogueEntry[] = listDataCatalogueEntries(catalogueFacture);
 const compatibiliteComplete = checkTemplateDataCompatibility(sampleTemplate, catalogueFacture);
 const compatibiliteSansPrix = checkTemplateDataCompatibility(sampleTemplate, catalogueSansPrix);
 
-// Tout ce qui suit se lit sur le document validé : l'alias sur le nœud de groupe, la
-// condition sur le nœud de condition. Les expressions déclarées plus haut ne servent qu'à
-// construire le template ; l'évaluation ci-dessous n'y touche pas.
-//
-// Ce `requireNode` vaut une démonstration à lui seul : `discounted` vit désormais DANS une
-// cellule du tableau, et `findNodeById` l'atteint quand même. `childrenOf` aplatit la
-// frontière de cellule, donc rien de ce qu'un tableau contient n'est invisible au parcours —
-// un sous-arbre que le parcours ne rendrait pas serait invisible à `walk`, à `findNodeById` et
-// à `collectDataPaths` SANS erreur nulle part.
+// Evaluates node bindings directly on the validated AST structure.
 const conditionNode = requireNode(sampleTemplate.root, 'discounted');
 if (conditionNode.type !== 'condition') {
   throw new Error(`« discounted » devrait être une condition, pas un ${conditionNode.type}.`);
@@ -231,42 +163,16 @@ const countSegments = rawSegments(
 );
 
 /* ------------------------------------------------------------------------------------- *
- * La section facture, décrite par un vrai tableau
+ * Invoice table rendering demonstration
  * ------------------------------------------------------------------------------------- */
 
-/**
- * Une part de largeur, `width / Σ width`, en pourcentage.
- *
- * Le poids est un ENTIER, donc la somme est exacte en binary64 et la part est UNE division
- * correctement arrondie — le même nombre à l'écran et dans le PDF. C3 ne déclare nulle part
- * la largeur du tableau lui-même : seul le RAPPORT inter-colonnes est déclaré, et c'est le
- * conteneur qui donne la largeur.
- *
- * **Aucun second arrondi ici, et c'est le point.** Un `.toFixed(2)` appliqué à la part
- * détruirait l'exactitude que le poids entier existe pour donner : trois colonnes de poids 1
- * rendraient `33.33 % × 3 = 99.99 %`, et une colonne légale de poids 1 à côté de vingt et une
- * de poids 1 000 rendrait `0.00 %` — une largeur déclarée non nulle affichée à zéro. La
- * division est émise telle quelle ; c'est au moteur de rendu, et non à ce calcul, de décider
- * d'une précision d'affichage.
- */
+/** Computes percentage column width from relative integer weights. */
 function partsDeLargeur(columns: readonly TableColumn[]): readonly string[] {
   const total = columns.reduce((somme, column) => somme + column.width, 0);
   return columns.map((column) => `${(column.width / total) * 100}%`);
 }
 
-/**
- * Les segments d'un bloc texte, en TEXTE D'AFFICHAGE.
- *
- * Distinct de `rawSegments`, et la distinction est la correction d'un vrai défaut : celui-ci
- * est une sonde de diagnostic qui passe chaque run par `JSON.stringify` et les joint par
- * ` + `, ce qui est juste dans un `<code>` et faux dans une cellule — l'en-tête rendait
- * `"Référence"`, guillemets compris, sous une phrase affirmant qu'aucune information n'est
- * inventée en chemin.
- *
- * Les segments d'UN nœud texte sont des runs EN LIGNE : ils se concatènent sans séparateur.
- * C'est exactement ce que dit la docstring de `TextSegment` — « "Total: " et la valeur
- * appartiennent à la même ligne » —, et tout séparateur ajouté ici serait inventé.
- */
+/** Resolves text block segments into display text strings. */
 function texteDeSegments(
   segments: readonly TextSegment[],
   scope: EvaluationScope,
@@ -277,28 +183,13 @@ function texteDeSegments(
     .join('');
 }
 
-/** Un run prêt à peindre : son texte, et la typographie RÉSOLUE qui s'y applique. */
+/** Paintable run containing text and resolved typography. */
 interface RunAffiche {
   readonly texte: string;
   readonly typographie: Typography | undefined;
 }
 
-/**
- * Les runs d'un bloc texte, chacun avec sa typographie résolue — lot C5.
- *
- * ## Pourquoi cette fonction existe, et pourquoi `texteDeSegments` en dérive
- *
- * `typography` vit sur LE SEGMENT autant que sur le bloc, donc « Total : **1 200 €** » — une
- * graisse à l'intérieur d'une phrase — n'est peignable qu'avec un élément par run. Le rendu
- * passe donc du texte au `<span>`, et le parcours des segments reste écrit UNE FOIS : la
- * version texte n'est plus qu'une projection de celle-ci. Deux parcours auraient été deux
- * orthographes d'un même fait, avec le droit de diverger sur la valeur absente.
- *
- * La résolution est `resolveTypography` DU CONTRAT, jamais un `??` réécrit ici. Ce que la
- * fonction exportée garantit n'est pas une garantie de bit — `a ?? b` n'a aucun hasard
- * numérique — mais une garantie d'UNICITÉ : il n'existe qu'une orthographe de « le style du run
- * gagne sur celui du bloc », et ce fichier est un consommateur nommé de cette unicité.
- */
+/** Resolves text runs with their merged typography styles. */
 function runsDeSegments(
   segments: readonly TextSegment[],
   scope: EvaluationScope,
@@ -310,18 +201,11 @@ function runsDeSegments(
       literal: (literal) => literal.text,
       binding: (binding) => {
         const value = evaluateExpression(binding.value, scope, { budget });
-        // Une donnée absente rend une cellule vide. L'ADR 0001 laisse la politique de la
-        // valeur absente ouverte, et une cellule de tableau n'est pas l'endroit où la
-        // trancher : `rawSegments` garde le `(absent)` explicite pour les sections de dump.
+        // If missing data, render an empty cell.
         if (value === undefined) {
           return '';
         }
-        // Le jeu de données appartient à l'intégrateur (AGENTS.md, « Ce qu'Openview n'est
-        // pas ») : rien ne garantit qu'une liaison pointe vers un scalaire. `String({})` rend
-        // silencieusement `'[object Object]'`, une valeur imprimée qui n'a jamais existé dans
-        // le document. La liste positive ci-dessous est ce qui narrove `value` hors d'`unknown`
-        // pour de bon : un test négatif (`typeof value !== 'object'`) laisse `value` non
-        // rétréci aux yeux du compilateur, donc du même avis que Sonar sur ce `String(value)`.
+        // Type narrowing to convert scalar values to string safely.
         if (
           typeof value === 'string' ||
           typeof value === 'number' ||
@@ -332,8 +216,7 @@ function runsDeSegments(
         }
         return JSON.stringify(value);
       },
-      // Même raison qu'au-dessus : pas de paginateur, donc pas de valeur. `1` est un espace
-      // réservé, et la page le dit en toutes lettres plutôt que de faire croire à un calcul.
+      // Placeholder value for page number before pagination engine execution.
       pageField: () => '1',
     });
     const typographie = resolveTypography({
@@ -348,25 +231,10 @@ function runsDeSegments(
   });
 }
 
-/**
- * L'échelle des deux factures peintes plus bas : des PIXELS PAR MILLIMÈTRE.
- *
- * Déclarée, et déclarée ici, parce que tout ce que le lot C5 stocke est en millimètres — sauf
- * une taille de caractère, qui est en points. C'est ce qui rend la conversion du contrat
- * réellement porteuse dans ce fichier plutôt que décorative : `fontSize: '10pt'` aurait marché
- * en CSS et n'aurait rien démontré.
- */
+/** Scale factor for document rendering in pixels per millimeter. */
 const PX_PAR_MM = 2.6;
 
-/**
- * Transcrit UN nom de police opaque en chaîne CSS, sans lui donner la grammaire d'une pile.
- *
- * Passer le nom brut à `fontFamily` ferait de la virgule un séparateur et de `serif` ou
- * `system-ui` des indirections vers la machine. Le contrat autorise au contraire une police qui
- * s'appellerait réellement « Serif » et refuse toute pile de repli : les guillemets portent cette
- * différence. Les caractères de contrôle passent par un échappement hexadécimal CSS ; le guillemet
- * et la barre oblique inverse sont échappés directement.
- */
+/** Quotes font family names safely for CSS properties. */
 function familleDePoliceCss(famille: string | undefined): string | undefined {
   if (famille === undefined) {
     return undefined;
@@ -406,28 +274,7 @@ function inclinaisonCss(italique: boolean | undefined): CSSProperties['fontStyle
   return italique ? 'italic' : 'normal';
 }
 
-/**
- * Le CSS d'un nœud, DÉRIVÉ de ce que le nœud déclare — jamais l'inverse.
- *
- * C'est le sens de la dérivation qui compte. Une feuille de style écrite à la main à côté du
- * modèle ressemblerait au résultat et ne prouverait rien ; ici, chaque propriété vient d'un champ
- * que le contrat porte, et retirer le champ du modèle éteint la propriété.
- *
- * ## La conversion vient du CONTRAT, et c'est une dépendance plutôt qu'une convention
- *
- * `mmFromPt` est importée, pas réécrite. Le motif est mesuré et il est le même que celui de
- * `printableAreaOf` : `(pt * 25.4) / 72` et `pt * (25.4 / 72)` rendent deux doubles différents
- * pour 31,5 % des tailles entières, et la décision produit 7 promet un aperçu IDENTIQUE au PDF.
- * Une conversion réécrite ici casserait cette promesse en silence. Ce fichier est le premier
- * consommateur nommé de cette fonction.
- *
- * ## Ce que cette fonction NE fait PAS
- *
- * Elle n'invente aucune valeur par défaut. Un champ absent laisse la propriété CSS absente, et
- * c'est le navigateur qui décide — ce qui est exactement la dette que l'ADR 0007 nomme pour les
- * cinq valeurs typographiques qu'un run peut ne pas déclarer. Écrire un défaut ici serait écrire
- * une règle de rendu dans une démonstration, au lieu de montrer le trou.
- */
+/** Converts node BoxStyle and Typography declarations to React CSSProperties. */
 function styleCssDe(box: BoxStyle | undefined, typo: Typography | undefined): CSSProperties {
   const mm = (valeur: number): string => `${valeur * PX_PAR_MM}px`;
 
@@ -442,8 +289,7 @@ function styleCssDe(box: BoxStyle | undefined, typo: Typography | undefined): CS
     paddingBottom: box?.padding === undefined ? undefined : mm(box.padding.bottom),
     paddingLeft: box?.padding === undefined ? undefined : mm(box.padding.left),
     fontFamily: familleDePoliceCss(typo?.family),
-    // Points -> millimètres par la conversion DU CONTRAT, puis millimètres -> pixels par
-    // l'échelle déclarée. Deux étapes, une seule orthographe de la première.
+    // Converts points to millimeters, then millimeters to pixels.
     fontSize: typo?.sizePt === undefined ? undefined : mm(mmFromPt(typo.sizePt)),
     fontWeight: graisseCss(typo?.bold),
     fontStyle: inclinaisonCss(typo?.italic),
@@ -451,37 +297,17 @@ function styleCssDe(box: BoxStyle | undefined, typo: Typography | undefined): CS
   };
 }
 
-/** `start`/`end` restent tels quels : CSS les connaît, et rien n'est résolu ici. */
+/** Map TextAlignment to CSS text-align property value. */
 const alignementCss = (align: TextAlignment | undefined): CSSProperties['textAlign'] => align;
 
-/**
- * Apparie chaque élément d'une liste à une clé stable DANS CETTE LISTE.
- *
- * Un identifiant de nœud ne suffit pas, et c'est une propriété du contrat plutôt qu'un défaut :
- * deux itérations d'une boucle rendent le MÊME id, puisque c'est le même sous-arbre répété. La
- * position dans la liste rendue est donc la seule chose qui les distingue, et la calculer ICI
- * plutôt que dans le JSX permet d'écrire la raison une fois au lieu de la répéter à chaque site.
- */
+/** Generates stable item keys for list rendering. */
 const avecCle = <T,>(
   items: readonly T[],
   nom: (item: T) => string,
 ): readonly { readonly cle: string; readonly item: T }[] =>
   items.map((item, index) => ({ cle: `${nom(item)}#${index}`, item }));
 
-/**
- * Peint un bloc, AU SEGMENT, avec ce que le modèle déclare et rien de plus.
- *
- * ## Ce que cette fonction démontre, et ce qu'elle ne peut pas démontrer
- *
- * Elle démontre que l'apparence est ENTIÈREMENT dans le document : le même appel, sur deux
- * modèles qui ne diffèrent que par leur apparence, rend deux factures très différentes. Elle ne
- * démontre RIEN sur la pagination, la coupe, la fusion de deux filets adjacents ou la place d'une
- * image sans dimension : ce sont les attentes que l'ADR 0007 nomme envers le moteur, et cette page
- * n'est pas un moteur.
- *
- * Le parcours passe par `visitNode`, et les huit branches sont nommées : un neuvième type de bloc
- * casse la compilation ICI, à un site unique.
- */
+/** Renders a block node to React JSX matching core styling and conditions. */
 function Bloc({
   bloc,
   scope,
@@ -503,14 +329,11 @@ function Bloc({
       <div
         style={{
           ...styleCssDe(texte.box, undefined),
-          // La précédence vient du CONTRAT : `resolveTextAlign` est la seule orthographe de
-          // « d'où vient le défaut », et la colonne n'est qu'un défaut.
+          // Resolve text alignment following core hierarchy.
           textAlign: alignementCss(resolveTextAlign({ text: texte.align, column: colonne })),
         }}
       >
-        {/* Un <span> PAR RUN, parce que `typography` vit sur le segment autant que sur le
-            bloc : c'est ce qui rend « Total : 1 200 € » -- une graisse à l'intérieur d'une
-            phrase -- exprimable, et c'est nommément ce que l'ADR 0002 avait laissé ouvert. */}
+        {/* Render span per text run with resolved typography styles */}
         {avecCle(
           runsDeSegments(texte.content, scope, budget, texte.typography),
           (run) => run.texte,
@@ -525,22 +348,18 @@ function Bloc({
     container: (conteneur) => (
       <div style={styleCssDe(conteneur.box, undefined)}>{enfants(conteneur.children)}</div>
     ),
-    // `null` et non un fragment vide : une condition fausse ne rend RIEN, et le dire avec
-    // `null` est ce qui distingue « rien » de « un élément qui se trouve être vide ».
+    // Null return when condition evaluates to false.
     condition: (condition) =>
       evaluatePredicate(condition.when, scope, { budget }) ? enfants(condition.children) : null,
     loop: (boucle) =>
       avecCle(evaluateSequence(boucle.each, scope, { budget }), () => boucle.as).map(
         ({ cle, item }) => (
-          // L'alias est lié ICI, dans la portée de l'itération : c'est `childScope` DU CONTRAT,
-          // et non une portée recomposée à la main -- ce qui est exactement ce que l'ADR 0002 a
-          // corrigé quand cette page inventait `{ line }` elle-même.
+          // Create iteration scope using childScope from core.
           <div key={cle}>{enfants(boucle.children, childScope(scope, boucle.as, item))}</div>
         ),
       ),
     table: (tableau) => <Tableau tableau={tableau} scope={scope} budget={budget} />,
-    // Les pistes viennent des NOMBRES validés du contrat : colonnes égales en fractions,
-    // lignes au pas déclaré. Le contenu d'une zone ne redimensionne aucune piste.
+    // Grid track sizes derived from core validation rules.
     grid: (grille) => (
       <div
         style={{
@@ -571,13 +390,7 @@ function Bloc({
 }
 
 /**
- * Peint un tableau : les trois sections nommées, les poids de colonne, et les trois `box`.
- *
- * Le `padding` du tableau est retranché de sa largeur AVANT que les poids se la partagent, et le
- * `padding` d'une LIGNE insète le contenu de chaque cellule sans déplacer aucune frontière de
- * colonne. Ce sont les deux phrases du modèle de boîte que le contrat a dû écrire, et cette
- * fonction est ce qui les rend visibles : c'est `box-sizing: border-box` sur le tableau, et un
- * padding porté par la CELLULE et non par la bande.
+ * Renders a table node with column widths, borders, and rows.
  */
 function Tableau({
   tableau,
@@ -592,8 +405,7 @@ function Tableau({
   const ligne = (row: TableRowNode, portee: EvaluationScope, cle: string) => (
     <tr key={cle} style={{ backgroundColor: row.box?.background }}>
       {tableau.columns.map((column, index) => {
-        // Une cellule NOMME sa colonne : la recherche est par clé, jamais par position. C'est
-        // exactement ce que la docstring de `TableCell` dit que l'appariement par clé a supprimé.
+        // Cells map to columns by column identifier.
         const cellule = row.cells.find((candidate) => candidate.columnId === column.id);
         return (
           <td
@@ -601,10 +413,7 @@ function Tableau({
             style={{
               width: parts[index],
               verticalAlign: 'top',
-              // ④ du modèle de boîte : le `padding` d'une LIGNE insète le contenu de CHAQUE
-              // CELLULE, à l'identique, et ne déplace AUCUNE frontière de colonne. Insérer la
-              // bande entière désalignerait l'en-tête du corps — le défaut que le lot existe
-              // pour empêcher.
+              // Line padding insets each cell content without moving column boundaries.
               ...styleCssDe(
                 row.box?.padding === undefined ? undefined : { padding: row.box.padding },
                 undefined,
@@ -629,8 +438,7 @@ function Tableau({
   return (
     <table
       style={{
-        // ③ : les poids se résolvent contre la largeur de CONTENU du tableau, donc son
-        // `padding` est retranché AVANT le partage. `border-box` est ce qui l'exprime en CSS.
+        // Column widths resolve against table content width.
         boxSizing: 'border-box',
         width: '100%',
         borderCollapse: 'collapse',
@@ -655,35 +463,13 @@ function Tableau({
   );
 }
 
-/**
- * Les deux listes de chemins de données, et l'égalité est la moitié MÉCANIQUEMENT VÉRIFIABLE du
- * critère de recette.
- *
- * L'autre moitié — « visuellement très différentes » — est une REVUE HUMAINE, et aucune assertion
- * ne peut en tenir lieu. Le plan nomme qui la fait ; cette page se contente de mettre les deux
- * factures côte à côte pour qu'elle soit possible.
- */
+/** Data paths comparison across templates. */
 const cheminsA = collectTemplateDataPaths(sampleTemplate);
 const cheminsB = collectTemplateDataPaths(factureVariante);
 const cheminsIdentiques =
   cheminsA.length === cheminsB.length && cheminsA.every((chemin, i) => chemin === cheminsB[i]);
 
-/**
- * Ce qu'un bloc affiche, dans la portée qu'on lui donne.
- *
- * **Le parcours passe par `visitNode`, et les huit branches sont nommées.** C'est la règle
- * qu'`AGENTS.md` §3.B pose et que ce fichier applique déjà aux segments (`rawSegments`) :
- * un neuvième type de bloc casse la compilation ICI, à un site unique, au lieu de se
- * découvrir à l'exécution.
- *
- * Aucune branche ne lève et aucune ne rend le vide en silence, et les deux moitiés de cette
- * phrase ont été des défauts. Un `throw` était atteint depuis la portée de MODULE — les
- * constantes ci-dessous sont évaluées avant que React existe —, si bien qu'une image dans une
- * cellule rendait une page BLANCHE plutôt qu'une section dégradée. Et la branche `condition`
- * rendait `''` pour tout enfant non textuel, exactement ce que la docstring promettait de ne
- * pas faire. Les trois blocs que cette démonstration ne sait pas mettre en page rendent
- * désormais un MARQUEUR VISIBLE : ni exception, ni silence.
- */
+/** Renders block content into text representation within the given scope. */
 function texteDeBloc(block: BlockNode, scope: EvaluationScope, budget: EvaluationBudget): string {
   const descendre = (blocs: readonly BlockNode[]): string =>
     blocs
@@ -695,8 +481,7 @@ function texteDeBloc(block: BlockNode, scope: EvaluationScope, budget: Evaluatio
     text: (texte) => texteDeSegments(texte.content, scope, budget),
     image: (image) => image.alt ?? `[image ${image.src}]`,
     container: (conteneur) => descendre(conteneur.children),
-    // Récursive, et c'est la correction : un `container`, une seconde condition ou une image
-    // sous une condition descendent par le même chemin que partout ailleurs.
+    // Recursive block rendering.
     condition: (condition) =>
       evaluatePredicate(condition.when, scope, { budget }) ? descendre(condition.children) : '',
     loop: (boucle) => `[loop ${boucle.as} non mis en page par cette démonstration]`,
@@ -714,30 +499,20 @@ function texteDeCellule(cell: TableCell, scope: EvaluationScope, budget: Evaluat
     .join(' ');
 }
 
-/** Une case prête à afficher : sa COLONNE et son texte, appariés une seule fois. */
+/** Table cell display descriptor with matched column and text. */
 interface CaseAffichee {
   readonly column: TableColumn;
   readonly texte: string;
 }
 
-/**
- * Une ligne prête à afficher : une case par colonne déclarée, vide là où la ligne est courte.
- *
- * Rend la **colonne avec son texte** plutôt qu'un texte seul, et ce n'est pas une commodité :
- * en ne rendant que des chaînes, l'affichage devait retrouver la colonne PAR POSITION —
- * `columns[index]?.align ?? 'start'`, six fois — c'est-à-dire recroiser deux tableaux par
- * index, exactement ce que la docstring de `TableCell` dit que l'appariement par clé a
- * supprimé. Le `?? 'start'` inventait de surcroît un alignement que le modèle n'a pas déclaré,
- * dans une section qui affirme que rien n'est inventé en chemin.
- */
+/** Table row display descriptor with matched cells per column. */
 function casesDeLigne(
   row: TableRowNode,
   columns: readonly TableColumn[],
   scope: EvaluationScope,
   budget: EvaluationBudget,
 ): readonly CaseAffichee[] {
-  // La cellule NOMME sa colonne : on cherche par `columnId`, jamais par position. C'est ce qui
-  // rend une ligne courte naturelle au lieu d'une suite de remplissages.
+  // Cell names its column by columnId.
   return columns.map((column) => {
     const cell = row.cells.find((candidate) => candidate.columnId === column.id);
     return { column, texte: cell === undefined ? '' : texteDeCellule(cell, scope, budget) };
@@ -752,9 +527,7 @@ const lignesEntete = tableauLignes.header.map((row) => ({
   cases: casesDeLigne(row, tableauLignes.columns, renderData, budgetFacture),
 }));
 
-// Le corps : une portée dérivée par élément, exactement comme une boucle, et l'alias est
-// déclaré par le GROUPE. L'en-tête et le pied ne le voient pas — c'est la raison pour laquelle
-// la répétition vit sur `tableRowGroup` et non sur le tableau.
+// Table body evaluates iteration scopes per row.
 const lignesCorps = tableauLignes.body.flatMap((entry) => {
   if (entry.type === 'tableRow') {
     return [
@@ -782,10 +555,10 @@ const lignesPied = tableauLignes.footer.map((row) => ({
 }));
 
 /* ------------------------------------------------------------------------------------- *
- * Trois modèles, un jeu de données, trois totaux
+ * Rounding comparison models: A (raw), B (per line), A' (per line half-even)
  * ------------------------------------------------------------------------------------- */
 
-/** `quantite * prixUnitaire` sur le second jeu de lignes. Aucun montant n'est fourni. */
+/** Line amount formula (units * rate) evaluated for rounding comparison. */
 const montantLigne: PrintableExpression = {
   kind: 'arithmetic',
   op: 'mul',
@@ -793,7 +566,7 @@ const montantLigne: PrintableExpression = {
   right: { kind: 'path', path: 'l.prixUnitaire' },
 };
 
-/** Le kind du lot C2 : trois champs requis, et la POSITION dans l'arbre est la déclaration. */
+/** Round expression builder for comparison models. */
 const arrondir = (value: PrintableExpression, mode: RoundMode): RoundExpression => ({
   kind: 'round',
   value,
@@ -816,25 +589,14 @@ interface ModeleArrondi {
   readonly budget: EvaluationBudget;
 }
 
-/**
- * Un modèle complet par variante, PARSÉ — pas une expression évaluée à la volée.
- *
- * Chacun porte son propre budget, et c'est le contrat : « le budget de travail du rendu
- * ENTIER, créé une fois par le pipeline et partagé par toute expression du DOCUMENT ».
- * Trois modèles sont trois documents. Un budget commun ferait dépendre le compteur affiché
- * sous B de ce que A a déjà dépensé, donc de l'ordre de la démonstration — et un
- * intégrateur qui recopie cette page câblerait un budget de rendu sur une session.
- */
+/** Creates a valid parsed template for a specific rounding mode. */
 function modeleArrondi(
   cle: string,
   libelle: string,
   parLigne: PrintableExpression,
   mode: RoundMode,
 ): ModeleArrondi {
-  // Le total est DÉRIVÉ de l'expression de ligne, jamais réécrit à côté d'elle : c'est ce
-  // qui garantit que la colonne d'un modèle et son total somment bien la même chose. Épelé
-  // deux fois, rien n'obligerait les deux copies à rester identiques, et les désaccorder
-  // rendrait la démonstration silencieusement fausse — aucune porte ne lit ce fichier.
+  // Total expression derived directly from line amount formula.
   const total = arrondir(sommeDes(parLigne), mode);
   return {
     cle,
@@ -844,8 +606,7 @@ function modeleArrondi(
       id: `tpl_arrondi_${cle}`,
       name: `Arrondi ${cle}`,
       version: '1.0.0',
-      // Une page nue : ces trois modèles démontrent l'arrondi, pas la feuille. Le champ est
-      // requis, donc leur auteur l'écrit — et c'est exactement ce que « impose » veut dire.
+      // Minimal page configuration for rounding models.
       page: {
         sheet: { width: 210, height: 297 },
         margins: { top: 20, right: 20, bottom: 20, left: 20 },
@@ -894,7 +655,7 @@ const modeles: readonly ModeleArrondi[] = [
   ),
 ];
 
-/** La liaison d'un nœud de texte à une seule liaison. Tombe plutôt que de dégrader. */
+/** Reads single binding expression path from a text node. */
 function premiereLiaison(segments: readonly TextSegment[], quoi: string): PrintableExpression {
   const segment = segments[0];
   if (segment?.kind !== 'binding') {
@@ -905,8 +666,7 @@ function premiereLiaison(segments: readonly TextSegment[], quoi: string): Printa
 
 function nombre(value: unknown, quoi: string): number {
   if (typeof value !== 'number') {
-    // `TypeError` plutôt qu'`Error` : ce qui échoue ici est un contrôle de type, et la classe
-    // le dit à qui inspecte l'erreur — comme `goesUp` le fait dans `core`.
+    // Throw TypeError when evaluated value is not a number.
     throw new TypeError(`« ${quoi} » aurait dû être un nombre : contrat de core cassé.`);
   }
   return value;
@@ -918,7 +678,7 @@ interface LectureArrondi {
   readonly total: number;
 }
 
-/** Tout se lit sur le document VALIDÉ, comme partout ailleurs sur cette page. */
+/** Validated rounding model readouts. */
 function lireModele(modele: ModeleArrondi): LectureArrondi {
   const documentRoot = modele.template.root;
   const boucle = requireNode(documentRoot, 'lignes');
@@ -946,14 +706,7 @@ function lireModele(modele: ModeleArrondi): LectureArrondi {
 
 const lectures: readonly LectureArrondi[] = modeles.map(lireModele);
 
-/**
- * La prose ci-dessous NOMME des chiffres ; elle les lit donc, elle ne les recopie pas.
- *
- * Écrits en dur à côté d'un tableau calculé en direct, ils se périment au premier coup d'œil
- * de quelqu'un qui édite les cinq lignes de démonstration — et aucune porte ne relit ce
- * fichier, `apps/*` étant hors du glob de Vitest. La page enseignerait alors une conclusion
- * que son propre tableau contredit.
- */
+/** Finds rounding readout by key or throws if missing. */
 function lectureDe(cle: string): LectureArrondi {
   const lecture = lectures.find((candidate) => candidate.modele.cle === cle);
   if (lecture === undefined) {
@@ -966,29 +719,17 @@ const lectureA = lectureDe('A');
 const lectureB = lectureDe('B');
 const lectureAPrime = lectureDe('A′');
 
-/**
- * Les lignes que l'arrondi change réellement — c'est-à-dire celles dont le montant exact
- * n'est pas déjà au centime. Dérivées plutôt que listées : c'est exactement le point
- * pédagogique, et une ligne ajoutée au jeu de données entre d'elle-même dans la phrase.
- */
+/** Lines where rounding produces a non-zero difference. */
 const lignesDyadiques = lectureAPrime.montants.filter(
   (montant, index) => montant !== lectureA.montants[index],
 );
 
-/**
- * L'écriture française d'un nombre calculé — et la mesure la plus courte de ce que le lot C6
- * apporte.
- *
- * Cette ligne était une fonction de trois lignes qui prétendait connaître le français :
- * `String(value).replace('.', ',')`. Elle est remplacée par une écriture que L'AUTEUR DU MODÈLE
- * déclare, et que le contrat honore. Le `?? ''` couvre la valeur non finie, seule cause
- * d'absence de `formatDecimal`.
- */
+/** French decimal formatting helper using resolved presentations from template. */
 const ecritureFrancaise = resolvePresentation(sampleTemplate.presentations, 'fr-eur');
 const fr = (value: number): string =>
   (ecritureFrancaise.ok ? formatDecimal(value, ecritureFrancaise.writing) : undefined) ?? '';
 
-/** Les lignes du second jeu, telles que la page les affiche à gauche du tableau. */
+/** Lines of second dataset displayed in comparison table. */
 const lignesArrondi = renderData.arrondi.lignes;
 
 /** Separate budget for diagnostic examples that belong to no rendered document. */
@@ -1241,12 +982,7 @@ const refusalStyle = {
   marginBottom: '0.75rem',
 } as const;
 
-/**
- * Une couleur distincte : un refus au save time n'est pas un refus au rendu.
- *
- * Dérivé, pas recopié — les deux sortes de cartes se lisent en séquence sur la même page, et
- * la phrase ci-dessus ne reste vraie que si la géométrie a UNE source.
- */
+/** Refusal diagnostic card container style. */
 const parseRefusalStyle = {
   ...refusalStyle,
   background: '#fffaf0',
@@ -1261,69 +997,29 @@ const cellStyle = {
   textAlign: 'left',
 } as const;
 
-/** L'écart d'un centime se lit sur cette ligne : elle est mise en évidence pour cela. */
+/** Highlight style for highlighting precision comparison differences. */
 const totalCellStyle = { ...cellStyle, background: '#f0f6ff', fontWeight: 'bold' } as const;
 
-/**
- * Le pied du tableau de lignes, et il ne réutilise PAS `totalCellStyle`.
- *
- * Celui-ci existe pour une raison nommée — « l'écart d'un centime se lit sur cette ligne » —
- * et l'emprunter pour une ligne de total ordinaire rendrait ce commentaire faux. Deux raisons,
- * deux constantes.
- */
+/** Table footer cell style for the line items comparison table. */
 const pieceDePiedStyle = { ...cellStyle, fontWeight: 'bold' } as const;
 
-/**
- * Le style du tableau de lignes, et il est SÉPARÉ de `tableStyle` pour deux raisons.
- *
- * `tableLayout: 'fixed'` plus une largeur définie sont ce qui rend les pourcentages de
- * `<colgroup>` **autoritaires**. Sans eux, l'algorithme de table automatique traite une
- * largeur de colonne en pourcentage comme une simple suggestion et la fait perdre contre le
- * minimum de contenu : mesuré, un conteneur contraint rendait 24,79 / 14,10 / 19,06 / 21,59 /
- * 20,47 % là où le modèle déclare 33,33 / 11,11 / 16,67 / 16,67 / 22,22 %. La section affirme
- * que les largeurs sont `width / Σ width` ; il faut donc que ce soit vrai, et pas seulement
- * dans une fenêtre assez large pour que le tableau puisse grandir.
- *
- * Et c'est une constante distincte parce que le `<table>` comparatif des trois arrondis
- * partage `tableStyle` et doit rester inchangé — il agrège trois documents et porte un
- * `colSpan` que le contrat ne décrit pas.
- */
+/** Table styling for fixed layout percentage columns. */
 const tableauLignesStyle = { ...tableStyle, width: '100%', tableLayout: 'fixed' } as const;
 
 /* ------------------------------------------------------------------------------------- *
- * La page : une feuille dessinée à l'échelle, et rien de plus
+ * Page layout and sheet scale preview
  * ------------------------------------------------------------------------------------- */
 
-/**
- * La page du modèle VALIDÉ, lue comme tout le reste de cette section.
- *
- * `sampleTemplate.page` et non le littéral écrit plus haut : ce qui est dessiné est ce que
- * le parse a rendu, pas ce que l'auteur croyait avoir écrit.
- */
+/** Validated template page setup. */
 const pageModele: PageSetup = sampleTemplate.page;
 
-/**
- * L'aire imprimable, obtenue de `printableAreaOf` et JAMAIS recalculée ici.
- *
- * Le playground devient ainsi le troisième consommateur de cette fonction, après le moteur
- * (E1) et le viewer (V1). C'est tout l'argument rendu visible : `largeur - gauche - droite`
- * n'est pas UNE opération — mesuré, `215.9 - (25.4 + 25.4)` rend `165.10000000000002` et
- * `(215.9 - 25.4) - 25.4` rend `165.1`. Deux implémentations qui écrivent la soustraction
- * chacune de leur côté n'écrivent pas la même formule ; une fonction exportée fait de cet
- * accord une DÉPENDANCE.
- */
+/** Printable area computed via printableAreaOf helper. */
 const aireImprimable = printableAreaOf(pageModele);
 
-/** Le facteur d'échelle du dessin : la feuille tient dans 320 px de large. */
+/** Scale factor for sheet drawing preview. */
 const ECHELLE = 320 / pageModele.sheet.width;
 
-/**
- * L'occurrence en clair, et les CINQ ont un libellé.
- *
- * Un `Record` sur l'union plutôt qu'un `switch` : un membre ajouté à
- * `PAGE_BAND_OCCURRENCES` et pas ici ne compile pas. Sans cela, le playground montrerait un
- * tuple partiel sans que rien ne le signale.
- */
+/** Human-readable labels for page band occurrences. */
 const LIBELLE_OCCURRENCE: Readonly<Record<PageBandOccurrence, string>> = {
   every: 'sur toutes les pages',
   firstOnly: 'première page seulement',
@@ -1332,7 +1028,7 @@ const LIBELLE_OCCURRENCE: Readonly<Record<PageBandOccurrence, string>> = {
   lastOnly: 'dernière page seulement',
 };
 
-/** Ce qu'une bande affiche dans le dessin : son rang d'application et son contenu résolu. */
+/** Band preview item properties. */
 interface BandeAffichee {
   readonly cle: string;
   readonly occurrence: string;
@@ -1359,19 +1055,14 @@ const feuilleStyle = {
   boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
 } as const;
 
-/** Un calque dessiné sur la feuille à l'échelle : sa clé, son libellé et sa boîte pleine feuille. */
+/** Layer preview item properties. */
 interface CalqueDessine {
   readonly cle: string;
   readonly libelle: string;
   readonly style: CSSProperties;
 }
 
-/**
- * Les calques d'un plan, dessinés pleine feuille dans l'ordre stocké — l'ordre EST la profondeur.
- *
- * Ce qui est peint vient du document validé : le fond du conteneur du calque et l'opacité du calque
- * entier. Rien n'est inventé ; un calque sans fond reste une boîte transparente étiquetée.
- */
+/** Preview layers rendered in stored plane order. */
 function calquesDe(plan: PageLayerPlane): readonly CalqueDessine[] {
   return (pageModele.layers ?? [])
     .filter((calque) => calque.plane === plan)
@@ -1388,12 +1079,7 @@ function calquesDe(plan: PageLayerPlane): readonly CalqueDessine[] {
     }));
 }
 
-/**
- * La zone imprimable, positionnée par les marges et DIMENSIONNÉE par `printableAreaOf`.
- *
- * Les décalages viennent des marges, les dimensions de la fonction : c'est ce qui rend le
- * dessin faux si quelqu'un « corrige » la soustraction ailleurs.
- */
+/** Printable area preview box. */
 const zoneImprimableStyle = {
   position: 'absolute',
   left: `${pageModele.margins.left * ECHELLE}px`,
@@ -1414,34 +1100,14 @@ const bandeStyle = {
 } as const;
 
 /* ------------------------------------------------------------------------------------------- *
- * Lot C6 — langue, devise et formats. La démonstration, et ce qu'elle refuse de faire croire.
+ * Presentations and localized values demonstration
  * ------------------------------------------------------------------------------------------- */
 
-/**
- * Les DEUX commutateurs de la vitrine, et ils sont indépendants PAR CONCEPTION.
- *
- * ① la langue des MOTS est une DONNÉE (`rendu.langue`), lue par le `if` du titre — mécanisme du
- *   lot C1, auquel C6 n'ajoute rien ;
- * ② l'écriture des VALEURS est un NOM passé à `resolvePresentation` — mécanisme de ce lot.
- *
- * Les coudre interdirait un document correct : anglais + euros pour un client britannique d'une
- * société française est une facture légitime. Les tenir cohérents appartient donc à l'intégrateur,
- * et les deux combinaisons CROISÉES sont affichées plus bas précisément pour qu'on le voie.
- */
+/** Independent configuration switches for content language vs presentation formatting. */
 const LANGUES = ['fr', 'en'] as const;
 const ECRITURES = ['fr-eur', 'en-usd'] as const;
 
-/**
- * Le câblage, SITE PAR SITE — fait à la main, et c'est le trou que le contrat ne referme pas.
- *
- * `runsDeSegments` rend `String(value)` pour TOUTE valeur liée, et rien dans le document stocké ne
- * distingue `commande.numero` d'un total : reconnaître un total exigerait de réserver un nom de
- * champ, ce que la règle de périmètre refuse. Une écriture appliquée à tous les nombres
- * imprimerait `20 260 014`, qui désigne une autre commande.
- *
- * C6 remet donc au moteur tout ce qu'il faut pour écrire une valeur, et ne lui dit pas QUELLES
- * valeurs écrire. C'est le lot E4 qui le tranchera, devant une vraie facture.
- */
+/** Manual binding wiring for presentation values demonstration. */
 interface SiteEcrit {
   readonly libelle: string;
   readonly fonction: string;
@@ -1452,7 +1118,7 @@ const sitesEcrits: readonly SiteEcrit[] = [
   {
     libelle: 'commande.numero',
     fonction: 'aucune — brut',
-    // Le site qui prouve le trou : un numéro de commande n'est PAS un nombre à écrire.
+    // Order number is rendered as plain text rather than formatted currency.
     rendu: () => String(renderData.commande.numero),
   },
   {
@@ -1483,7 +1149,7 @@ const sitesEcrits: readonly SiteEcrit[] = [
   },
 ];
 
-/** Le titre, évalué contre le MÊME modèle et le MÊME jeu de données, langue basculée. */
+/** Title expression evaluated against both language settings. */
 const titreDansLaLangue = (langue: string): string => {
   const valeur = evaluateExpression(
     titre,
@@ -1493,14 +1159,7 @@ const titreDansLaLangue = (langue: string): string => {
   return typeof valeur === 'string' ? valeur : '';
 };
 
-/**
- * Les quatre combinaisons, chacune résolue UNE FOIS — jamais une fois par valeur.
- *
- * `resolvePresentation` construit deux formateurs de contrôle pour vérifier que ce moteur honore
- * le tag ; le faire par valeur serait le payer N fois. Un rendu peut légitimement employer
- * PLUSIEURS écritures (montants, quantités, prix unitaires) : ce qui est proscrit, c'est de
- * résoudre la même deux fois.
- */
+/** Pre-resolved presentation combinations. */
 const combinaisons = LANGUES.flatMap((langue) =>
   ECRITURES.map((nom) => ({
     langue,
@@ -1511,16 +1170,10 @@ const combinaisons = LANGUES.flatMap((langue) =>
   })),
 );
 
-/** Un nom que personne n'a déclaré : le refus porte sa cause, et c'est ce qu'A-7 a acheté. */
+/** Diagnostic preview for undeclared presentation identifier refusal. */
 const refusInconnu = resolvePresentation(sampleTemplate.presentations, 'de-chf');
 
-/**
- * Une écriture bien formée que ce moteur n'honore pas — refusée au RENDU, jamais au parse.
- *
- * `zz` est grammaticalement impeccable et simplement inconnu, donc il se STOCKE : être inconnu est
- * une propriété du LECTEUR, pas du document. Sans le refus, `Intl` retomberait en silence sur la
- * langue de la machine de rendu — le défaut que tout ce lot existe pour supprimer.
- */
+/** Diagnostic preview for unsupported locale refusal. */
 const refusNonHonore = resolvePresentation(
   {
     zz: {
@@ -1653,8 +1306,7 @@ export default function App() {
       </p>
       <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <div style={feuilleStyle}>
-          {/* Les calques ARRIÈRE, dessinés pleine feuille SOUS la zone imprimable — lot C11. Ce
-              qui est peint vient du document validé : fond du conteneur et opacité du calque. */}
+          {/* Background layers rendered under printable area */}
           {calquesDe('background').map((calque) => (
             <div key={calque.cle} style={calque.style} title={calque.libelle} />
           ))}
@@ -1842,19 +1494,11 @@ export default function App() {
             <col key={column.id} style={{ width: largeurs[index] }} />
           ))}
         </colgroup>
-        {/*
-          Une clé de ligne est positionnelle par nature, et c'est vrai des TROIS sections. Les
-          lignes ne sont jamais réordonnées, deux lignes identiques doivent rester deux entrées
-          distinctes, et une clé dérivée du contenu les confondrait. `row.id` n'est PAS une clé
-          valide : `nodeIdSchema` est un simple `z.string().min(1)`, rien dans `core` n'impose
-          l'unicité des ids de nœud, et `TableNode.header` déclare explicitement que plusieurs
-          lignes d'en-tête sont licites — deux lignes portant le même id passent le schéma et
-          donneraient à React deux clés identiques.
-        */}
+        {/* Positional row keys are used for immutable sequence presentation rows. */}
         <thead>
           {lignesEntete.map((row, rowIndex) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
-            <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
+            // biome-ignore lint/suspicious/noArrayIndexKey: Positional index key used by design in playground preview list
+            <tr key={rowIndex /* NOSONAR: positional key */}>
               {row.cases.map(({ column, texte }) => (
                 <th key={column.id} style={{ ...cellStyle, textAlign: column.align }}>
                   {texte}
@@ -1865,8 +1509,8 @@ export default function App() {
         </thead>
         <tbody>
           {lignesCorps.map((row, rowIndex) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
-            <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
+            // biome-ignore lint/suspicious/noArrayIndexKey: Positional index key used by design in playground preview list
+            <tr key={rowIndex /* NOSONAR: positional key */}>
               {row.cases.map(({ column, texte }) => (
                 <td key={column.id} style={{ ...cellStyle, textAlign: column.align }}>
                   {texte}
@@ -1877,8 +1521,8 @@ export default function App() {
         </tbody>
         <tfoot>
           {lignesPied.map((row, rowIndex) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: clé positionnelle assumée (AGENTS.md §1.1)
-            <tr key={rowIndex /* NOSONAR : même justification, cf. le commentaire ci-dessus */}>
+            // biome-ignore lint/suspicious/noArrayIndexKey: Positional index key used by design in playground preview list
+            <tr key={rowIndex /* NOSONAR: positional key */}>
               {row.cases.map(({ column, texte }) => (
                 <td key={column.id} style={{ ...pieceDePiedStyle, textAlign: column.align }}>
                   {texte}
@@ -2188,10 +1832,7 @@ export default function App() {
       </p>
       <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
         {combinaisons.map((combinaison) => {
-          // La résolution est liée à une CONSTANTE LOCALE, et ce n'est pas un détail de style : le
-          // rétrécissement d'un accès de propriété ne survit pas à la fermeture d'un rappel
-          // imbriqué, donc `combinaison.resolution.writing` ne compilerait pas dans le `map`
-          // ci-dessous. C'est le résultat discriminé qui rend ce rétrécissement écrivable du tout.
+          // Resolution bound to a local constant to preserve narrowing in closures.
           const { resolution } = combinaison;
           return (
             <div
@@ -2230,8 +1871,7 @@ export default function App() {
                           <code>{site.fonction}</code>
                         </td>
                         <td style={{ ...cellStyle, fontWeight: 'bold' }}>
-                          {/* Une écriture RÉSOLUE, jamais une bâtie à la main : c'est la seule qui a
-                            passé les deux portes de locale et la revalidation des cinq champs. */}
+                          {/* Render formatted presentation value */}
                           {site.rendu(resolution.writing) ?? '(absent)'}
                         </td>
                       </tr>

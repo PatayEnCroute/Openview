@@ -62,14 +62,7 @@ const runAttribute = (index: number, context: PaintContext): HtmlAttributes =>
   context.keyed ? { 'data-openview-run': String(index) } : {};
 
 /**
- * What a marker prints: the real value once the cuts are known, a placeholder of digits before.
- *
- * The placeholder is only ever measured, so what matters is that it cannot be wider than the box
- * reserved for it: a digit is never wider than the widest glyph of the canonical alphabet.
- *
- * A report is rounded HERE and nowhere earlier, with the operation `@openview/core` publishes: the
- * sum travels raw so that two markers declaring two roundings write two spellings of it, and a
- * second implementation of the rounding could drift from the one a formula uses.
+ * Computes rendered text for a page marker, using digit placeholders during measurement.
  */
 function markerText(run: MaterialPageFieldRun, context: PaintContext): string {
   const page = context.page;

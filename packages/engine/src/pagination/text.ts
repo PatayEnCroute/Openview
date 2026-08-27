@@ -65,20 +65,7 @@ const edgeOf = (first: boolean, last: boolean): FragmentEdge => {
 const MIN_LINES_PER_SIDE = 2;
 
 /**
- * Where to cut a text block: as far as fits, but never leaving one line alone on either page.
- *
- * A preference and not a rule, in this order. The greedy end is bounded so at least two lines follow
- * the cut, and required to leave at least two before it. When the room where the block stands
- * cannot satisfy that but a page holding nothing else could -- by taking the block whole or by
- * allowing the same 2/2 cut -- nothing is placed and the page closes. When no page can satisfy it,
- * the greedy end stands: a preference may cost a page, never a refusal and never a page that
- * consumed nothing.
- *
- * Fewer than four lines remain: two on each side is arithmetically impossible, so the greedy end
- * stands and no artificial cut is introduced.
- *
- * @param greedy the E2 end for a given room, which decides the cursors and the runs either way
- * @returns the line to cut before, or `undefined` to close the page and offer a fresh one
+ * Determines text line cut points respecting widow and orphan line preferences.
  */
 function keptLines(
   greedy: (room: number) => number,

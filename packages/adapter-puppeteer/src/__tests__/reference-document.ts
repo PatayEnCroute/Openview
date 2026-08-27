@@ -10,13 +10,7 @@ import {
 import { LOGO_PNG } from './fixtures.js';
 
 /**
- * The acceptance document: one sheet, a logo, a five-column table, computed money and dates, two
- * bands and two appearances.
- *
- * It is shaped like a bill because that is the hardest document the roadmap names, and its field
- * names are this fixture's own -- `order`, `rows`, `issuer`. Nothing in the engine or in this
- * adapter reads a name: the same structure prints a statement or a delivery note under a completely
- * different vocabulary.
+ * Reference acceptance document fixture for Puppeteer PDF rendering validation.
  */
 
 const rowAmount: PrintableExpression = {

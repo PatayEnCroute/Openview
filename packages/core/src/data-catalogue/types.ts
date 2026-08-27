@@ -1,10 +1,5 @@
 /**
- * The data catalogue a host application declares: which keys its models may read, under which
- * business labels, and what nature each terminal value has.
- *
- * Openview reserves no key and expects no structure -- the vocabulary is the host's. The catalogue
- * answers "what does the host allow a model to read?" and never "what does this render contain?".
- *
+ * Host data catalogue type contracts and terminal scalar definitions.
  * @see docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md
  */
 

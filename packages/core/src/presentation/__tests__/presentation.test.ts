@@ -18,21 +18,7 @@ import {
   type PresentationTable,
 } from '../types.js';
 
-/**
- * The two assertions the compiler plays, rather than the runner.
- *
- * `keyof` catches presence -- a field removed from the schema, or added to it -- and the value pair
- * catches a type drift, such as a schema saying `string` where the interface says `number`. Neither
- * subsumes the other; both together stay blind to a field that turns optional in an object whose
- * every field would be, and that blind spot does not exist here because `Presentation` has no
- * optional field at all.
- *
- * Measured: an optional field added to the interface alone, or to the schema alone, passes all four
- * gates at exit 0 without these two annotations, and yields `TS2322` with them.
- *
- * They are `const` and not `it` because there is nothing to run: the guard is the annotation, and
- * `pnpm run type-check` plays it. They are exported so `noUnusedLocals` does not flag them.
- */
+/** Asserts key and value assignability between Presentation schema and interface. */
 export const PRESENTATION_KEYS_IN_STEP: MutuallyAssignable<
   keyof z.infer<typeof PresentationSchema>,
   keyof Presentation
@@ -184,10 +170,7 @@ describe('a locale is judged twice, and the two judgements are deliberately not 
   });
 
   it('shows the hole it exists to close, without ever naming the host locale', () => {
-    // The tag is explicit, so the `no-environment-read` plugin does not bite -- an arity-zero
-    // `Intl.NumberFormat()` is refused, and no spelling of `biome-ignore` rescues a plugin
-    // diagnostic. The property shown is that an unknown tag falls back to the machine, and it is
-    // shown without pinning what the machine is, so the test is true on any host.
+    // The tag is explicit. An unknown tag falls back to the host locale.
     expect(new Intl.NumberFormat('zz').resolvedOptions().locale).not.toBe('zz');
   });
 });
@@ -649,8 +632,7 @@ describe('the stored shape, its stamp and its migration', () => {
   });
 
   it('carries a table through the stamp on a document that already had one', () => {
-    // The version guard reads the stamp and not the content, so a document stamped 6 that already
-    // carries a table -- hand-made, or written by an unstamped mid-lot build -- is not refused.
+    // The version guard processes the document and migrates to current version while preserving declared presentations.
     const withTable = documentAt(6, { presentations: { 'montant-fr': FR } });
 
     const parsed = parseTemplate(withTable);

@@ -43,16 +43,7 @@ function bandBlocks(bands: readonly MaterialPageBand[], role: PageRole): readonl
 }
 
 /**
- * Cuts the root flow into pages, then names each page and gives it the band its role calls for.
- *
- * The fill is greedy and structured: the longest prefix that fits, cut only at a point the kind
- * allows. Two layouts are never compared on taste, nothing is random, and a page that consumed
- * nothing is refused rather than retried -- with a finite number of progression units and a strict
- * advance per page, that is the whole termination argument.
- *
- * Bands that fill the printable area exactly leave the flow a height of zero. A document with
- * nothing in its flow still prints one page of bands; the first block of content on such a page is
- * refused, because no cut of it could ever be printed.
+ * Partitions the root block flow into discrete pages applying greedy layout cuts and page band roles.
  */
 export function paginate(
   document: MaterialDocument,

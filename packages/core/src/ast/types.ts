@@ -5,10 +5,7 @@ interface NodeBase {
   /** Unique and stable identifier of the node. */
   readonly id: string;
   /**
-   * Asks a renderer to keep each materialised occurrence of this node on a single page. Absence
-   * permits fragmentation without ordering it, and an occurrence no fresh page can hold falls back
-   * to the ordinary policy of its kind.
-   *
+   * Asks renderer to keep each materialised occurrence of this node on a single page.
    * @see docs/adr/0009-les-blocs-insecables.md
    */
   readonly keepTogether?: true | undefined;

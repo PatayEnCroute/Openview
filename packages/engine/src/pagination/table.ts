@@ -62,14 +62,7 @@ function groupHeight(
 }
 
 /**
- * The longest run of rows of a table that fits, with its declared header repeated in front.
- *
- * The header is a preface: it is cloned onto every fragment that carries content and never advances
- * the cursor, so a fragment holding nothing but a repeated header is refused rather than kept. The
- * footer is not a preface: its rows follow the body once, and may start a page of their own.
- *
- * A row that no longer fits where it stands but would fit on a page of its own is moved there
- * whole. A row that fits on no page at all is split down its columns instead.
+ * Places the maximum fitting slice of table rows onto a page with repeated header rows.
  */
 export function placeTable(
   table: MaterialTable,

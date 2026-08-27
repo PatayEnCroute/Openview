@@ -42,13 +42,7 @@ const MEASURE_FAILED =
 const NOT_SETTLED =
   'The composed pages kept overflowing the height the browser gave them, so the engine stopped rather than print a sequence it could not prove. Read `details.pageNumber` for the last page involved.';
 
-/**
- * How many times a measured overflow may push the paginator to cut again.
- *
- * Each round withholds strictly more height from one page, so the sequence cannot repeat; the bound
- * only stops a pathological document from spending a browser on it. The operational ceilings of a
- * hostile document are a separate concern from this convergence.
- */
+/** Maximum settle iteration rounds allowed to resolve page breaks without overflow. */
 const MAX_SETTLE_ROUNDS = 8;
 
 /** The band domains a document that turns out to hold one page can ever paint. */
@@ -132,12 +126,7 @@ interface Composed {
 }
 
 /**
- * Cuts, paints and measures the whole sequence until the browser agrees every page holds what the
- * paginator put on it.
- *
- * A measured overflow becomes height withheld from that page and the flow is cut again from the
- * start, so the pages that follow are recomposed rather than patched. Nothing is printed until a
- * measurement of the final sequence has come back clean.
+ * Iteratively measures and repaginates pages until layout converges without height overflow.
  */
 async function settle(
   session: PdfRenderSession,
@@ -198,10 +187,6 @@ async function renderInSession(
   let metrics = await measureNaturally(session, bound, markers);
 
   if (pageCountOf(bound, markers, metrics, pxOf(bound, metrics)) > 1) {
-    /* The one-page hypothesis is spent: the domains a run of pages reaches are wider, so the bands
-       they add are bound now -- once -- and the reserves and the cuts are taken again from the
-       start. Widening never makes the document fit on one page again, so this happens at most once
-       and the two passes cannot chase each other. */
     const widened: ReadonlySet<PageBandOccurrence> = reachableOccurrences(2);
     bound = extendBands(template, data, bound, widened);
     markers = await reserveMarkers(session, bound);
@@ -216,8 +201,6 @@ async function renderInSession(
       images: documentImages(bound.document),
     });
   } catch (error) {
-    /* A refusal the session already named keeps its own code and details: re-wrapping it would
-       replace a precise cause with a generic export failure. */
     if (error instanceof DocumentRenderError) {
       throw error;
     }
@@ -226,15 +209,9 @@ async function renderInSession(
 }
 
 /**
- * Assembles the pdf render port: validate, bind, paginate, build, serialise, then print.
+ * Assembles the PDF render port executing validation, binding, pagination, and printing.
  *
- * Every step runs on every render; none of them may stop the chain quietly, so a refusal is an
- * exception and a success has been through all of them. One session is opened per render and closed
- * on every path, so every height that decided a cut and the page that was printed come from the
- * same fonts and the same layout engine.
- *
- * The strategy receives closed html documents and the declared sheet -- never the template, the
- * data or the AST.
+ * @see docs/adr/0006-la-page.md
  */
 export function createPdfRenderPort(
   strategy: PdfRenderStrategy,

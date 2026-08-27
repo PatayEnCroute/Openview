@@ -89,14 +89,7 @@ const COMMON = [
 ];
 
 /**
- * The stylesheet of the printed document: several sheets, each with three slots of fixed height.
- *
- * Every value comes from the validated page setup or from a measurement, so no text of the template
- * ever enters a style block. `break-after` on every sheet but the last is what makes one box print
- * as one page and adds no blank one after the end.
- *
- * `overflow: hidden` stays a last barrier against a page that grew, never the guard: the session
- * measures the whole sequence and refuses before anything is printed.
+ * Generates the stylesheet for the paginated document based on page geometry.
  */
 export function documentCss(geometry: PageGeometry): string {
   const { sheet, margins, printable, headerReserve, footerReserve } = geometry;

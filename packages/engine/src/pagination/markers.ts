@@ -110,15 +110,7 @@ export interface GlyphWidths {
 }
 
 /**
- * The width every marker reserves, from the widest glyph its own alphabet can draw.
- *
- * A footer that goes from `9` to `10` must not move the cut that decides how many pages there are,
- * and a report that goes from `0` to `-1234.56` must not either. Reserving the widest value the
- * marker could ever reach makes its geometry independent of the value it ends up showing, which is
- * what breaks that circle without a fixed-point search.
- *
- * A counter and a report take different bounds: a counter writes at most `digits` digits, a report
- * writes at most {@link CANONICAL_NUMBER_MAX_CHARS} characters of a wider alphabet.
+ * Creates marker reserve metrics based on the widest glyphs for typography signatures.
  */
 export function markerReserve(
   digits: number,

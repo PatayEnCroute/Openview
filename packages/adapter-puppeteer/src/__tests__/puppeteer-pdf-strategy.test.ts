@@ -57,7 +57,7 @@ function paintedColours(bytes: Uint8Array): readonly string[] {
     let inflated: string;
     try {
       inflated = inflateSync(raw).toString('latin1');
-    } catch {
+    } catch (_error: unknown) {
       /* Not every stream is deflated -- a font or an image is not -- and a stream this reader
          cannot inflate simply holds no colour operator to collect. */
       inflated = raw.toString('latin1');

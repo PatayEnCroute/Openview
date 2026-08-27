@@ -13,14 +13,10 @@ import {
 import { RECIPE_TABLE, RECIPE_TEMPLATE } from './fixtures.js';
 
 /**
- * The SOLE fault of a table, as a `(path, message)` pair, or `undefined` when it parsed.
+ * The sole issue of a table as a `(path, message)` pair, or `undefined` when parsing succeeds.
  *
- * Asserts the issue COUNT rather than reading `issues[0]` off an arbitrarily long list, and
- * that is the correction of a real defect: every caller below claims to pin one refusal, and
- * four of them were feeding a table broken in thirteen independent ways. Reading position 0
- * was green either way, so the property this file cares about most -- one fault, one message
- * for lot C8 -- went unmeasured on exactly the inputs where it broke. It also removes a
- * dependency on zod's issue ORDER, which is not contractual.
+ * Asserts that exactly one validation issue is raised, ensuring precise fault isolation
+ * without relying on non-contractual issue ordering.
  */
 const soleIssueOf = (raw: unknown): { path: string; message: string } | undefined => {
   const result = TableNodeSchema.safeParse(raw);
@@ -68,9 +64,8 @@ describe('TableNodeSchema', () => {
   });
 
   it('refuses two columns sharing an id', () => {
-    // Le message est CONSTANT : il n'interpole pas le contenu du modèle, parce qu'un
-    // `columnId` est choisi par l'auteur du modèle, c'est-à-dire par l'attaquant du modèle de
-    // menace (ADR 0003:417). C'est le `path` qui désigne la faute.
+    // The error message is constant and does not interpolate template content, because columnId
+    // is user-supplied (threat model ADR 0003). The path indicates the faulty field.
     expect(
       soleIssueOf({
         ...RECIPE_TABLE,
@@ -94,9 +89,7 @@ describe('TableNodeSchema', () => {
   });
 
   it.each([0, -3])('refuses the width %i, below the window', (width) => {
-    // Cinq entrées fautives pour QUATRE messages : `0` et `-3` rendent le même `too_small`,
-    // et écrire un `it` par entrée en ferait deux qui épinglent la même chaîne -- un test
-    // tautologique au sens d'AGENTS.md §5.
+    // Both 0 and -3 yield the same too_small error; testing them with each avoids redundant tests.
     expect(soleIssueOf(withColumn({ id: 'a', width, align: 'start' }))).toStrictEqual({
       path: 'columns.0.width',
       message: `A column width may not go below ${MIN_COLUMN_WIDTH}`,
@@ -113,8 +106,7 @@ describe('TableNodeSchema', () => {
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY])('refuses the non-finite width %p', (width) => {
-    // `z.number()` n'accepte que le fini, donc un `.finite()` ne tirerait jamais, et les deux
-    // entrées rendent le MÊME message -- celui de l'option `error` du champ.
+    // Non-finite numbers are rejected with the schema custom error message.
     expect(soleIssueOf(withColumn({ id: 'a', width, align: 'start' }))).toStrictEqual({
       path: 'columns.0.width',
       message: 'A column width is a finite whole number of weight units',
@@ -213,9 +205,7 @@ describe('TableNodeSchema', () => {
   });
 
   it('ACCEPTS a short row: one cell for five columns', () => {
-    // Le pendant positif, obligatoire. Sans lui, rien ne distingue « la ligne courte est
-    // licite » d'un refus qu'on aurait oublié d'écrire -- et c'est la forme même de la ligne
-    // de total.
+    // Verifies that a short row is valid, which is the structure used for total rows.
     const result = TableNodeSchema.safeParse({
       ...RECIPE_TABLE,
       footer: [{ type: 'tableRow', id: 'court', cells: [{ columnId: 'montant', children: [] }] }],
@@ -225,10 +215,7 @@ describe('TableNodeSchema', () => {
   });
 
   it('names ONE fault when a table declares no column, whatever its rows hold', () => {
-    // Le garde `declared.size === 0` de `checkTableWiring` est ce qui tient ce compte à 1.
-    // MESURÉ en le retirant du `dist` compilé, tout le reste inchangé : la même entrée rend 13
-    // issues -- une par cellule du tableau, plus celle de `columns`. Un auteur qui a oublié de
-    // déclarer ses colonnes a UNE chose à corriger, et C8 doit le lui dire une fois.
+    // The declared.size === 0 guard ensures exactly one error is emitted when no columns are declared.
     const result = TableNodeSchema.safeParse({ ...RECIPE_TABLE, columns: [] });
 
     expect(result.success).toBe(false);
@@ -240,9 +227,7 @@ describe('TableNodeSchema', () => {
   });
 
   it('lets a BOUND fault and a wiring fault be reported together, and a TYPE fault mask it', () => {
-    // La dépendance de ce lot au comportement de zod 4, épinglée plutôt que supposée : un
-    // `superRefine` est sauté sur `invalid_type` / `invalid_value`, jamais sur `too_small`.
-    // A rejouer a chaque montee de zod, comme l'ADR 0004 le fait pour la regle nursery de Biome.
+    // Zod continues refinement on bounds (too_small) but halts on invalid_type.
     const withOrphan = (column: TableColumn): unknown => ({
       type: 'table',
       id: 't',
@@ -257,9 +242,9 @@ describe('TableNodeSchema', () => {
 
     expect(bound.success).toBe(false);
     expect(masked.success).toBe(false);
-    // `too_small` est continuable : la borne ET le câblage sont rapportés.
+    // `too_small` is continuable: both bound and wiring are reported.
     if (!bound.success) expect(bound.error.issues).toHaveLength(2);
-    // `invalid_type` abandonne : la cellule orpheline reste invisible jusqu'à correction.
+    // `invalid_type` halts: orphan cell remains unreached until fixed.
     if (!masked.success) expect(masked.error.issues).toHaveLength(1);
   });
 });
@@ -275,9 +260,7 @@ describe('the block flow', () => {
       },
     };
 
-    // Le bon endroit : le FLUX DE BLOCS, et non « quelque part dans un tableau ». L'assertion
-    // porte sur le CHEMIN et le CODE, pas sur le message : `toThrow(/Invalid input/)` restait
-    // vert si `RECIPE_TEMPLATE` se mettait à être refusé pour une raison sans rapport.
+    // Asserts that stray rows in container flow are refused with a typed invalid_union error on path.
     const result = TemplateSchema.safeParse(strayRow);
 
     expect(result.success).toBe(false);
@@ -290,21 +273,7 @@ describe('the block flow', () => {
   });
 
   it('bounds what the bare block union does not', () => {
-    // La porte bornée est ce que `core` doit à ses appelants : un `TemplateShapeError`
-    // `too-deep` plutôt qu'un `RangeError` nu. C'est la seule moitié du contrat qui soit à nous.
-    //
-    // La seconde jambe -- `expect(() => BlockNodeSchema.parse(deep)).toThrow(RangeError)` --
-    // est RETIRÉE, et son motif s'écrit plutôt que de se perdre : elle épinglait le MOTEUR et
-    // non le code. Mesuré dans ce dépôt, la profondeur à laquelle la récursion de Zod cède
-    // dépend de la pile ET du JIT : 937 niveaux sur le pool `forks` par défaut, 3 750 dans un
-    // worker à pile de 4 Mo, et **5 000 passe sans lever** une fois le JIT chauffé par quelques
-    // parses profonds dans le même worker. `vitest.config.ts` ne fixe aucun `pool`, donc un
-    // simple changement de pool ou une image de CI différente suffit à déplacer le seuil : la
-    // jambe rougirait pour une raison entièrement extérieure à `core`. C'est exactement ce que
-    // `value-type.test.ts:103-118` a dû faire quand Node 26 a cessé de récurser, et le
-    // commentaire de ce test annonçait déjà ce retrait -- il fallait l'exécuter.
-    //
-    // La borne, elle, ne dépend d'aucun moteur : `maxDepth` vaut 64 et le refus est typé.
+    // Bounded parseBlockNode rejects deep tree hierarchies with a typed TemplateShapeError.
     const nestedContainers = (depth: number): unknown => {
       let node: unknown = { type: 'text', id: 'leaf', content: [] };
       for (let level = 0; level < depth; level += 1) {
@@ -317,13 +286,7 @@ describe('the block flow', () => {
   });
 
   it('refines a table through parseTemplate, not only through its own schema', () => {
-    // La dépendance n° 1 du lot au comportement de zod, réellement REJOUÉE : « un
-    // `z.object().superRefine()` reste un `ZodObject`, donc `TableNodeSchema` demeure membre
-    // légal des deux unions discriminées, `lazy` comprises ». Toutes les autres assertions de
-    // câblage appellent `TableNodeSchema.safeParse` sur un tableau NU, si bien qu'une montée de
-    // zod qui dispatcherait vers l'objet interne plutôt que vers le schéma raffiné les
-    // laisserait toutes vertes -- et `parseTemplate` accepterait une cellule orpheline, c'est-à
-    // -dire du contenu que rien n'affichera jamais, persisté par `onSave`.
+    // Confirms that TableNodeSchema refinements apply when parsed as part of a full Template.
     const orphelin = {
       ...RECIPE_TEMPLATE,
       root: {
@@ -368,8 +331,7 @@ describe('the recipe criterion', () => {
     const parsed = parseTemplate(RECIPE_TEMPLATE);
 
     expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-    // L'aller-retour JSON est ce qui prouve que le modèle est STOCKABLE, pas seulement
-    // constructible : un champ que le schéma laisse tomber se voit ici et nulle part ailleurs.
+    // JSON round-trip verifies the model is serializable.
     expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(RECIPE_TEMPLATE);
   });
 
@@ -378,19 +340,7 @@ describe('the recipe criterion', () => {
 
     expect(total?.cells).toHaveLength(2);
     expect(RECIPE_TABLE.columns).toHaveLength(5);
-    // Le nœud tableau porte exactement ces SEPT clés, et la ligne de total ne porte AUCUNE clé
-    // de plus qu'une ligne ordinaire. Ce que cette assertion attrape : un champ REQUIS ajouté
-    // à `TableNode` ou à `TableColumn`. Ce qu'elle N'attrape PAS, et c'est le cas probable :
-    // un `total?:` optionnel, qui n'apparaîtrait pas dans la fixture. Le refus de l'auto-somme
-    // est structurel AU SENS DU TYPE pour le pied -- `readonly TableRowNode[]` n'a nulle part
-    // où poser un agrégat -- et doctrinal, adossé à un grep, pour la colonne.
-    //
-    // `box` est la septième, et son arrivée a fait ROUGIR cette assertion — c'est le SECOND
-    // filet mécanique sous l'estampille du lot C5, à côté du littéral de chaîne de
-    // `migrate.test.ts`. Il attrape un champ OPTIONNEL, lui, mais seulement parce que la
-    // fixture le porte : c'est exactement ce que le lot C5 a ajouté à `RECIPE_TABLE` pour que
-    // l'aller-retour JSON ci-dessus couvre `Template`, le neuvième site d'accrochage et le seul
-    // qu'aucune paire `*_KEYS_IN_STEP` ne peut garder.
+    // Asserts exact expected keys on table and columns without auto-aggregation fields.
     expect(Object.keys(RECIPE_TABLE)).toStrictEqual([
       'type',
       'id',
@@ -412,8 +362,7 @@ describe('the recipe criterion', () => {
       expect(column.width).toBeLessThanOrEqual(MAX_COLUMN_WIDTH);
       expect(TABLE_COLUMN_ALIGNMENTS).toContain(column.align);
     }
-    // « libellés à gauche, montants à droite » -- le membre du critère que l'alignement sert,
-    // et la raison pour laquelle il vit dans C3 et pas dans C5.
+    // Column alignments: labels to the start, amounts to the end.
     expect(RECIPE_TABLE.columns.map((column) => column.align)).toStrictEqual([
       'start',
       'end',

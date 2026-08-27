@@ -250,16 +250,10 @@ describe('findNodeById', () => {
   });
 
   it('reaches every node of the table through childrenOf, cells included', () => {
-    // Un sous-arbre que `childrenOf` ne rend pas est invisible pour `walk`, `findNodeById` et
-    // `collectDataPaths` -- sans erreur nulle part. C'est l'assertion qui l'interdit.
-    // 17 = le tableau (1) + l'en-tête et ses cinq textes (6) + le groupe, sa ligne et ses
-    // cinq textes (7) + la ligne de pied et ses deux textes (3). 19 pour la racine du
-    // modèle : les deux de plus sont la racine et le titre.
+    // Verifies that walk reaches all 17 table nodes and 19 template root nodes.
     expect([...walk(RECIPE_TABLE)]).toHaveLength(17);
     expect([...walk(RECIPE_TEMPLATE.root)]).toHaveLength(19);
     expect(findNodeById(RECIPE_TABLE, 'td-montant')?.type).toBe('text');
-    // Sans cette seconde assertion, un `childrenOf` qui oublierait la section `footer`
-    // passerait la première.
     expect(findNodeById(RECIPE_TABLE, 'tf-montant')?.type).toBe('text');
   });
 });
@@ -339,25 +333,16 @@ describe('collectDataPaths', () => {
   });
 
   it('asks the integrator for two keys, and for no per-item field', () => {
-    // La garantie de l'ADR 0002, sur la forme qui la met le plus à l'épreuve : HUIT lectures
-    // enracinées sur `ligne` sont écrites dans ce modèle, six dans le corps et deux sous
-    // l'agrégat du pied, et aucune ne sort. Deux mécanismes distincts les filtrent -- les six
-    // du corps parce que `nodeReads(group)` déclare `binds: 'ligne'`, les deux du pied parce
-    // que `pathsOf` porte son PROPRE contexte d'alias -- et si l'un tombait, l'autre ne
-    // rattraperait rien.
+    // Verifies that scoped loop aliases are correctly filtered from top-level data path collection.
     expect(collectDataPaths(RECIPE_TEMPLATE.root)).toStrictEqual([
       'facture.numero',
       'facture.lignes',
     ]);
-    // Le tableau seul : il ne lit rien de son côté, `nodeReads(table)` est NO_READS.
     expect(collectDataPaths(RECIPE_TABLE)).toStrictEqual(['facture.lignes']);
   });
 
   it('reports a group alias used outside its group as a caller key', () => {
-    // La contre-épreuve, et c'est le vrai test : si le TABLEAU liait l'alias -- la forme que
-    // le plan écarte --, cette lecture serait filtrée en silence et l'intégrateur ne serait
-    // jamais interrogé sur une donnée que le document lit réellement. C'est exactement le
-    // défaut que l'ADR 0002 a corrigé pour les boucles.
+    // Verifies that an alias used outside its owning scope is reported as an external data path.
     const leaky: DocumentNode = {
       ...RECIPE_TABLE,
       footer: [

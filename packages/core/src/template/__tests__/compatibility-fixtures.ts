@@ -1,16 +1,5 @@
 /**
- * The historical corpus: one raw document per stored version, and the current-shape baseline the
- * entry points are exercised against.
- *
- * Every historical document is DATA, never annotated as `Template` and never built by a current
- * factory: an annotation would make the compiler add today's fields to yesterday's document, which
- * is exactly the substitution these fixtures exist to catch. Each carries one capability
- * representative of the version that introduced it, and none carries a field of a later one.
- *
- * Two rules are inherited from `ast/__tests__/fixtures.ts`, and both are mechanical: no exported
- * factory goes uncalled (an uncalled one lowers this package's function coverage without a test
- * going red), and nothing is imported from `vitest` (this file is compiled into `dist/` and
- * shipped in the tarball).
+ * Historical test corpus: raw documents per stored version for migration verification.
  */
 
 import { CURRENT_SCHEMA_VERSION } from '../template.js';
@@ -609,10 +598,7 @@ const ACCOUNTING = 'pageReport';
 const LAYOUT = 'grid';
 
 /**
- * The closed matrix: one witness per stored version, ordered from the oldest.
- *
- * A lot that changes the stored shape adds its row here, and the day the initial version stops
- * being 1 the topology test says so rather than this list drifting in silence.
+ * Historical test documents ordered by version from the initial schema to current.
  */
 export const HISTORICAL_FIXTURES: readonly HistoricalFixture[] = [
   {

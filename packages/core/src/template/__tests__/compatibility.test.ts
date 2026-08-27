@@ -90,7 +90,7 @@ describe('the official upgrade chain', () => {
   it('is continuous, ordered and complete from the initial version to the current one', () => {
     // The single owner of the whole chain. Its expectation is DERIVED from the two bounds rather
     // than copied as a list, so a version bumped without a step registered fails here and no
-    // subsystem has to be edited when a later lot extends the chain.
+    // subsystem has to be edited when a later release extends the chain.
     const steps = TEMPLATE_MIGRATIONS;
     const first = steps.at(0);
     const last = steps.at(-1);
@@ -139,8 +139,7 @@ describe('the official upgrade chain', () => {
   });
 
   it('covers every stored version with one historical witness', () => {
-    // The corpus is closed against the chain rather than maintained by hand: the day a lot bumps
-    // the version without adding its fixture, this is what says so.
+    // The corpus is closed against the chain: every version has a corresponding fixture.
     expect(HISTORICAL_FIXTURES.map((fixture) => fixture.version)).toStrictEqual(
       Array.from(
         { length: CURRENT_SCHEMA_VERSION - INITIAL_SCHEMA_VERSION + 1 },
@@ -715,10 +714,7 @@ describe('the compatibility page written when a stored document carries none', (
   });
 
   it('PRESERVES a page a v4 document already carries', () => {
-    // The stamp only ever guards upward, so a hand-made document -- or one written by an
-    // unstamped mid-lot build -- can be stamped 4 and already carry a page. The two spreads do
-    // OPPOSITE things here: `{ ...input, page: DEFAULT }` overwrites the author's page, while
-    // `{ page: DEFAULT, ...input }` preserves it by key order alone. This is what forbids both.
+    // The migration preserves an existing authored page setup instead of overriding it.
     const authored = { ...validTemplate, schemaVersion: 4 };
 
     const parsed = parseTemplate(authored);
