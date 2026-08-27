@@ -1,5 +1,5 @@
 import type { DocumentNode } from '../ast/nodes.js';
-import { type NodeVisitor, visitNode, visitSegment } from '../ast/visitor.js';
+import { nodeShape } from '../ast/shape.js';
 import type { DataCompatibilityDiagnostic } from '../diagnostics/types.js';
 import {
   type Expression,
@@ -432,104 +432,6 @@ const READING_VISITOR: ExpressionVisitor<Located | undefined, ReadingContext> = 
   },
 };
 
-/** One expression a node reads, at the position and under the expectation the node gives it. */
-interface NodeReading {
-  readonly expression: Expression;
-  readonly expectation: DataExpectation;
-  readonly at: readonly (string | number)[];
-}
-
-/** A child and where it hangs from its parent. */
-interface NodeChild {
-  readonly node: DocumentNode;
-  readonly at: readonly (string | number)[];
-}
-
-/** A sequence a node repeats and the alias it binds for its children. */
-interface NodeBinding {
-  readonly source: Expression;
-  readonly alias: string;
-  readonly at: readonly (string | number)[];
-}
-
-/** What the traversal needs of a node: its readings, the alias it opens, and its children. */
-interface NodeShape {
-  readonly readings: readonly NodeReading[];
-  readonly binding: NodeBinding | undefined;
-  readonly children: readonly NodeChild[];
-}
-
-const NO_BINDING = undefined;
-
-function blockChildren(children: readonly DocumentNode[]): readonly NodeChild[] {
-  return children.map((node, index) => ({ node, at: ['children', index] }));
-}
-
-const SHAPE: NodeVisitor<NodeShape> = {
-  text: (node) => ({
-    readings: node.content.flatMap((segment, index) =>
-      visitSegment<readonly NodeReading[]>(segment, {
-        literal: () => [],
-        binding: (bound) => [
-          { expression: bound.value, expectation: 'printable', at: ['content', index, 'value'] },
-        ],
-        pageField: () => [],
-      }),
-    ),
-    binding: NO_BINDING,
-    children: [],
-  }),
-  image: () => ({ readings: [], binding: NO_BINDING, children: [] }),
-  container: (node) => ({
-    readings: [],
-    binding: NO_BINDING,
-    children: blockChildren(node.children),
-  }),
-  loop: (node) => ({
-    readings: [],
-    binding: { source: node.each, alias: node.as, at: ['each'] },
-    children: blockChildren(node.children),
-  }),
-  condition: (node) => ({
-    readings: [{ expression: node.when, expectation: 'boolean', at: ['when'] }],
-    binding: NO_BINDING,
-    children: blockChildren(node.children),
-  }),
-  table: (node) => ({
-    readings: [],
-    binding: NO_BINDING,
-    children: [
-      ...node.header.map((row, index) => ({ node: row, at: ['header', index] })),
-      ...node.body.map((entry, index) => ({ node: entry, at: ['body', index] })),
-      ...node.footer.map((row, index) => ({ node: row, at: ['footer', index] })),
-    ],
-  }),
-  tableRowGroup: (node) => ({
-    readings: [],
-    binding: { source: node.each, alias: node.as, at: ['each'] },
-    children: node.rows.map((row, index) => ({ node: row, at: ['rows', index] })),
-  }),
-  tableRow: (node) => ({
-    readings:
-      node.pageReport === undefined
-        ? []
-        : [
-            {
-              expression: node.pageReport.value,
-              expectation: 'number',
-              at: ['pageReport', 'value'],
-            },
-          ],
-    binding: NO_BINDING,
-    children: node.cells.flatMap((cell, cellIndex) =>
-      cell.children.map((child, childIndex) => ({
-        node: child,
-        at: ['cells', cellIndex, 'children', childIndex],
-      })),
-    ),
-  }),
-};
-
 /**
  * Analyses one node and its subtree.
  *
@@ -541,34 +443,33 @@ function analyseNode(
   node: DocumentNode,
   path: readonly (string | number)[],
 ): void {
-  const shape = visitNode(node, SHAPE);
-  const site: Site = { path, nodeId: node.id };
+  const { readings, binding, children } = nodeShape(node);
+  const nodeId = node.id;
 
-  for (const reading of shape.readings) {
+  for (const reading of readings()) {
     visitExpression(reading.expression, READING_VISITOR, {
       analysis,
       expectation: reading.expectation,
-      site: { path: [...path, ...reading.at], nodeId: node.id },
+      site: { path: [...path, ...reading.at], nodeId },
     });
   }
 
-  if (shape.binding !== undefined) {
-    const resolved = visitExpression(shape.binding.source, READING_VISITOR, {
+  if (binding !== undefined) {
+    const resolved = visitExpression(binding.source.expression, READING_VISITOR, {
       analysis,
-      expectation: 'list',
-      site: { path: [...path, ...shape.binding.at], nodeId: node.id },
+      expectation: binding.source.expectation,
+      site: { path: [...path, ...binding.source.at], nodeId },
     });
-    bind(analysis, shape.binding.alias, resolved, {
-      path: [...path, 'as'],
-      nodeId: site.nodeId,
-    });
+    bind(analysis, binding.alias, resolved, { path: [...path, 'as'], nodeId });
   }
 
-  for (const child of shape.children) {
-    analyseNode(analysis, child.node, [...path, ...child.at]);
+  for (const slot of children) {
+    for (const [index, child] of slot.nodes.entries()) {
+      analyseNode(analysis, child, [...path, ...slot.at, index]);
+    }
   }
 
-  if (shape.binding !== undefined) {
+  if (binding !== undefined) {
     analysis.scopes.pop();
   }
 }

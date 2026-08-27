@@ -1,8 +1,11 @@
 # Analyse de dette — huit chantiers de refactoring transverses
 
-> **Statut :** analyse, **aucun chantier engagé**. Ce document ne planifie rien : il relève, mesure
-> et ordonne. Aucun fichier du dépôt n'a été modifié pour le produire, et il ne vaut mandat pour
-> aucun des fichiers protégés par [AGENTS.md §7](../../AGENTS.md).
+> **Statut :** analyse. **CH3 est engagé et livré** — son plan est
+> [`ch3-la-forme-d-un-noeud.md`](ch3-la-forme-d-un-noeud.md), et §2 ci-dessous garde le constat
+> d'origine plutôt que d'être réécrit : c'est un registre daté. Les sept autres chantiers ne sont
+> pas engagés. Ce document ne planifie rien : il relève, mesure et ordonne. Aucun fichier du dépôt
+> n'a été modifié pour le produire, et il ne vaut mandat pour aucun des fichiers protégés par
+> [AGENTS.md §7](../../AGENTS.md).
 >
 > **Baseline relevée le 2026-08-27**, sur `claude/codebase-refactoring-analysis-kesqaa` :
 > `CURRENT_SCHEMA_VERSION` = **9** · barrel public de `@openview/core` à **283** valeurs ·
@@ -33,7 +36,7 @@ ou fragilisent un lot devant nous ; les quatre suivants sont de l'hygiène.
 | :-- | :--- | :--- | :--- |
 | CH1 | `MaterialBlock` sans Visiteur | structurel | AGENTS.md §3.B ; la marge de la porte des branches |
 | CH2 | `measure.ts` hors de portée de la mesure | risque | E6, E7 |
-| CH3 | La forme d'un nœud écrite trois fois | dérive silencieuse | le contrat de `collectDataPaths` |
+| CH3 | La forme d'un nœud écrite trois fois | dérive silencieuse | le contrat de `collectDataPaths` — **livré**, [plan](ch3-la-forme-d-un-noeud.md) |
 | CH4 | Le CSS du moteur réécrit ailleurs | bloque un lot promis | viewer V2 et V3 |
 | CH5 | `App.tsx`, 2 303 lignes sans test | maintenabilité | AGENTS.md §1.6 |
 | CH6 | `core/index.ts` réénuméré à la main | frottement | le comptage manuel du barrel |

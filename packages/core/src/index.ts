@@ -60,16 +60,10 @@ export {
   TextPageReportSegmentSchema,
   TextSegmentSchema,
 } from './ast/nodes.js';
-export type { NodeReads, NodeVisitor, SegmentVisitor } from './ast/visitor.js';
-export {
-  childrenOf,
-  collectDataPaths,
-  findNodeById,
-  nodeReads,
-  visitNode,
-  visitSegment,
-  walk,
-} from './ast/visitor.js';
+export type { NodeReads } from './ast/traverse.js';
+export { childrenOf, collectDataPaths, findNodeById, nodeReads, walk } from './ast/traverse.js';
+export type { NodeVisitor, SegmentVisitor } from './ast/visitor.js';
+export { visitNode, visitSegment } from './ast/visitor.js';
 
 export type {
   DataCatalogue,
