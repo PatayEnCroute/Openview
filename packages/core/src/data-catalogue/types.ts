@@ -2,7 +2,7 @@
  * Host data catalogue type contracts and terminal scalar definitions.
  * @see docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md
  */
-import { DATA_EXPECTATIONS, type DataExpectation } from '../ast/types.js';
+import type { DataExpectation } from '../ast/types.js';
 
 /** Terminal natures a declared value can have. */
 export const DATA_SCALAR_KINDS = ['string', 'number', 'boolean', 'civil-date'] as const;
@@ -63,7 +63,7 @@ export interface DataCatalogueEntry {
  * with the AST's other closed vocabularies. What a declared nature satisfies belongs to the
  * catalogue and stays in `expectations.ts`.
  */
-export { DATA_EXPECTATIONS, type DataExpectation };
+export { DATA_EXPECTATIONS, type DataExpectation } from '../ast/types.js';
 
 /** How one reading stands against the catalogue. */
 export const DATA_READ_STATUSES = ['available', 'undeclared', 'incompatible', 'blocked'] as const;

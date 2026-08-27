@@ -11,7 +11,6 @@ import type {
   MaterialRun,
   MaterialTable,
   MaterialText,
-  OccurrenceKey,
 } from '../document/types.js';
 
 /** Where a fragment sits in the sequence its source was cut into. */
@@ -172,9 +171,9 @@ export interface LineMetric {
 export interface Metrics {
   readonly pxPerMm: number;
   /** Natural border-box height of one occurrence, in css pixels. */
-  height(key: OccurrenceKey): number;
+  height(key: string): number;
   /** Visual line ends of one text occurrence, in order. */
-  lines(key: OccurrenceKey): readonly LineMetric[];
+  lines(key: string): readonly LineMetric[];
 }
 
 /** What one attempt to fill a vertical sequence produced. */
@@ -199,6 +198,19 @@ export type FlowFill = (
   fresh: number,
   metrics: Metrics,
 ) => Placement;
+
+/**
+ * Which part of its whole a fragment is, read from whether it opened it and whether it closed it.
+ *
+ * Spelt once because a flow, a row and a table all answer it the same way, and an edge that drifted
+ * between them would paint a continuation rule where a document ends.
+ */
+export function fragmentEdge(first: boolean, done: boolean): FragmentEdge {
+  if (first) {
+    return done ? 'whole' : 'first';
+  }
+  return done ? 'last' : 'middle';
+}
 
 /** Vertical padding of a box in css pixels, which a fragment repeats on every page it spans. */
 export function boxPaddingPx(box: BoxStyle | undefined, pxPerMm: number): number {

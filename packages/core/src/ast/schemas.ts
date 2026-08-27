@@ -16,6 +16,7 @@ import {
 import {
   type BlockNode,
   type DocumentNode,
+  type GridItem,
   type GridNode,
   MAX_COLUMN_WIDTH,
   MAX_GRID_TRACKS,
@@ -53,8 +54,8 @@ const DANGEROUS_URI_SCHEME = /^(?:javascript|vbscript|file|data(?!:image\/)):/i;
 function withoutIgnorableChars(value: string): string {
   return [...value]
     .filter((char) => {
-      const code = char.charCodeAt(0);
-      return code > 0x20 && code !== 0x7f;
+      const code = char.codePointAt(0);
+      return code !== undefined && code > 0x20 && code !== 0x7f;
     })
     .join('');
 }
@@ -381,63 +382,102 @@ function isSpan(value: number | undefined): boolean {
   return value === undefined || (Number.isInteger(value) && value >= 2);
 }
 
+/** Whether a track count passed its own local bounds, so the cross-check may run against it. */
+function isAxisCount(value: number): boolean {
+  return Number.isInteger(value) && value >= MIN_GRID_TRACKS && value <= MAX_GRID_TRACKS;
+}
+
+/** Whether every local bound of a zone held, so the cross-check must not cascade on it. */
+function isZoneLocallySound(item: GridItem): boolean {
+  return (
+    isCoordinate(item.row) &&
+    isCoordinate(item.column) &&
+    isSpan(item.rowSpan) &&
+    isSpan(item.columnSpan)
+  );
+}
+
+/** A zone whose local bounds held, with each absent span resolved to the one track it means. */
+interface ResolvedZone {
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan: number;
+  readonly columnSpan: number;
+}
+
+/** Reads a locally sound zone with its spans resolved. */
+function resolveZone(item: GridItem): ResolvedZone {
+  return {
+    row: item.row,
+    column: item.column,
+    rowSpan: item.rowSpan ?? 1,
+    columnSpan: item.columnSpan ?? 1,
+  };
+}
+
+/** Reports the axis a zone runs past, and answers whether it stays inside the grid. */
+function checkZoneFits(
+  zone: ResolvedZone,
+  grid: GridNode,
+  index: number,
+  ctx: z.RefinementCtx,
+): boolean {
+  if (zone.row + zone.rowSpan - 1 > grid.rows) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['items', index, 'row'],
+      message:
+        'This zone reaches past the last row of the grid. Lower its row or its rowSpan, or declare more rows.',
+    });
+    return false;
+  }
+  if (zone.column + zone.columnSpan - 1 > grid.columns) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['items', index, 'column'],
+      message:
+        'This zone reaches past the last column of the grid. Lower its column or its columnSpan, or declare more columns.',
+    });
+    return false;
+  }
+  return true;
+}
+
 /**
- * Refuses zones that leave the grid and zones that share a coordinate.
+ * Marks every cell a zone covers, and answers whether one was already taken.
  *
  * Occupancy uses `(row - 1) * columns + column - 1`: both axes are bounded by
- * {@link MAX_GRID_TRACKS}, so no key exceeds 999999 and no two coordinates collide. A zone found
- * overlapping stops its own scan at the first shared cell, so a hostile pile of zones cannot turn
- * the check quadratic.
+ * {@link MAX_GRID_TRACKS}, so no key exceeds 999999 and no two coordinates collide. The scan stops
+ * at the first shared cell, so a hostile pile of zones cannot turn the check quadratic.
  */
+function claimZoneCells(zone: ResolvedZone, columns: number, occupied: Set<number>): boolean {
+  for (let row = zone.row; row < zone.row + zone.rowSpan; row += 1) {
+    for (let column = zone.column; column < zone.column + zone.columnSpan; column += 1) {
+      const key = (row - 1) * columns + column - 1;
+      if (occupied.has(key)) {
+        return true;
+      }
+      occupied.add(key);
+    }
+  }
+  return false;
+}
+
+/** Refuses zones that leave the grid and zones that share a coordinate. */
 function checkGridZones(grid: GridNode, ctx: z.RefinementCtx): void {
-  const { rows, columns } = grid;
-  const axisIsSound = (value: number): boolean =>
-    Number.isInteger(value) && value >= MIN_GRID_TRACKS && value <= MAX_GRID_TRACKS;
-  if (!axisIsSound(rows) || !axisIsSound(columns)) {
+  if (!isAxisCount(grid.rows) || !isAxisCount(grid.columns)) {
     return;
   }
   const occupied = new Set<number>();
   for (const [index, item] of grid.items.entries()) {
-    if (
-      !isCoordinate(item.row) ||
-      !isCoordinate(item.column) ||
-      !isSpan(item.rowSpan) ||
-      !isSpan(item.columnSpan)
-    ) {
+    if (!isZoneLocallySound(item)) {
       continue;
     }
-    const rowSpan = item.rowSpan ?? 1;
-    const columnSpan = item.columnSpan ?? 1;
-    if (item.row + rowSpan - 1 > rows) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['items', index, 'row'],
-        message:
-          'This zone reaches past the last row of the grid. Lower its row or its rowSpan, or declare more rows.',
-      });
+    const zone = resolveZone(item);
+    if (!checkZoneFits(zone, grid, index, ctx)) {
       continue;
     }
-    if (item.column + columnSpan - 1 > columns) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['items', index, 'column'],
-        message:
-          'This zone reaches past the last column of the grid. Lower its column or its columnSpan, or declare more columns.',
-      });
-      continue;
-    }
-    let collided = false;
-    for (let row = item.row; row < item.row + rowSpan && !collided; row += 1) {
-      for (let column = item.column; column < item.column + columnSpan; column += 1) {
-        const key = (row - 1) * columns + column - 1;
-        if (occupied.has(key)) {
-          collided = true;
-          break;
-        }
-        occupied.add(key);
-      }
-    }
-    if (collided) {
+    if (claimZoneCells(zone, grid.columns, occupied)) {
       ctx.addIssue({
         code: 'custom',
         path: ['items', index],

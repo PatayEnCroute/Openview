@@ -143,6 +143,9 @@ const dataPaths = collectTemplateDataPaths(sampleTemplate);
 
 /** Data catalogue entries and compatibility checks for template demonstration. */
 const champsDeclares: readonly DataCatalogueEntry[] = listDataCatalogueEntries(catalogueFacture);
+const verdictCatalogue = catalogueValide
+  ? 'catalogue accepté'
+  : 'CATALOGUE REFUSÉ, ce qui est un défaut';
 const compatibiliteComplete = checkTemplateDataCompatibility(sampleTemplate, catalogueFacture);
 const compatibiliteSansPrix = checkTemplateDataCompatibility(sampleTemplate, catalogueSansPrix);
 
@@ -468,6 +471,10 @@ const cheminsA = collectTemplateDataPaths(sampleTemplate);
 const cheminsB = collectTemplateDataPaths(factureVariante);
 const cheminsIdentiques =
   cheminsA.length === cheminsB.length && cheminsA.every((chemin, i) => chemin === cheminsB[i]);
+const verdictMemeListe =
+  cheminsA.join('|') === cheminsB.join('|')
+    ? 'même liste, même ordre'
+    : '⛔ LES DEUX LISTES DIVERGENT';
 
 /** Renders block content into text representation within the given scope. */
 function texteDeBloc(block: BlockNode, scope: EvaluationScope, budget: EvaluationBudget): string {
@@ -1066,17 +1073,20 @@ interface CalqueDessine {
 function calquesDe(plan: PageLayerPlane): readonly CalqueDessine[] {
   return (pageModele.layers ?? [])
     .filter((calque) => calque.plane === plan)
-    .map((calque, index) => ({
-      cle: `${plan}-${index}`,
-      libelle: `${calque.content.id}${calque.opacity === undefined ? '' : ` (opacité ${calque.opacity})`}`,
-      style: {
-        position: 'absolute',
-        inset: 0,
-        background: calque.content.box?.background,
-        opacity: calque.opacity,
-        pointerEvents: 'none',
-      },
-    }));
+    .map((calque, index) => {
+      const opacite = calque.opacity === undefined ? '' : ` (opacité ${calque.opacity})`;
+      return {
+        cle: `${plan}-${index}`,
+        libelle: `${calque.content.id}${opacite}`,
+        style: {
+          position: 'absolute',
+          inset: 0,
+          background: calque.content.box?.background,
+          opacity: calque.opacity,
+          pointerEvents: 'none',
+        },
+      };
+    });
 }
 
 /** Printable area preview box. */
@@ -1242,11 +1252,7 @@ export default function App() {
         <code>listDataCatalogueEntries</code>. Le catalogue vit dans{' '}
         <code>apps/playground/src/examples/data-catalogue.ts</code> : aucune de ces clés et aucun de
         ces libellés n'existe dans <code>packages/</code>. Sa validation à la frontière est jouée
-        une fois au chargement —{' '}
-        <strong>
-          {catalogueValide ? 'catalogue accepté' : 'CATALOGUE REFUSÉ, ce qui est un défaut'}
-        </strong>
-        .
+        une fois au chargement — <strong>{verdictCatalogue}</strong>.
       </p>
       <p>
         <strong>Cette carte n'est pas le sélecteur de champs.</strong> Elle montre le critère de
@@ -1923,12 +1929,7 @@ export default function App() {
       <p>
         <code>collectTemplateDataPaths</code> rend <strong>{cheminsA.length}</strong> chemins sur
         l'apparence A et <strong>{cheminsB.length}</strong> sur l'apparence B —{' '}
-        <strong>
-          {cheminsA.join('|') === cheminsB.join('|')
-            ? 'même liste, même ordre'
-            : '⛔ LES DEUX LISTES DIVERGENT'}
-        </strong>
-        .
+        <strong>{verdictMemeListe}</strong>.
       </p>
       <pre style={codeStyle}>{cheminsA.join('\n')}</pre>
 

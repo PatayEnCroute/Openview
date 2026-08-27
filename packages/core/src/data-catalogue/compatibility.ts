@@ -105,7 +105,7 @@ function membersOf(analysis: Analysis, type: DataObjectType): ReadonlyMap<string
 function lookupAlias(analysis: Analysis, name: string): Binding | undefined {
   for (let index = analysis.scopes.length - 1; index >= 0; index -= 1) {
     const scope = analysis.scopes[index];
-    if (scope !== undefined && scope.alias === name) {
+    if (scope?.alias === name) {
       return scope.binding;
     }
   }
@@ -264,7 +264,7 @@ function readPath(
 
 /** Binds the element of a resolved list, or blocks the alias when there is no list to bind. */
 function elementBinding(source: Located | undefined): Binding {
-  if (source === undefined || source.type.kind !== 'list') {
+  if (source?.type.kind !== 'list') {
     return { blocked: true };
   }
   return {

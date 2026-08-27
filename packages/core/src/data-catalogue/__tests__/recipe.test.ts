@@ -121,7 +121,7 @@ describe('the complete declaration accepts the proof model', () => {
   });
 
   it('needs no dataset: the call takes a model and a declaration, and nothing else', () => {
-    expect(checkTemplateDataCompatibility.length).toBe(2);
+    expect(checkTemplateDataCompatibility).toHaveLength(2);
   });
 });
 

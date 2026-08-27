@@ -156,7 +156,7 @@ describe('the layers and the cuts', () => {
         ...longFlow(),
       }),
     );
-    expect(layered.pages.length).toBe(bare.pages.length);
+    expect(layered.pages).toHaveLength(bare.pages.length);
     expect(idsPerPage(layered)).toStrictEqual(idsPerPage(bare));
     expect(layered.pages.map((page) => page.incomingReport)).toStrictEqual(
       bare.pages.map((page) => page.incomingReport),

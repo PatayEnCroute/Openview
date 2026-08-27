@@ -1,7 +1,10 @@
 import type { Sheet } from '@openview/core';
-import type { OccurrenceKey } from '../document/types.js';
 import { refusal } from '../errors.js';
-import type { PdfLayoutMeasurement } from '../strategy/pdf.js';
+import type {
+  PageMeasurement,
+  PdfLayoutMeasurement,
+  TextLineMeasurement,
+} from '../strategy/pdf.js';
 import type { LineMetric, Metrics } from './types.js';
 
 /** Sub-pixel layout rounding. Far below one line of text, so a real overflow still fails. */
@@ -27,54 +30,59 @@ function assertLength(value: number): void {
   }
 }
 
-/**
- * Checks a session reply before a single height of it reaches the algorithm.
- *
- * A box that is missing, doubled, unasked for, negative or infinite is a defect of the port, not a
- * short document: turning one into a cut would produce a silently wrong pdf, so it is refused here
- * with nothing of the render in the message.
- *
- * @param expected every occurrence key the probe annotated, so a reply can be compared to the ask
- */
-export function validateMeasurement(
-  measurement: PdfLayoutMeasurement,
-  expected: ReadonlySet<OccurrenceKey>,
-  sheet: Sheet,
-): Metrics {
-  if (measurement.pages.length === 0) {
-    refuse({ limit: 0 });
+/** A count that must be a whole number of things, so never fractional and never negative. */
+function assertCount(value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    refuse();
   }
-  const [firstPage] = measurement.pages;
-  if (firstPage === undefined) {
-    refuse({ limit: 0 });
+}
+
+/** Every length one page reports about itself, its printable area and its three regions. */
+function assertPageLengths(page: PageMeasurement): void {
+  assertLength(page.page.width);
+  assertLength(page.page.height);
+  assertLength(page.printable.width);
+  assertLength(page.printable.height);
+  for (const region of page.regions) {
+    assertLength(region.height);
+    assertLength(region.contentHeight);
   }
-  for (const page of measurement.pages) {
-    assertLength(page.page.width);
-    assertLength(page.page.height);
-    assertLength(page.printable.width);
-    assertLength(page.printable.height);
-    for (const region of page.regions) {
-      assertLength(region.height);
-      assertLength(region.contentHeight);
-    }
-  }
+}
+
+/** The scale the reply implies, refused when the session laid the document on another sheet. */
+function scaleOf(firstPage: PageMeasurement, sheet: Sheet): number {
   const pxPerMm = firstPage.page.width / sheet.width;
   if (!Number.isFinite(pxPerMm) || pxPerMm <= 0) {
     throw refusal(WRONG_SHEET, 'layout-measurement-failed');
   }
+  return pxPerMm;
+}
 
-  if (!Number.isInteger(measurement.clippedMarkerCount) || measurement.clippedMarkerCount < 0) {
-    refuse();
+/**
+ * Refuses a line cursor that goes backwards from the one before it.
+ *
+ * A cursor that went backwards would let a fragment repeat characters the page before it already
+ * printed, which no later check could see.
+ */
+function assertLineFollows(line: TextLineMeasurement, previous: LineMetric | undefined): void {
+  if (previous === undefined) {
+    return;
   }
-
   if (
-    !Array.isArray(measurement.overflowingGridItems) ||
-    measurement.overflowingGridItems.some((id) => typeof id !== 'string')
+    line.run < previous.run ||
+    (line.run === previous.run && line.offset < previous.offset) ||
+    line.height + TOLERANCE_PX < previous.height
   ) {
-    refuse({ limit: 0 });
+    refuse({ limit: line.index });
   }
+}
 
-  const heights = new Map<OccurrenceKey, number>();
+/** One height per measured box, refusing a box unasked for, doubled, or impossibly sized. */
+function collectHeights(
+  measurement: PdfLayoutMeasurement,
+  expected: ReadonlySet<string>,
+): Map<string, number> {
+  const heights = new Map<string, number>();
   for (const box of measurement.boxes) {
     if (!expected.has(box.key) || heights.has(box.key)) {
       refuse({ limit: measurement.boxes.length });
@@ -86,51 +94,82 @@ export function validateMeasurement(
   if (heights.size !== expected.size) {
     refuse({ limit: expected.size });
   }
+  return heights;
+}
 
-  const lines = new Map<OccurrenceKey, LineMetric[]>();
+/** The visual lines of every measured text box, in the order the session emitted them. */
+function collectLines(
+  measurement: PdfLayoutMeasurement,
+  expected: ReadonlySet<string>,
+): Map<string, LineMetric[]> {
+  const lines = new Map<string, LineMetric[]>();
   for (const line of measurement.lines) {
     if (!expected.has(line.key)) {
       refuse({ limit: measurement.lines.length });
     }
     assertLength(line.height);
-    if (!Number.isInteger(line.run) || line.run < 0) {
-      refuse();
-    }
-    if (!Number.isInteger(line.offset) || line.offset < 0) {
-      refuse();
-    }
-    if (!Number.isInteger(line.index) || line.index < 0) {
-      refuse();
-    }
+    assertCount(line.run);
+    assertCount(line.offset);
+    assertCount(line.index);
     const collected = lines.get(line.key) ?? [];
     if (collected.length !== line.index) {
       refuse({ limit: line.index });
     }
-    const previous = collected.at(-1);
-    /* A cursor that goes backwards would let a fragment repeat characters the page before it
-       already printed, which no later check could see. */
-    if (
-      previous !== undefined &&
-      (line.run < previous.run ||
-        (line.run === previous.run && line.offset < previous.offset) ||
-        line.height + TOLERANCE_PX < previous.height)
-    ) {
-      refuse({ limit: line.index });
-    }
+    assertLineFollows(line, collected.at(-1));
     collected.push({ run: line.run, offset: line.offset, height: line.height });
     lines.set(line.key, collected);
   }
+  return lines;
+}
+
+/**
+ * Checks a session reply before a single height of it reaches the algorithm.
+ *
+ * A box that is missing, doubled, unasked for, negative or infinite is a defect of the port, not a
+ * short document: turning one into a cut would produce a silently wrong pdf, so it is refused here
+ * with nothing of the render in the message.
+ *
+ * @param expected every occurrence key the probe annotated, so a reply can be compared to the ask
+ */
+export function validateMeasurement(
+  measurement: PdfLayoutMeasurement,
+  expected: ReadonlySet<string>,
+  sheet: Sheet,
+): Metrics {
+  if (measurement.pages.length === 0) {
+    refuse({ limit: 0 });
+  }
+  const [firstPage] = measurement.pages;
+  if (firstPage === undefined) {
+    refuse({ limit: 0 });
+  }
+  for (const page of measurement.pages) {
+    assertPageLengths(page);
+  }
+  const pxPerMm = scaleOf(firstPage, sheet);
+
+  assertCount(measurement.clippedMarkerCount);
+
+  if (
+    !Array.isArray(measurement.overflowingGridItems) ||
+    measurement.overflowingGridItems.some((id) => typeof id !== 'string')
+  ) {
+    refuse({ limit: 0 });
+  }
+
+  const heights = collectHeights(measurement, expected);
+  const lines = collectLines(measurement, expected);
 
   return {
     pxPerMm,
-    height(key: OccurrenceKey): number {
+    height(key: string): number {
       const found = heights.get(key);
       if (found === undefined) {
         throw refusal(UNKNOWN_KEY, 'layout-measurement-failed');
       }
       return found;
     },
-    lines(key: OccurrenceKey): readonly LineMetric[] {
+    lines(key: string): readonly LineMetric[] {
       return lines.get(key) ?? [];
     },
   };

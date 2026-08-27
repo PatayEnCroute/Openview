@@ -7,7 +7,7 @@ import type {
   RowBlockCursor,
   RowFragment,
 } from './types.js';
-import { boxPaddingPx, FLOW_START } from './types.js';
+import { boxPaddingPx, FLOW_START, fragmentEdge } from './types.js';
 
 /** One fragment of a row split down its columns, and what the split consumed. */
 export interface RowPlacement {
@@ -80,7 +80,7 @@ export function placeRow(
     fragment: {
       source: row,
       cells,
-      edge: first && done ? 'whole' : first ? 'first' : done ? 'last' : 'middle',
+      edge: fragmentEdge(first, done),
     },
   };
 }
