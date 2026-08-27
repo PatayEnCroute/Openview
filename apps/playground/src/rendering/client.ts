@@ -13,6 +13,8 @@ export interface CatalogueChoice {
 export interface CatalogueView {
   readonly templates: readonly CatalogueChoice[];
   readonly datasets: readonly CatalogueChoice[];
+  /** The named writing variants of the values. The words switch with the data set instead. */
+  readonly writings: readonly CatalogueChoice[];
 }
 
 /** Error representing a structured render refusal from the backend. */
@@ -52,7 +54,11 @@ export async function fetchCatalogue(): Promise<CatalogueView> {
   const payload: unknown = await response.json();
   const record: Record<string, unknown> =
     typeof payload === 'object' && payload !== null ? { ...payload } : {};
-  return { templates: choicesOf(record.templates), datasets: choicesOf(record.datasets) };
+  return {
+    templates: choicesOf(record.templates),
+    datasets: choicesOf(record.datasets),
+    writings: choicesOf(record.writings),
+  };
 }
 
 async function refusalOf(response: Response): Promise<RenderRefusal> {
@@ -76,11 +82,16 @@ const nameFrom = (disposition: string | null): string | undefined =>
 /**
  * Requests PDF rendering from the bridge and triggers browser download.
  */
-export async function downloadPdf(templateId: string, datasetId: string): Promise<string> {
+export async function downloadPdf(
+  templateId: string,
+  datasetId: string,
+  writingId: string,
+): Promise<string> {
   const response = await fetch(RENDER_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ templateId, datasetId }),
+    /* An IDENTIFIER, never a map of writings: the bridge checks it against its own whitelist. */
+    body: JSON.stringify({ templateId, datasetId, writingId }),
   });
   if (!response.ok) {
     throw await refusalOf(response);

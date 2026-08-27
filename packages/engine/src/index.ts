@@ -8,6 +8,7 @@
  */
 
 export type { DocumentImage } from './document/images.js';
+export type { PresentationSelection } from './document/presentation.js';
 export type {
   DocumentArea,
   DocumentRegion,

@@ -144,11 +144,23 @@ const txt = (id: string, text: string, typography: Typography): TextNode => ({
 });
 
 /** Standard page numbering segment tuple with markers. */
+/**
+ * The profiles this demo names, and the sites that ask for them.
+ *
+ * The names belong to the demo. Which writing each stands for is chosen by the caller when it opens
+ * a port, so the same stored model prints in euros or in dollars without being edited. The dates
+ * reuse the `montant` profile: the same writing carries the currency and the date style.
+ */
+export const MONTANT = { kind: 'money', profile: 'montant' } as const;
+export const QUANTITE = { kind: 'decimal', profile: 'quantite' } as const;
+export const PRIX_UNITAIRE = { kind: 'money', profile: 'prixUnitaire' } as const;
+export const DATE = { kind: 'date', profile: 'montant' } as const;
+
 const PAGINATION: readonly TextSegment[] = [
   { kind: 'literal', text: 'Page ' },
-  { kind: 'pageField', field: 'number' },
+  { kind: 'pageField', field: 'number', format: QUANTITE },
   { kind: 'literal', text: ' / ' },
-  { kind: 'pageField', field: 'count' },
+  { kind: 'pageField', field: 'count', format: QUANTITE },
 ];
 
 /** Explicit stringification: `concat` refuses a number, and `text()` is where one becomes text. */
@@ -311,12 +323,40 @@ export const factureAvecApparence = (a: Apparence): Template =>
         maxFractionDigits: 2,
         dateStyle: 'long',
       },
+      'fr-decimal': {
+        locale: 'fr-FR',
+        currency: 'EUR',
+        minFractionDigits: 0,
+        maxFractionDigits: 3,
+        dateStyle: 'short',
+      },
+      'fr-eur-4': {
+        locale: 'fr-FR',
+        currency: 'EUR',
+        minFractionDigits: 2,
+        maxFractionDigits: 4,
+        dateStyle: 'short',
+      },
       'en-usd': {
         locale: 'en-US',
         currency: 'USD',
         minFractionDigits: 2,
         maxFractionDigits: 2,
         dateStyle: 'long',
+      },
+      'en-decimal': {
+        locale: 'en-US',
+        currency: 'USD',
+        minFractionDigits: 0,
+        maxFractionDigits: 3,
+        dateStyle: 'short',
+      },
+      'en-usd-4': {
+        locale: 'en-US',
+        currency: 'USD',
+        minFractionDigits: 2,
+        maxFractionDigits: 4,
+        dateStyle: 'short',
       },
     },
     page: {
@@ -338,6 +378,7 @@ export const factureAvecApparence = (a: Apparence): Template =>
                 field: 'report',
                 decimals: 2,
                 mode: 'halfExpand',
+                format: MONTANT,
                 typography: a.accent,
               },
             ],
@@ -590,7 +631,11 @@ export const factureAvecApparence = (a: Apparence): Template =>
                           id: 'td-quantite',
                           typography: a.corps,
                           content: [
-                            { kind: 'binding', value: { kind: 'path', path: 'line.quantite' } },
+                            {
+                              kind: 'binding',
+                              value: { kind: 'path', path: 'line.quantite' },
+                              format: QUANTITE,
+                            },
                           ],
                         },
                       ],
@@ -603,7 +648,11 @@ export const factureAvecApparence = (a: Apparence): Template =>
                           id: 'td-prix',
                           typography: a.corps,
                           content: [
-                            { kind: 'binding', value: { kind: 'path', path: 'line.prixUnitaire' } },
+                            {
+                              kind: 'binding',
+                              value: { kind: 'path', path: 'line.prixUnitaire' },
+                              format: PRIX_UNITAIRE,
+                            },
                           ],
                         },
                       ],
@@ -615,7 +664,7 @@ export const factureAvecApparence = (a: Apparence): Template =>
                           type: 'text',
                           id: 'td-montant',
                           typography: a.corps,
-                          content: [{ kind: 'binding', value: lineAmount }],
+                          content: [{ kind: 'binding', value: lineAmount, format: MONTANT }],
                         },
                       ],
                     },
@@ -636,6 +685,9 @@ export const factureAvecApparence = (a: Apparence): Template =>
                                 {
                                   kind: 'binding',
                                   value: { kind: 'path', path: 'line.discount' },
+                                  /* A discount is a money amount here. Written down site by site,
+                                     never deduced from the field name. */
+                                  format: MONTANT,
                                 },
                               ],
                             },
@@ -661,7 +713,7 @@ export const factureAvecApparence = (a: Apparence): Template =>
                       type: 'text',
                       id: 'tf-montant',
                       typography: a.corps,
-                      content: [{ kind: 'binding', value: totalHT }],
+                      content: [{ kind: 'binding', value: totalHT, format: MONTANT }],
                     },
                   ],
                 },
@@ -677,15 +729,15 @@ export const factureAvecApparence = (a: Apparence): Template =>
           keepTogether: true,
           content: [
             { kind: 'literal', text: 'Total HT ' },
-            { kind: 'binding', value: totalHT, typography: a.accent },
+            { kind: 'binding', value: totalHT, format: MONTANT, typography: a.accent },
             { kind: 'literal', text: ' — remise ' },
-            { kind: 'binding', value: remise },
+            { kind: 'binding', value: remise, format: MONTANT },
             { kind: 'literal', text: ' — remise arrondie ' },
-            { kind: 'binding', value: remiseArrondie },
+            { kind: 'binding', value: remiseArrondie, format: MONTANT },
             { kind: 'literal', text: ' — reste à payer ' },
-            { kind: 'binding', value: restePayer },
+            { kind: 'binding', value: restePayer, format: MONTANT },
             { kind: 'literal', text: ' — prix moyen ' },
-            { kind: 'binding', value: prixMoyen },
+            { kind: 'binding', value: prixMoyen, format: PRIX_UNITAIRE },
           ],
         },
         {
@@ -695,11 +747,11 @@ export const factureAvecApparence = (a: Apparence): Template =>
           align: a.alignementMentions,
           content: [
             { kind: 'literal', text: 'Échéance ' },
-            { kind: 'binding', value: echeance },
+            { kind: 'binding', value: echeance, format: DATE },
             { kind: 'literal', text: ' — 45 jours fin de mois ' },
-            { kind: 'binding', value: echeanceFinDeMois },
+            { kind: 'binding', value: echeanceFinDeMois, format: DATE },
             { kind: 'literal', text: ' — jours de retard ' },
-            { kind: 'binding', value: joursRetard },
+            { kind: 'binding', value: joursRetard, format: QUANTITE },
           ],
         },
         {
@@ -709,7 +761,7 @@ export const factureAvecApparence = (a: Apparence): Template =>
           align: a.alignementMentions,
           content: [
             { kind: 'literal', text: 'Lignes remisées ' },
-            { kind: 'binding', value: lignesRemisees, typography: a.accent },
+            { kind: 'binding', value: lignesRemisees, format: QUANTITE, typography: a.accent },
           ],
         },
         {
@@ -843,4 +895,16 @@ export const renderDataLong = {
     conditions:
       'Le règlement est exigible à la date portée ci-dessus, sans escompte. Les intérêts au taux légal courent de plein droit dès le lendemain de cette date sur toute somme restée impayée, et l’indemnité forfaitaire de recouvrement prévue par la loi s’y ajoute. Les marchandises demeurent la propriété de l’émetteur jusqu’au paiement intégral de la facture. Toute contestation portant sur une ligne du présent relevé doit être formée par écrit dans les trente jours de son émission, en rappelant la référence portée en tête de chaque feuille ; une ligne non contestée dans ce délai est réputée acceptée.',
   },
+};
+
+/**
+ * The same sixty lines, asking for their words in English.
+ *
+ * The words switch here, in the data set, at a path this demo named itself. The values switch in the
+ * writings the caller selects. The four pairings of the two are all reachable, and their coherence
+ * is the integrator's business -- Openview couples no language to a currency.
+ */
+export const renderDataLongAnglais = {
+  ...renderDataLong,
+  rendu: { ...renderDataLong.rendu, langue: 'en' },
 };

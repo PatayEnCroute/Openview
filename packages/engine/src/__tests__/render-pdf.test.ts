@@ -345,3 +345,132 @@ describe('a sequence the browser lays out taller than it was composed', () => {
     expect(log.printed).toHaveLength(0);
   });
 });
+
+describe('the writings the caller selected for one port', () => {
+  /** The writings this file names. Their keys belong to the fixture, not to the contract. */
+  const WRITINGS = {
+    'fr-eur-2': {
+      locale: 'fr-FR',
+      currency: 'EUR',
+      minFractionDigits: 2,
+      maxFractionDigits: 2,
+      dateStyle: 'long',
+    },
+    'fr-decimal-3': {
+      locale: 'fr-FR',
+      currency: 'EUR',
+      minFractionDigits: 0,
+      maxFractionDigits: 3,
+      dateStyle: 'short',
+    },
+  };
+
+  const writtenAmount = templateOf({
+    presentations: WRITINGS,
+    root: {
+      type: 'container',
+      id: 'root',
+      children: [
+        {
+          type: 'text',
+          id: 'amount',
+          content: [
+            {
+              kind: 'binding',
+              value: { kind: 'path', path: 'sample.reference' },
+              format: { kind: 'money', profile: 'amount' },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  /** A report marker in a domain a one-page document never reaches. */
+  const lateReport = templateOf({
+    presentations: WRITINGS,
+    page: {
+      /* The same small sheet as `threeTall`, so the fake's tall blocks really need three pages. */
+      sheet: { width: 100, height: 100 },
+      margins: { top: 0, right: 0, bottom: 0, left: 0 },
+      header: [
+        {
+          on: 'exceptFirst',
+          content: {
+            type: 'container',
+            id: 'carried',
+            children: [
+              {
+                type: 'text',
+                id: 'carried-t',
+                content: [
+                  {
+                    kind: 'pageField',
+                    field: 'report',
+                    decimals: 2,
+                    mode: 'halfEven',
+                    format: { kind: 'money', profile: 'amount' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      footer: [],
+    },
+    root: {
+      type: 'container',
+      id: 'root',
+      children: ['a', 'b', 'c'].map((id) => ({
+        type: 'text',
+        id,
+        content: [{ kind: 'literal', text: id }],
+      })),
+    },
+  });
+
+  it('writes a value at the selected writing, and leaves the request untouched', async () => {
+    const { strategy, log } = fakeStrategy();
+    const port = createPdfRenderPort(strategy, { presentationSelection: { amount: 'fr-eur-2' } });
+    const request = requestOf(writtenAmount, SAMPLE_DATA);
+
+    await port.render(request);
+
+    expect(log.printed[0]?.html).toContain('42,00');
+    /* The selection is an engine option: no third field of the request, and no reserved key. */
+    expect(Object.keys(request).sort()).toStrictEqual(['data', 'template']);
+  });
+
+  it('refuses before opening a session when a reachable site names an unselected profile', async () => {
+    // The writings are resolved during binding, which happens before the browser is asked for
+    // anything: no Chromium is launched for a document that cannot print, and nothing to close.
+    const { strategy, log } = fakeStrategy();
+    const port = createPdfRenderPort(strategy, { presentationSelection: {} });
+
+    await expect(port.render(requestOf(writtenAmount, SAMPLE_DATA))).rejects.toMatchObject({
+      code: 'presentation-refused',
+      details: { nodeId: 'amount', formatKind: 'money' },
+    });
+    expect(log.opened).toHaveLength(0);
+    expect(log.printed).toHaveLength(0);
+    expect(log.closed).toBe(0);
+  });
+
+  it('closes the session when a band bound after the first pass refuses its writing', async () => {
+    // The report marker lives in a domain the one-page hypothesis never reaches, so its writing is
+    // resolved INSIDE the session -- which then has to be closed on the way out. The scale of the
+    // selected writing contradicts the rounding the marker declares.
+    const { strategy, log } = fakeStrategy(TALL);
+    const port = createPdfRenderPort(strategy, {
+      presentationSelection: { amount: 'fr-decimal-3' },
+    });
+
+    await expect(port.render(requestOf(lateReport))).rejects.toMatchObject({
+      code: 'presentation-refused',
+      details: { limit: 2 },
+    });
+    expect(log.closed).toBe(1);
+    expect(log.printed).toHaveLength(0);
+  });
+});
