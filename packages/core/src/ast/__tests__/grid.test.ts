@@ -14,7 +14,7 @@ import {
   MAX_GRID_TRACKS,
   MIN_GRID_TRACKS,
 } from '../nodes.js';
-import { collectDataPaths, findNodeById, walk } from '../visitor.js';
+import { collectDataPaths, findNodeById, walk } from '../traverse.js';
 import type { MutuallyAssignable } from './fixtures.js';
 
 /**

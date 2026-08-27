@@ -18,7 +18,7 @@ import {
   type TextPageReportSegmentSchema,
 } from '../nodes.js';
 import { TableNodeSchema } from '../schemas.js';
-import { collectDataPaths, nodeReads } from '../visitor.js';
+import { collectDataPaths, nodeReads } from '../traverse.js';
 import type { MutuallyAssignable } from './fixtures.js';
 
 /**

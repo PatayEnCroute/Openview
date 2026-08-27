@@ -2,6 +2,7 @@
  * Host data catalogue type contracts and terminal scalar definitions.
  * @see docs/adr/0015-le-catalogue-de-donnees-de-l-integrateur.md
  */
+import { DATA_EXPECTATIONS, type DataExpectation } from '../ast/types.js';
 
 /** Terminal natures a declared value can have. */
 export const DATA_SCALAR_KINDS = ['string', 'number', 'boolean', 'civil-date'] as const;
@@ -57,25 +58,12 @@ export interface DataCatalogueEntry {
   readonly type: DataType;
 }
 
-/**
- * What the runtime requires at the exact position a path is read.
- *
- * A closed vocabulary, not a type system: it says what an operand position accepts, and leaves to
- * evaluation the faults no catalogue reading is involved in.
+/*
+ * The expectation vocabulary is a property of the AST -- a position imposes it -- so it is declared
+ * with the AST's other closed vocabularies. What a declared nature satisfies belongs to the
+ * catalogue and stays in `expectations.ts`.
  */
-export const DATA_EXPECTATIONS = [
-  'any',
-  'printable',
-  'number',
-  'boolean',
-  'text',
-  'civil-date',
-  'primitive',
-  'orderable',
-  'list',
-] as const;
-
-export type DataExpectation = (typeof DATA_EXPECTATIONS)[number];
+export { DATA_EXPECTATIONS, type DataExpectation };
 
 /** How one reading stands against the catalogue. */
 export const DATA_READ_STATUSES = ['available', 'undeclared', 'incompatible', 'blocked'] as const;

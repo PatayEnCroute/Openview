@@ -1,4 +1,4 @@
-import { collectDataPaths } from '../ast/visitor.js';
+import { collectDataPaths } from '../ast/traverse.js';
 import type { PageBand } from '../page/page.js';
 import type { Template } from './template.js';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectDataPaths } from '../../ast/visitor.js';
+import { collectDataPaths } from '../../ast/traverse.js';
 import { RECIPE_PAGE } from '../../page/__tests__/fixtures.js';
 import type { PageBand, PageSetup } from '../../page/page.js';
 import { parseTemplate } from '../migrate.js';
