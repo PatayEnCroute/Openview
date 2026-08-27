@@ -2,6 +2,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   type EvaluationScope,
   type Expression,
+  type Presentation,
   type PrintableExpression,
   parseTemplate,
   STANDARD_SHEETS_MM,
@@ -108,23 +109,162 @@ const title: PrintableExpression = {
   },
 };
 
-const PAGINATION = [
-  { kind: 'literal', text: 'Page ' },
-  { kind: 'pageField', field: 'number' },
-  { kind: 'literal', text: ' / ' },
-  { kind: 'pageField', field: 'count' },
+/**
+ * The writing each site of this document asks for, or nothing at all in its plain spelling.
+ *
+ * Threaded like the appearance, so the two spellings share one structure, one set of ids and one
+ * set of data paths -- and so the plain one stays exactly the document E1 and E3 already print.
+ */
+export interface SiteWritings {
+  readonly amount?: Record<string, unknown> | undefined;
+  readonly quantity?: Record<string, unknown> | undefined;
+  readonly unitPrice?: Record<string, unknown> | undefined;
+  readonly date?: Record<string, unknown> | undefined;
+  /** Whether the WORDS of this document switch on a path of the data set. */
+  readonly bilingual?: true | undefined;
+}
+
+/** No writing anywhere: every figure prints in its canonical form, as it did before E4. */
+const PLAIN: SiteWritings = {};
+
+/**
+ * The three profiles this model names, and the four sites that ask for them.
+ *
+ * `amount` is asked for twice over: once as money on the figures, once as a date on the two dates.
+ * The same writing carries the currency and the date style, which is why one render resolves three
+ * writings and not four.
+ */
+const WRITTEN: SiteWritings = {
+  amount: { kind: 'money', profile: 'amount' },
+  quantity: { kind: 'decimal', profile: 'quantity' },
+  unitPrice: { kind: 'money', profile: 'unitPrice' },
+  date: { kind: 'date', profile: 'amount' },
+  bilingual: true,
+};
+
+/**
+ * The six writings the bilingual recette declares. Their names belong to this fixture.
+ *
+ * Three per configuration: amounts at two decimals, quantities at up to three, and unit prices at
+ * up to four -- which is why one writing per render would not do.
+ */
+export const WRITINGS: Readonly<Record<string, Presentation>> = {
+  'fr-eur-2': {
+    locale: 'fr-FR',
+    currency: 'EUR',
+    minFractionDigits: 2,
+    maxFractionDigits: 2,
+    dateStyle: 'long',
+  },
+  'fr-decimal-3': {
+    locale: 'fr-FR',
+    currency: 'EUR',
+    minFractionDigits: 0,
+    maxFractionDigits: 3,
+    dateStyle: 'short',
+  },
+  'fr-eur-4': {
+    locale: 'fr-FR',
+    currency: 'EUR',
+    minFractionDigits: 2,
+    maxFractionDigits: 4,
+    dateStyle: 'short',
+  },
+  'en-usd-2': {
+    locale: 'en-US',
+    currency: 'USD',
+    minFractionDigits: 2,
+    maxFractionDigits: 2,
+    dateStyle: 'long',
+  },
+  'en-decimal-3': {
+    locale: 'en-US',
+    currency: 'USD',
+    minFractionDigits: 0,
+    maxFractionDigits: 3,
+    dateStyle: 'short',
+  },
+  'en-usd-4': {
+    locale: 'en-US',
+    currency: 'USD',
+    minFractionDigits: 2,
+    maxFractionDigits: 4,
+    dateStyle: 'short',
+  },
+};
+
+/** The values in French and euros. One of the two diagonals of the recette. */
+export const FRENCH_VALUES: Record<string, string> = {
+  amount: 'fr-eur-2',
+  quantity: 'fr-decimal-3',
+  unitPrice: 'fr-eur-4',
+};
+
+/** The values in English and dollars. The other diagonal. */
+export const ENGLISH_VALUES: Record<string, string> = {
+  amount: 'en-usd-2',
+  quantity: 'en-decimal-3',
+  unitPrice: 'en-usd-4',
+};
+
+/** The path this fixture -- not Openview -- chose to carry the language of the words. */
+const FRENCH_WORDS: Expression = {
+  kind: 'compare',
+  op: 'eq',
+  left: { kind: 'path', path: 'render.language' },
+  right: { kind: 'literal', value: 'fr' },
+};
+
+/** A writing on a site, or nothing: the canonical spelling of "no writing" is no key. */
+const asks = (format: Record<string, unknown> | undefined): Record<string, unknown> =>
+  format === undefined ? {} : { format };
+
+const pagination = (sites: SiteWritings): readonly Record<string, unknown>[] => [
+  said('Page ', 'Page ', sites),
+  { kind: 'pageField', field: 'number', ...asks(sites.quantity) },
+  said(' / ', ' sur ', sites),
+  { kind: 'pageField', field: 'count', ...asks(sites.quantity) },
 ];
 
-const label = (id: string, text: string): Record<string, unknown> => ({
+/**
+ * A fixed word inside a run of segments, in one language or in whichever the data set names.
+ *
+ * The words and the figures switch on two independent things: a path of the data set here, and the
+ * writings the caller selected there. Nothing couples them, and the recette renders all four pairs.
+ */
+const said = (english: string, french: string, sites: SiteWritings): Record<string, unknown> =>
+  sites.bilingual === true
+    ? {
+        kind: 'binding',
+        value: {
+          kind: 'if',
+          when: FRENCH_WORDS,
+          whenTrue: { kind: 'literal', value: french },
+          whenFalse: { kind: 'literal', value: english },
+        },
+      }
+    : { kind: 'literal', text: english };
+
+/** A whole text block holding one fixed word. */
+const label = (
+  id: string,
+  english: string,
+  french: string,
+  sites: SiteWritings = PLAIN,
+): Record<string, unknown> => ({
   type: 'text',
   id,
-  content: [{ kind: 'literal', text }],
+  content: [said(english, french, sites)],
 });
 
-const bound = (id: string, value: PrintableExpression): Record<string, unknown> => ({
+const bound = (
+  id: string,
+  value: PrintableExpression,
+  format?: Record<string, unknown> | undefined,
+): Record<string, unknown> => ({
   type: 'text',
   id,
-  content: [{ kind: 'binding', value }],
+  content: [{ kind: 'binding', value, ...asks(format) }],
 });
 
 /**
@@ -136,6 +276,7 @@ const bound = (id: string, value: PrintableExpression): Record<string, unknown> 
  */
 function stripe(
   appearance: Appearance,
+  sites: SiteWritings,
   carried: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   return {
@@ -171,8 +312,10 @@ function stripe(
                     type: 'text',
                     id: 'stripe-reference',
                     typography: appearance.body,
+                    /* The reference is an IDENTIFIER: no writing, whatever it looks like. A
+                       host that numbers its orders 20260014 must read 20260014 back. */
                     content: [
-                      { kind: 'literal', text: 'Reference ' },
+                      said('Reference ', 'Reference ', sites),
                       {
                         kind: 'binding',
                         value: { kind: 'path', path: 'order.reference' },
@@ -256,7 +399,23 @@ export function referenceDocument(appearance: Appearance): Template {
   return parseTemplate(referenceDocumentRaw(appearance));
 }
 
-function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
+/**
+ * The same document, with every site classed and its words switched by the data set.
+ *
+ * One template object, rendered through two ports: what makes the recette a recette is that the
+ * stored document is IDENTICAL between the two diagonals.
+ */
+export function writtenReferenceDocument(appearance: Appearance): Template {
+  return parseTemplate({
+    ...referenceDocumentRaw(appearance, WRITTEN),
+    presentations: WRITINGS,
+  });
+}
+
+function referenceDocumentRaw(
+  appearance: Appearance,
+  sites: SiteWritings = PLAIN,
+): Record<string, unknown> {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     id: 'tpl_reference',
@@ -273,22 +432,25 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
            a helper that would invent a third page domain. */
         {
           on: 'firstOnly',
-          content: stripe(appearance, undefined),
+          content: stripe(appearance, sites, undefined),
         },
         {
           on: 'exceptFirst',
-          content: stripe(appearance, {
+          content: stripe(appearance, sites, {
             type: 'text',
             id: 'stripe-carried',
             typography: appearance.body,
             align: 'end',
             content: [
-              { kind: 'literal', text: 'Brought forward ' },
+              said('Brought forward ', 'Report ', sites),
               {
                 kind: 'pageField',
                 field: 'report',
                 decimals: 2,
                 mode: 'halfExpand',
+                /* The rounding is declared here and the writing is chosen by the caller. Their
+                   scales have to agree, or the formatter would round the figure a second time. */
+                ...asks(sites.amount),
                 typography: appearance.accent,
               },
             ],
@@ -303,7 +465,7 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
           content: {
             type: 'container',
             id: 'running-foot',
-            children: [{ type: 'text', id: 'running-foot-num', content: PAGINATION }],
+            children: [{ type: 'text', id: 'running-foot-num', content: pagination(sites) }],
           },
         },
         {
@@ -312,7 +474,7 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
             type: 'container',
             id: 'final-foot',
             children: [
-              { type: 'text', id: 'final-foot-num', content: PAGINATION },
+              { type: 'text', id: 'final-foot-num', content: pagination(sites) },
               {
                 type: 'text',
                 id: 'final-foot-notice',
@@ -363,11 +525,11 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
               id: 'head',
               box: { ...appearance.stripe, border: appearance.headRule },
               cells: [
-                { columnId: 'sku', children: [label('h-sku', 'Item')] },
-                { columnId: 'units', children: [label('h-units', 'Units')] },
-                { columnId: 'rate', children: [label('h-rate', 'Rate')] },
-                { columnId: 'amount', children: [label('h-amount', 'Amount')] },
-                { columnId: 'note', children: [label('h-note', 'Note')] },
+                { columnId: 'sku', children: [label('h-sku', 'Item', 'Article', sites)] },
+                { columnId: 'units', children: [label('h-units', 'Units', 'Quantite', sites)] },
+                { columnId: 'rate', children: [label('h-rate', 'Rate', 'Prix unitaire', sites)] },
+                { columnId: 'amount', children: [label('h-amount', 'Amount', 'Montant', sites)] },
+                { columnId: 'note', children: [label('h-note', 'Note', 'Remarque', sites)] },
               ],
             },
           ],
@@ -391,17 +553,25 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
                   cells: [
                     {
                       columnId: 'sku',
+                      /* An item code is an identifier too, digits and all: no writing. */
                       children: [bound('d-sku', { kind: 'path', path: 'row.sku' })],
                     },
                     {
                       columnId: 'units',
-                      children: [bound('d-units', { kind: 'path', path: 'row.units' })],
+                      children: [
+                        bound('d-units', { kind: 'path', path: 'row.units' }, sites.quantity),
+                      ],
                     },
                     {
                       columnId: 'rate',
-                      children: [bound('d-rate', { kind: 'path', path: 'row.rate' })],
+                      children: [
+                        bound('d-rate', { kind: 'path', path: 'row.rate' }, sites.unitPrice),
+                      ],
                     },
-                    { columnId: 'amount', children: [bound('d-amount', rowAmount)] },
+                    {
+                      columnId: 'amount',
+                      children: [bound('d-amount', rowAmount, sites.amount)],
+                    },
                     {
                       columnId: 'note',
                       children: [
@@ -413,9 +583,16 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
                             {
                               type: 'text',
                               id: 'reduced-note',
+                              /* A reduction is a MONEY amount here. Written down site by site
+                                 rather than deduced from the field name, which the engine never
+                                 reads. */
                               content: [
-                                { kind: 'literal', text: 'less ' },
-                                { kind: 'binding', value: { kind: 'path', path: 'row.reduction' } },
+                                said('less ', 'moins ', sites),
+                                {
+                                  kind: 'binding',
+                                  value: { kind: 'path', path: 'row.reduction' },
+                                  ...asks(sites.amount),
+                                },
                               ],
                             },
                           ],
@@ -433,8 +610,8 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
               type: 'tableRow',
               id: 'total',
               cells: [
-                { columnId: 'sku', children: [label('f-label', 'Net total')] },
-                { columnId: 'amount', children: [bound('f-amount', netTotal)] },
+                { columnId: 'sku', children: [label('f-label', 'Net total', 'Total net', sites)] },
+                { columnId: 'amount', children: [bound('f-amount', netTotal, sites.amount)] },
               ],
             },
           ],
@@ -446,12 +623,17 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
           align: 'end',
           keepTogether: true,
           content: [
-            { kind: 'literal', text: 'Net ' },
-            { kind: 'binding', value: netTotal, typography: appearance.accent },
-            { kind: 'literal', text: ' less ' },
-            { kind: 'binding', value: roundedReduction },
-            { kind: 'literal', text: ' leaves ' },
-            { kind: 'binding', value: remainder },
+            said('Net ', 'Net ', sites),
+            {
+              kind: 'binding',
+              value: netTotal,
+              ...asks(sites.amount),
+              typography: appearance.accent,
+            },
+            said(' less ', ' moins ', sites),
+            { kind: 'binding', value: roundedReduction, ...asks(sites.amount) },
+            said(' leaves ', ' laisse ', sites),
+            { kind: 'binding', value: remainder, ...asks(sites.amount) },
           ],
         },
         {
@@ -460,12 +642,17 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
           typography: appearance.body,
           align: appearance.noticeAlign,
           content: [
-            { kind: 'literal', text: 'Due ' },
-            { kind: 'binding', value: dueDate },
-            { kind: 'literal', text: ', end of that month ' },
-            { kind: 'binding', value: endOfTerm },
-            { kind: 'literal', text: ', reduced lines ' },
-            { kind: 'binding', value: reducedRowCount, typography: appearance.accent },
+            said('Due ', 'Echeance ', sites),
+            { kind: 'binding', value: dueDate, ...asks(sites.date) },
+            said(', end of that month ', ', fin du mois ', sites),
+            { kind: 'binding', value: endOfTerm, ...asks(sites.date) },
+            said(', reduced lines ', ', lignes remisees ', sites),
+            {
+              kind: 'binding',
+              value: reducedRowCount,
+              ...asks(sites.quantity),
+              typography: appearance.accent,
+            },
           ],
         },
         /* A framed block that asks to stay whole. It lands where the rows leave off, so on the long
@@ -476,7 +663,10 @@ function referenceDocumentRaw(appearance: Appearance): Record<string, unknown> {
           keepTogether: true,
           box: { ...appearance.stripe, border: appearance.headRule },
           children: [
-            { ...label('settlement-head', 'How to settle'), typography: appearance.accent },
+            {
+              ...label('settlement-head', 'How to settle', 'Comment regler', sites),
+              typography: appearance.accent,
+            },
             {
               type: 'text',
               id: 'settlement-body',
@@ -644,7 +834,7 @@ export function layeredReferenceDocument(appearance: Appearance, layers = true):
 
 /** Three rows, two of them reduced. */
 export const THREE_ROWS: EvaluationScope = {
-  render: { wording: 'long' },
+  render: { wording: 'long', language: 'en' },
   order: {
     reference: 20_260_014,
     holder: 'acme',
@@ -668,7 +858,7 @@ export const THREE_ROWS: EvaluationScope = {
 
 /** One row, none reduced, the short wording: the same model, different results. */
 export const ONE_ROW: EvaluationScope = {
-  render: { wording: 'short' },
+  render: { wording: 'short', language: 'en' },
   order: {
     reference: 20_260_015,
     holder: 'brontide',
@@ -683,6 +873,48 @@ export const ONE_ROW: EvaluationScope = {
     payment: 'Remittances are applied to the oldest unpaid line first.',
     terms:
       'Payment is due on the date shown above, without deduction. Interest at the statutory rate runs from the day after that date on any part left unpaid, and the recovery costs allowed by law are added to it. Goods remain the property of the issuer until the invoice is settled in full. Any dispute about a line of this statement is to be raised in writing within thirty days of its issue, quoting the reference at the head of every sheet; a line not disputed within that period is taken as accepted.',
+  },
+};
+
+/**
+ * The same data set, asking for its words in the other language.
+ *
+ * The words switch here, in the data. The figures switch in the port's selection. Neither reads the
+ * other, which is why the recette can render all four pairs of the two.
+ */
+export function worded(data: EvaluationScope, language: 'fr' | 'en'): EvaluationScope {
+  const render = data.render;
+  if (typeof render !== 'object' || render === null) {
+    throw new Error('the reference data set should carry a render block');
+  }
+  return { ...data, render: { ...render, language } };
+}
+
+/**
+ * The bilingual recette's own short data set.
+ *
+ * Its unit price carries four decimals and its quantity three, so the three writings a render
+ * resolves are VISIBLY different rather than merely selected -- a rate of 7.77 would print the same
+ * under the amount writing and under the unit-price one.
+ */
+export const WRITTEN_ROWS: EvaluationScope = {
+  render: { wording: 'short', language: 'en' },
+  order: {
+    reference: 20_260_017,
+    holder: 'longacre works',
+    issuedOn: '2026-03-02',
+    termDays: 45,
+    reductionRate: 5,
+    rows: [
+      { sku: '0012345', units: 2.125, rate: 7.1234, reduction: 0 },
+      { sku: 'REF-0090', units: 1, rate: 12.5, reduction: 3.5 },
+    ],
+  },
+  issuer: {
+    notice: 'Settlement in full is expected on the due date.',
+    settlement: 'By transfer to the account named in the remittance advice, quoting the reference.',
+    payment: 'Remittances are applied to the oldest unpaid line first.',
+    terms: 'Payment is due on the date shown above, without deduction.',
   },
 };
 
@@ -721,7 +953,7 @@ const sixtyRows = (): readonly Record<string, unknown>[] =>
  * under this fixture's own key, and four sheets is what the measured flow happens to need.
  */
 export const SIXTY_ROWS: EvaluationScope = {
-  render: { wording: 'long' },
+  render: { wording: 'long', language: 'en' },
   order: {
     reference: 20_260_016,
     holder: 'longacre works',

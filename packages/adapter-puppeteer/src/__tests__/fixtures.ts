@@ -11,6 +11,7 @@ import {
   type PdfRenderSession,
   type PdfRenderStrategy,
   type PdfSourceDocument,
+  type RenderEngineOptions,
 } from '@openview/engine';
 import { PDFDocument } from 'pdf-lib';
 import {
@@ -74,6 +75,7 @@ export interface CapturedRender {
 export async function renderCapturing(
   template: Template,
   data: EvaluationScope = {},
+  options?: RenderEngineOptions | undefined,
 ): Promise<CapturedRender> {
   const inner = hostStrategy();
   const measured: PdfSourceDocument[] = [];
@@ -95,7 +97,7 @@ export async function renderCapturing(
       };
     },
   };
-  const result = await createPdfRenderPort(strategy).render({ template, data });
+  const result = await createPdfRenderPort(strategy, options).render({ template, data });
   if (printed === undefined) {
     throw new Error('the pipeline printed nothing');
   }
