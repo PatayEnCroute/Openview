@@ -37,7 +37,14 @@ import {
   writtenReferenceDocument,
 } from './reference-document.js';
 
-const CHROMIUM_TIMEOUT_MS = 60_000;
+/**
+ * Room for Chromium to launch and lay a document out, under a loaded machine.
+ *
+ * A watchdog against a hung browser, never a performance budget: the slowest case of this package
+ * measures 28 s when it runs alone, and the whole suite holds several browsers at once, so a
+ * threshold near the uncontended figure fails on contention rather than on a fault.
+ */
+const CHROMIUM_TIMEOUT_MS = 120_000;
 const PT_PER_MM = 72 / 25.4;
 
 /** The two spaces a French writing puts around its figures, which nothing may normalise. */
