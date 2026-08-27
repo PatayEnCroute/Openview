@@ -1547,8 +1547,8 @@ export default function App() {
 
       <h2>Parcours de l'AST (Visiteur, profondeur d'abord)</h2>
       <ol>
-        {nodeIds.map((label) => (
-          <li key={label}>{label}</li>
+        {avecCle(nodeIds, (label) => label).map(({ cle, item }) => (
+          <li key={cle}>{item}</li>
         ))}
       </ol>
 
@@ -1626,7 +1626,7 @@ export default function App() {
         et c'est l'hôte qui l'échappe.
       </p>
       {compatibiliteSansPrix.diagnostics.map((refus) => (
-        <div key={`${refus.code}-${refus.path.join('.')}`} style={refusalStyle}>
+        <div key={`${refus.code}-${refus.path.join('.')}-${refus.dataPath}`} style={refusalStyle}>
           <code>{refus.code}</code> · <code>{refus.dataPath}</code> ·{' '}
           <code>{refus.path.join(' › ')}</code>
           <br />
@@ -1690,15 +1690,17 @@ export default function App() {
           <p>
             <strong>Calques</strong> — répétés sur toutes les pages, hors flux (lot C11)
           </p>
-          {(pageModele.layers ?? []).map((calque, index) => (
-            <div key={`calque-${calque.content.id}`} style={bandeStyle}>
-              <em>
-                {calque.plane === 'background' ? 'arrière-plan' : 'avant-plan'} #{index + 1}
-              </em>{' '}
-              — <code>{calque.content.id}</code>
-              {calque.opacity === undefined ? '' : ` — opacité ${calque.opacity}`}
-            </div>
-          ))}
+          {avecCle(pageModele.layers ?? [], (calque) => `calque-${calque.content.id}`).map(
+            ({ cle, item: calque }, index) => (
+              <div key={cle} style={bandeStyle}>
+                <em>
+                  {calque.plane === 'background' ? 'arrière-plan' : 'avant-plan'} #{index + 1}
+                </em>{' '}
+                — <code>{calque.content.id}</code>
+                {calque.opacity === undefined ? '' : ` — opacité ${calque.opacity}`}
+              </div>
+            ),
+          )}
         </div>
       </div>
       <p>
