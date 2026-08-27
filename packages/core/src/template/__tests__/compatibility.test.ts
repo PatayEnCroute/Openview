@@ -267,6 +267,62 @@ describe('the historical corpus, version by version', () => {
     expect(group.rows[0]?.pageReport?.value).toStrictEqual({ kind: 'path', path: 'entry.amount' });
     expect(Object.hasOwn(table.header[0] ?? {}, 'pageReport')).toBe(false);
   });
+
+  it('carries the writings a version 11 site declares, and invents none for a plain one', () => {
+    // The same own-property check as the two fields above. The reference is the case that pays for
+    // this contract existing at all: a number the host uses as an identifier declares no writing,
+    // and a chain writing `format: undefined` onto every segment would pass a JSON comparison
+    // while teaching an integrator that a plain site carries an empty writing.
+    const root = parseTemplate(witnessAt(11)).root;
+    const plain = findNodeById(root, 'reference');
+    const written = findNodeById(root, 'issued');
+    if (plain?.type !== 'text' || written?.type !== 'text') {
+      throw new Error('the version 11 witness should carry a plain site and a written one');
+    }
+    const [plainSegment] = plain.content;
+    const [writtenSegment] = written.content;
+
+    expect(plainSegment !== undefined && Object.hasOwn(plainSegment, 'format')).toBe(false);
+    expect(writtenSegment?.kind === 'binding' ? writtenSegment.format : undefined).toStrictEqual({
+      kind: 'date',
+      profile: 'amount',
+    });
+  });
+
+  it('carries the writing a version 11 report marker declares, beside its rounding', () => {
+    // A marker is the site the stamp protects hardest: it survives binding unresolved, so a build
+    // that stripped its writing would print a canonical figure in a document that asked for a
+    // localised one, with no error anywhere.
+    const band = parseTemplate(witnessAt(11)).page.footer[0]?.content.children[0];
+    if (band?.type !== 'text') {
+      throw new Error('the version 11 witness should carry a footer marker');
+    }
+    const [, report, , counter] = band.content;
+
+    expect(report).toStrictEqual({
+      kind: 'pageField',
+      field: 'report',
+      decimals: 2,
+      mode: 'halfEven',
+      format: { kind: 'money', profile: 'amount' },
+    });
+    expect(counter).toStrictEqual({
+      kind: 'pageField',
+      field: 'number',
+      format: { kind: 'decimal', profile: 'rank' },
+    });
+  });
+
+  it('asks the host for nothing on account of a profile, at any version', () => {
+    // A profile is the model author's own name for a writing role. Whatever the stamp, it must
+    // never reach the list an integrator reads to build its catalogue.
+    for (const fixture of HISTORICAL_FIXTURES) {
+      const paths = collectTemplateDataPaths(parseTemplate(fixture.document));
+      for (const profile of ['amount', 'quantity', 'rank']) {
+        expect(paths).not.toContain(profile);
+      }
+    }
+  });
 });
 
 describe('the meaning of the version 1 document, replayed after migration', () => {

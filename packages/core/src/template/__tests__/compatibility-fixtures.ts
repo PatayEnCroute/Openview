@@ -573,6 +573,153 @@ const v10 = {
   },
 };
 
+/**
+ * Three writings the model names, and the sites that ask for them by profile: an amount, a
+ * quantity and a date on the bindings, and the same amount profile on the report the pages carry.
+ *
+ * The reference stays unformatted on purpose: a number the host uses as an identifier must survive
+ * the render exactly as it was supplied.
+ */
+const v11 = {
+  schemaVersion: 11,
+  id: 'tpl_v11',
+  name: 'Historical model',
+  version: '1.0.0',
+  presentations: {
+    'fr-eur-2': {
+      locale: 'fr-FR',
+      currency: 'EUR',
+      minFractionDigits: 2,
+      maxFractionDigits: 2,
+      dateStyle: 'long',
+    },
+    'fr-decimal-3': {
+      locale: 'fr-FR',
+      currency: 'EUR',
+      minFractionDigits: 0,
+      maxFractionDigits: 3,
+      dateStyle: 'short',
+    },
+  },
+  page: {
+    sheet: { width: 210, height: 297 },
+    margins: { top: 15, right: 15, bottom: 15, left: 15 },
+    header: [],
+    footer: [
+      {
+        on: 'exceptFirst',
+        content: {
+          type: 'container',
+          id: 'foot',
+          children: [
+            {
+              type: 'text',
+              id: 'carried',
+              content: [
+                { kind: 'literal', text: 'Brought forward ' },
+                {
+                  kind: 'pageField',
+                  field: 'report',
+                  decimals: 2,
+                  mode: 'halfEven',
+                  format: { kind: 'money', profile: 'amount' },
+                },
+                { kind: 'literal', text: ' on page ' },
+                {
+                  kind: 'pageField',
+                  field: 'number',
+                  format: { kind: 'decimal', profile: 'rank' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  },
+  root: {
+    type: 'container',
+    id: 'root',
+    children: [
+      {
+        type: 'text',
+        id: 'reference',
+        content: [{ kind: 'binding', value: { kind: 'path', path: 'payload.reference' } }],
+      },
+      {
+        type: 'text',
+        id: 'issued',
+        content: [
+          {
+            kind: 'binding',
+            value: { kind: 'path', path: 'payload.issuedOn' },
+            format: { kind: 'date', profile: 'amount' },
+          },
+        ],
+      },
+      {
+        type: 'table',
+        id: 'lines',
+        columns: [
+          { id: 'units', width: 1, align: 'end' },
+          { id: 'amount', width: 2, align: 'end' },
+        ],
+        header: [],
+        body: [
+          {
+            type: 'tableRowGroup',
+            id: 'group',
+            each: { kind: 'path', path: 'payload.entries' },
+            as: 'entry',
+            rows: [
+              {
+                type: 'tableRow',
+                id: 'line',
+                pageReport: { value: { kind: 'path', path: 'entry.amount' } },
+                cells: [
+                  {
+                    columnId: 'units',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'units-cell',
+                        content: [
+                          {
+                            kind: 'binding',
+                            value: { kind: 'path', path: 'entry.units' },
+                            format: { kind: 'decimal', profile: 'quantity' },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    columnId: 'amount',
+                    children: [
+                      {
+                        type: 'text',
+                        id: 'amount-cell',
+                        content: [
+                          {
+                            kind: 'binding',
+                            value: { kind: 'path', path: 'entry.amount' },
+                            format: { kind: 'money', profile: 'amount' },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        footer: [],
+      },
+    ],
+  },
+};
+
 /** One historical document and its compatibility expectations. */
 export interface HistoricalFixture {
   /** The stored version this document was written under. */
@@ -596,6 +743,7 @@ const WRITINGS = 'presentations';
 const FRAGMENTATION = 'keepTogether';
 const ACCOUNTING = 'pageReport';
 const LAYOUT = 'grid';
+const WRITTEN_SITES = 'format';
 
 /**
  * Historical test documents ordered by version from the initial schema to current.
@@ -605,59 +753,90 @@ export const HISTORICAL_FIXTURES: readonly HistoricalFixture[] = [
     version: 1,
     document: V1_DOCUMENT,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [
+      ...TABLE,
+      ...APPEARANCE,
+      WRITINGS,
+      FRAGMENTATION,
+      ACCOUNTING,
+      LAYOUT,
+      WRITTEN_SITES,
+    ],
   },
   {
     version: 2,
     document: v2,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, 'round', ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [
+      ...TABLE,
+      'round',
+      ...APPEARANCE,
+      WRITINGS,
+      FRAGMENTATION,
+      ACCOUNTING,
+      LAYOUT,
+      WRITTEN_SITES,
+    ],
   },
   {
     version: 3,
     document: v3,
     receivesCompatibilityPage: true,
-    futureTokens: [...TABLE, ...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [
+      ...TABLE,
+      ...APPEARANCE,
+      WRITINGS,
+      FRAGMENTATION,
+      ACCOUNTING,
+      LAYOUT,
+      WRITTEN_SITES,
+    ],
   },
   {
     version: 4,
     document: v4,
     receivesCompatibilityPage: true,
-    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT, WRITTEN_SITES],
   },
   {
     version: 5,
     document: v5,
     receivesCompatibilityPage: false,
-    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [...APPEARANCE, WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT, WRITTEN_SITES],
   },
   {
     version: 6,
     document: v6,
     receivesCompatibilityPage: false,
-    futureTokens: [WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [WRITINGS, FRAGMENTATION, ACCOUNTING, LAYOUT, WRITTEN_SITES],
   },
   {
     version: 7,
     document: v7,
     receivesCompatibilityPage: false,
-    futureTokens: [FRAGMENTATION, ACCOUNTING, LAYOUT],
+    futureTokens: [FRAGMENTATION, ACCOUNTING, LAYOUT, WRITTEN_SITES],
   },
   {
     version: 8,
     document: v8,
     receivesCompatibilityPage: false,
-    futureTokens: [ACCOUNTING, LAYOUT],
+    futureTokens: [ACCOUNTING, LAYOUT, WRITTEN_SITES],
   },
   {
     version: 9,
     document: v9,
     receivesCompatibilityPage: false,
-    futureTokens: [LAYOUT],
+    futureTokens: [LAYOUT, WRITTEN_SITES],
   },
   {
     version: 10,
     document: v10,
+    receivesCompatibilityPage: false,
+    futureTokens: [WRITTEN_SITES],
+  },
+  {
+    version: 11,
+    document: v11,
     receivesCompatibilityPage: false,
     futureTokens: [],
   },

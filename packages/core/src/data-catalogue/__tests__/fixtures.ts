@@ -2,6 +2,7 @@
  * Test fixtures and factories for data catalogue tests.
  */
 
+import type { PresentationFormat } from '../../ast/nodes.js';
 import type { Expression, PrintableExpression } from '../../expression/expression.js';
 import { STANDARD_SHEETS_MM } from '../../page/page.js';
 import { CURRENT_SCHEMA_VERSION, type Template } from '../../template/template.js';
@@ -25,6 +26,11 @@ export const path = (written: string): PrintableExpression => ({ kind: 'path', p
 /** A text block reading one expression, so a reading has a node and a position of its own. */
 export function binding(value: PrintableExpression): Block {
   return { type: 'text', id: freshId('text'), content: [{ kind: 'binding', value }] };
+}
+
+/** A visible binding that declares the writing its position asks for. */
+export function writtenBinding(value: PrintableExpression, format: PresentationFormat): Block {
+  return { type: 'text', id: freshId('written'), content: [{ kind: 'binding', value, format }] };
 }
 
 /** A text block reading nothing: a literal and a page marker, neither of which is a data reading. */

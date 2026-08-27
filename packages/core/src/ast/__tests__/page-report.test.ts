@@ -64,6 +64,9 @@ const reportSegment = {
   mode: 'halfExpand',
 } as const;
 
+/** The one writing this file names, spelt once so the matrix below reads as a matrix. */
+const MONEY_AMOUNT = { kind: 'money', profile: 'amount' } as const;
+
 const textWith = (...content: readonly unknown[]) => ({
   type: 'text',
   id: 'line',
@@ -298,5 +301,75 @@ describe('the stamp the report contract carries', () => {
       from: 8,
       to: 9,
     });
+  });
+});
+
+describe('the writing a page marker declares', () => {
+  const countWith = (format: unknown) => textWith({ kind: 'pageField', field: 'number', format });
+  const reportWith = (format: unknown) => textWith({ ...reportSegment, format });
+
+  it('lets a counter ask for a decimal writing and nothing else', () => {
+    // A page number is a whole count of pages. A currency would put a symbol on it and a date has
+    // no day to read, so both are refused at the schema rather than at the render.
+    expect(TextNodeSchema.safeParse(countWith({ kind: 'decimal', profile: 'rank' })).success).toBe(
+      true,
+    );
+    for (const kind of ['money', 'date'] as const) {
+      const parsed = TextNodeSchema.safeParse(countWith({ kind, profile: 'rank' }));
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.path).toStrictEqual(['content', 0, 'format', 'kind']);
+    }
+  });
+
+  it('lets a report ask for money or a decimal, never for a date', () => {
+    for (const kind of ['money', 'decimal'] as const) {
+      expect(TextNodeSchema.safeParse(reportWith({ kind, profile: 'amount' })).success).toBe(true);
+    }
+    const parsed = TextNodeSchema.safeParse(reportWith({ kind: 'date', profile: 'amount' }));
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toStrictEqual(['content', 0, 'format', 'kind']);
+  });
+
+  it('still requires both rounding parameters when a report declares a writing', () => {
+    // The writing does not replace the rounding: the value is rounded first and the formatter is
+    // handed the result, so a report with a currency and no declared rounding is still incomplete.
+    for (const partial of [
+      { kind: 'pageField', field: 'report', decimals: 2, format: MONEY_AMOUNT },
+      { kind: 'pageField', field: 'report', mode: 'halfEven', format: MONEY_AMOUNT },
+    ]) {
+      expect(TextNodeSchema.safeParse(textWith(partial)).success).toBe(false);
+    }
+  });
+
+  it('leaves a marker that declares none with no key at all', () => {
+    const [counter] = TextNodeSchema.parse(textWith({ kind: 'pageField', field: 'count' })).content;
+    const [report] = TextNodeSchema.parse(textWith(reportSegment)).content;
+
+    expect(counter !== undefined && Object.hasOwn(counter, 'format')).toBe(false);
+    expect(report !== undefined && Object.hasOwn(report, 'format')).toBe(false);
+    expect(report).toStrictEqual(reportSegment);
+  });
+
+  it('refuses an unnamed profile on either marker', () => {
+    expect(TextNodeSchema.safeParse(countWith({ kind: 'decimal', profile: '' })).success).toBe(
+      false,
+    );
+    expect(TextNodeSchema.safeParse(reportWith({ kind: 'money', profile: '' })).success).toBe(
+      false,
+    );
+  });
+
+  it('adds no reading to the catalogue: a marker asks the host for nothing', () => {
+    // A profile is not a path. A counter comes from the cuts and a report from the contributions
+    // the rows declared, so neither reaches `collectDataPaths`.
+    const node = TextNodeSchema.parse(
+      textWith(
+        { kind: 'pageField', field: 'number', format: { kind: 'decimal', profile: 'rank' } },
+        { ...reportSegment, format: MONEY_AMOUNT },
+      ),
+    );
+
+    expect(collectDataPaths(node)).toStrictEqual([]);
+    expect(nodeReads(node)).toStrictEqual({ reads: [], binds: undefined });
   });
 });

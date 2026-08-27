@@ -9,7 +9,7 @@ import { PresentationTableSchema } from '../presentation/presentation.js';
  * Distinct from {@link Template.version}, which is the author-facing document revision.
  * @see docs/adr/0009-les-blocs-insecables.md
  */
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 /**
  * Zod schema for validating a complete document template at CURRENT_SCHEMA_VERSION.
