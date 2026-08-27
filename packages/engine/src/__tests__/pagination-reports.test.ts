@@ -137,8 +137,10 @@ describe('the report a page carries in', () => {
     // when a row materialised EARLY finishes LATE. An outer row is ranked before the inner rows its
     // own cell holds; make that inner table taller than a page and the outer row spans two sheets
     // while the first inner rows end on the first. Collection order is then 1, 2, 0, 3, 4.
-    const byRank = 1e16 + 1 + 1 + 1 + 1;
-    const byWalk = 1 + 1 + 1e16 + 1 + 1;
+    const sum = (terms: readonly number[]): number =>
+      terms.reduce((total, term) => total + term, 0);
+    const byRank = sum([1e16, 1, 1, 1, 1]);
+    const byWalk = sum([1, 1, 1e16, 1, 1]);
     expect(byRank).not.toBe(byWalk);
 
     const spanning = {

@@ -179,7 +179,9 @@ describe('the box model', () => {
        so a second spelling of the same conversion cannot pass this assertion. At 9.5 pt the two
        agree, which is exactly why the size is chosen rather than convenient. */
     const witness = 7.5;
-    expect((witness * 25.4) / 72).not.toBe(witness * (25.4 / 72));
+    const dividingLast = (pt: number): number => (pt * 25.4) / 72;
+    const scalingByFactor = (pt: number): number => pt * (25.4 / 72);
+    expect(dividingLast(witness)).not.toBe(scalingByFactor(witness));
     const html = htmlOf(
       flow([
         {

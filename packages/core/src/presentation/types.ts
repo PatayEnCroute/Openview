@@ -1,5 +1,3 @@
-import { MAX_ROUND_DECIMALS } from '../expression/types.js';
-
 /** Standard date formatting styles supported by Intl.DateTimeFormat. */
 export const DATE_STYLES = ['short', 'medium', 'long', 'full'] as const;
 
@@ -7,8 +5,8 @@ export type DateStyle = (typeof DATE_STYLES)[number];
 
 export const MIN_FRACTION_DIGITS = 0;
 
-/** Maximum fraction digits allowed in presentation writing. */
-export const MAX_FRACTION_DIGITS = MAX_ROUND_DECIMALS;
+/** Maximum fraction digits in presentation writing: the rounding bound, under its name here. */
+export { MAX_ROUND_DECIMALS as MAX_FRACTION_DIGITS } from '../expression/types.js';
 
 /**
  * Presentation configuration for currency, numbers, and dates.

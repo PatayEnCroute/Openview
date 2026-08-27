@@ -86,7 +86,7 @@ export function RenderDownloadPanel() {
       </p>
       <div style={rowStyle}>
         <label style={fieldStyle}>
-          Modèle
+          <span>Modèle</span>
           <select
             value={templateId}
             onChange={(event) => setTemplateId(event.target.value)}
@@ -100,7 +100,7 @@ export function RenderDownloadPanel() {
           </select>
         </label>
         <label style={fieldStyle}>
-          Jeu de données
+          <span>Jeu de données</span>
           <select
             value={datasetId}
             onChange={(event) => setDatasetId(event.target.value)}

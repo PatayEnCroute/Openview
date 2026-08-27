@@ -60,17 +60,15 @@ export type MaterialPageFieldRun = MaterialPageCountRun | MaterialPageReportRun;
 
 export type MaterialRun = MaterialTextRun | MaterialPageFieldRun;
 
-/**
- * An occurrence key: unique inside one render, opaque outside it.
- *
- * A declaration id repeats once a loop has run, so it cannot address one measured box. This key
- * comes from a counter local to the render: it is never stored, never returned to the caller and
- * never promised stable between two renders.
- */
-export type OccurrenceKey = string;
-
 interface MaterialBase {
-  readonly key: OccurrenceKey;
+  /**
+   * An occurrence key: unique inside one render, opaque outside it.
+   *
+   * A declaration id repeats once a loop has run, so it cannot address one measured box. This key
+   * comes from a counter local to the render: it is never stored, never returned to the caller and
+   * never promised stable between two renders.
+   */
+  readonly key: string;
   /** Id of the declaration this occurrence came from. Not unique once a loop has repeated it. */
   readonly nodeId: string;
   /**
@@ -101,7 +99,8 @@ export interface MaterialContainer extends MaterialBase {
 
 /** One cell per declared column, in column order. An unfilled column keeps an empty cell. */
 export interface MaterialCell {
-  readonly key: OccurrenceKey;
+  /** Occurrence key, unique inside one render. */
+  readonly key: string;
   readonly columnId: string;
   readonly children: readonly MaterialBlock[];
 }
@@ -114,7 +113,8 @@ export interface MaterialCell {
  * addition of the same terms in another order does not guarantee.
  */
 export interface MaterialPageReport {
-  readonly key: OccurrenceKey;
+  /** Occurrence key, unique inside one render. */
+  readonly key: string;
   readonly order: number;
   readonly value: number;
 }
@@ -127,7 +127,8 @@ export interface MaterialPageReport {
  * the body, so it is also the index in the body.
  */
 export interface MaterialRowGroupOccurrence {
-  readonly key: OccurrenceKey;
+  /** Occurrence key, unique inside one render. */
+  readonly key: string;
   readonly nodeId: string;
   readonly path: readonly (string | number)[];
   readonly firstRow: number;

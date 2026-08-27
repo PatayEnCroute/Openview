@@ -1,4 +1,4 @@
-import type { MaterialPageReport, OccurrenceKey } from '../document/types.js';
+import type { MaterialPageReport } from '../document/types.js';
 import { refusal } from '../errors.js';
 import type { CellFragment, MaterialFragment, TableFragment } from './types.js';
 import { wholeFragment } from './whole.js';
@@ -16,7 +16,7 @@ const NOT_FINITE =
  */
 export function completedOn(fragments: readonly MaterialFragment[]): readonly MaterialPageReport[] {
   const found: MaterialPageReport[] = [];
-  const seen = new Set<OccurrenceKey>();
+  const seen = new Set<string>();
 
   const cells = (list: readonly CellFragment[]): void => {
     for (const cell of list) {

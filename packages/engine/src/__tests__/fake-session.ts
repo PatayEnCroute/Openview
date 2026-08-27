@@ -44,7 +44,10 @@ export interface FakeLayout {
 /** A composed sequence declares a break after every sheet but the last; a probe declares none. */
 const isComposed = (html: string): boolean => html.includes('break-after:page');
 
-const KEYED = /<(\w+)((?:\s+[\w-]+="[^"]*")*)\s*>/g;
+/* `[^>]*` rather than a repeated attribute group: the group would let the engine split one run
+   of whitespace across its iterations, which backtracks super-linearly on a tag that never closes.
+   ATTRIBUTE reads the pairs out of the blob, so nothing is lost by not parsing them twice. */
+const KEYED = /<(\w+)([^>]*)>/g;
 const ATTRIBUTE = /([\w-]+)="([^"]*)"/g;
 
 interface KeyedBox {

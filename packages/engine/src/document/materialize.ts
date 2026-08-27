@@ -46,7 +46,6 @@ import type {
   MaterialRowGroupOccurrence,
   MaterialRun,
   MaterialText,
-  OccurrenceKey,
   ResolvedTypography,
 } from './types.js';
 import { resolveRunTypography } from './typography.js';
@@ -73,7 +72,7 @@ const DEFAULT_ALIGN = 'start';
  * same keys twice, which is what lets a measurement be replayed and compared.
  */
 export interface KeySource {
-  next(): OccurrenceKey;
+  next(): string;
   /**
    * The materialisation rank of one page-report contribution, zero-based.
    *
@@ -87,7 +86,7 @@ export function createKeySource(): KeySource {
   let issued = 0;
   let ranked = 0;
   return {
-    next(): OccurrenceKey {
+    next(): string {
       issued += 1;
       return `o${issued}`;
     },
@@ -301,7 +300,7 @@ function materializeCell(
  */
 function contributionOf(
   row: TableRowNode,
-  key: OccurrenceKey,
+  key: string,
   context: Context,
 ): MaterialPageReport | undefined {
   const declared = row.pageReport;
@@ -490,7 +489,7 @@ function materializeGrid(node: GridNode, context: Context): MaterialGrid {
     items: node.items.map((item, index) => {
       const at = [...context.path, 'items', index, 'content'];
       const [content] = materializeNode(item.content, { ...context, path: at });
-      if (content === undefined || content.kind !== 'container') {
+      if (content?.kind !== 'container') {
         throw refusal(
           'A grid zone did not materialise into a container, which is the only shape a zone declares.',
           'template-refused',
@@ -550,7 +549,7 @@ function bandContainer(
     column: undefined,
     path: ['page', region, band.on, 'content'],
   });
-  if (content === undefined || content.kind !== 'container') {
+  if (content?.kind !== 'container') {
     throw refusal(
       'A page band did not materialise into a container, which is the only shape a band declares.',
       'template-refused',
@@ -599,7 +598,7 @@ function materializeLayers(
         column: undefined,
         path: at,
       });
-      if (content === undefined || content.kind !== 'container') {
+      if (content?.kind !== 'container') {
         throw refusal(
           'A page layer did not materialise into a container, which is the only shape a layer declares.',
           'template-refused',

@@ -89,6 +89,12 @@ function invalidUnionMessage(issue: Extract<ZodIssue, { readonly code: 'invalid_
     : 'This value matches none of the supported forms.';
 }
 
+/** The sentence a type refusal becomes, naming the shape the schema expected. */
+function expectedTypeMessage(expected: ZodTypeName): string {
+  const noun = EXPECTED_NOUNS[expected] ?? `a ${expected}`;
+  return `This field must be ${noun}.`;
+}
+
 /**
  * The sentence an issue becomes. Bounds, formats and cross-field relations keep the words the
  * schema wrote; the validator's generic type and value refusals are rephrased.
@@ -98,7 +104,7 @@ function messageOf(issue: ZodIssue): string {
     case 'invalid_type':
       return SAFE_SCHEMA_MESSAGES.has(issue.message)
         ? issue.message
-        : `This field must be ${EXPECTED_NOUNS[issue.expected] ?? `a ${issue.expected}`}.`;
+        : expectedTypeMessage(issue.expected);
     case 'invalid_value':
       return SAFE_SCHEMA_MESSAGES.has(issue.message) ? issue.message : acceptedValues(issue.values);
     case 'invalid_union':

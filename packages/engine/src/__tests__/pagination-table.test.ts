@@ -352,7 +352,7 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const html = serializeHtml(buildPagedTree(paginated));
     const widths = [...html.matchAll(/<col style="width:([\d.%]+)">/g)].map((match) => match[1]);
     expect(new Set(widths)).toStrictEqual(new Set(['50%']));
-    expect(widths.length).toBe(paginated.pages.length * 2);
+    expect(widths).toHaveLength(paginated.pages.length * 2);
   });
 });
 

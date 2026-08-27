@@ -1,5 +1,5 @@
 ﻿import { refusal } from '../errors.js';
-import type { PdfLayoutMeasurement } from '../strategy/pdf.js';
+import type { PageMeasurement, PdfLayoutMeasurement } from '../strategy/pdf.js';
 import type { PaginatedDocument } from './types.js';
 import { TOLERANCE_PX } from './validate-measurement.js';
 
@@ -31,18 +31,13 @@ export interface FlowOverflow {
 }
 
 /**
- * Checks the composed sequence against what the browser really laid out, before anything is printed.
+ * The divergences no cut of the flow could repair, refused on the first one observed.
  *
- * A flow that reached past its slot is returned rather than thrown: it is the one divergence the
- * paginator can answer, by withholding that much height from the page and cutting again. Everything
- * else -- a missing page, a wrong sheet, a band over its reserve, an image that did not decode, a
- * box painted off the sheet -- is a refusal, because no cut of the flow would repair it.
+ * A missing page, an image that did not decode, a box painted off the sheet, a grid zone its
+ * content outgrew and a clipped marker all share that property, so none of them reaches the loop
+ * that settles an overflow.
  */
-export function verifyLayout(
-  paginated: PaginatedDocument,
-  measurement: PdfLayoutMeasurement,
-  pxPerMm: number,
-): FlowOverflow | undefined {
+function refuseUnrepairable(paginated: PaginatedDocument, measurement: PdfLayoutMeasurement): void {
   if (measurement.pages.length !== paginated.pages.length) {
     throw refusal(WRONG_PAGE_COUNT, 'layout-measurement-failed', {
       limit: paginated.pages.length,
@@ -75,6 +70,72 @@ export function verifyLayout(
       limit: measurement.clippedMarkerCount,
     });
   }
+}
+
+/** The sheet and printable area, in css pixels, every page must have been laid out at. */
+interface ExpectedPageBox {
+  readonly width: number;
+  readonly height: number;
+  readonly printableWidth: number;
+  readonly printableHeight: number;
+}
+
+/** Refuses a page laid out at a sheet or a printable area other than the declared one. */
+function checkPageBox(page: PageMeasurement, expected: ExpectedPageBox, pageNumber: number): void {
+  const off =
+    Math.abs(page.page.width - expected.width) > TOLERANCE_PX ||
+    Math.abs(page.page.height - expected.height) > TOLERANCE_PX ||
+    Math.abs(page.printable.width - expected.printableWidth) > TOLERANCE_PX ||
+    Math.abs(page.printable.height - expected.printableHeight) > TOLERANCE_PX;
+  if (off) {
+    throw refusal(WRONG_SHEET, 'layout-measurement-failed', { pageNumber });
+  }
+}
+
+/**
+ * The worst flow overflow between one page and what was already found, bands refused on the way.
+ *
+ * A band over its reserve is a refusal: the reserve is a declared height, so no cut of the flow
+ * gives it back. Only the root region yields an overflow the paginator can answer.
+ */
+function worstFlowOverflow(
+  page: PageMeasurement,
+  pageNumber: number,
+  worst: FlowOverflow | undefined,
+): FlowOverflow | undefined {
+  let found = worst;
+  for (const region of page.regions) {
+    const excess = region.contentHeight - region.height;
+    if (excess <= TOLERANCE_PX) {
+      continue;
+    }
+    if (region.region !== 'root') {
+      throw refusal(BAND_OVERFLOWS, 'page-band-overflow', {
+        pageNumber,
+        region: region.region,
+      });
+    }
+    if (found === undefined || excess > found.excess) {
+      found = { pageNumber, excess };
+    }
+  }
+  return found;
+}
+
+/**
+ * Checks the composed sequence against what the browser really laid out, before anything is printed.
+ *
+ * A flow that reached past its slot is returned rather than thrown: it is the one divergence the
+ * paginator can answer, by withholding that much height from the page and cutting again. Everything
+ * else -- a missing page, a wrong sheet, a band over its reserve, an image that did not decode, a
+ * box painted off the sheet -- is a refusal, because no cut of the flow would repair it.
+ */
+export function verifyLayout(
+  paginated: PaginatedDocument,
+  measurement: PdfLayoutMeasurement,
+  pxPerMm: number,
+): FlowOverflow | undefined {
+  refuseUnrepairable(paginated, measurement);
 
   const expected = {
     width: paginated.sheet.width * pxPerMm,
@@ -86,29 +147,8 @@ export function verifyLayout(
   let worst: FlowOverflow | undefined;
   for (const [index, page] of measurement.pages.entries()) {
     const pageNumber = index + 1;
-    const off =
-      Math.abs(page.page.width - expected.width) > TOLERANCE_PX ||
-      Math.abs(page.page.height - expected.height) > TOLERANCE_PX ||
-      Math.abs(page.printable.width - expected.printableWidth) > TOLERANCE_PX ||
-      Math.abs(page.printable.height - expected.printableHeight) > TOLERANCE_PX;
-    if (off) {
-      throw refusal(WRONG_SHEET, 'layout-measurement-failed', { pageNumber });
-    }
-    for (const region of page.regions) {
-      const excess = region.contentHeight - region.height;
-      if (excess <= TOLERANCE_PX) {
-        continue;
-      }
-      if (region.region !== 'root') {
-        throw refusal(BAND_OVERFLOWS, 'page-band-overflow', {
-          pageNumber,
-          region: region.region,
-        });
-      }
-      if (worst === undefined || excess > worst.excess) {
-        worst = { pageNumber, excess };
-      }
-    }
+    checkPageBox(page, expected, pageNumber);
+    worst = worstFlowOverflow(page, pageNumber, worst);
   }
   return worst;
 }
