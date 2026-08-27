@@ -550,34 +550,33 @@ function analyseNode(
   node: DocumentNode,
   path: readonly (string | number)[],
 ): void {
-  const shape = visitNode(node, SHAPE);
-  const site: Site = { path, nodeId: node.id };
+  const { readings, binding, children } = nodeShape(node);
+  const nodeId = node.id;
 
-  for (const reading of shape.readings) {
+  for (const reading of readings()) {
     visitExpression(reading.expression, READING_VISITOR, {
       analysis,
       expectation: reading.expectation,
-      site: { path: [...path, ...reading.at], nodeId: node.id },
+      site: { path: [...path, ...reading.at], nodeId },
     });
   }
 
-  if (shape.binding !== undefined) {
-    const resolved = visitExpression(shape.binding.source, READING_VISITOR, {
+  if (binding !== undefined) {
+    const resolved = visitExpression(binding.source.expression, READING_VISITOR, {
       analysis,
-      expectation: 'list',
-      site: { path: [...path, ...shape.binding.at], nodeId: node.id },
+      expectation: binding.source.expectation,
+      site: { path: [...path, ...binding.source.at], nodeId },
     });
-    bind(analysis, shape.binding.alias, resolved, {
-      path: [...path, 'as'],
-      nodeId: site.nodeId,
-    });
+    bind(analysis, binding.alias, resolved, { path: [...path, 'as'], nodeId });
   }
 
-  for (const child of shape.children) {
-    analyseNode(analysis, child.node, [...path, ...child.at]);
+  for (const slot of children) {
+    for (const [index, child] of slot.nodes.entries()) {
+      analyseNode(analysis, child, [...path, ...slot.at, index]);
+    }
   }
 
-  if (shape.binding !== undefined) {
+  if (binding !== undefined) {
     analysis.scopes.pop();
   }
 }

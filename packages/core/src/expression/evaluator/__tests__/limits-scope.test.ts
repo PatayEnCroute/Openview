@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findNodeById } from '../../../ast/visitor.js';
+import { findNodeById } from '../../../ast/traverse.js';
 import {
   EXPRESSION_ERROR_CODES,
   type ExpressionErrorCode,

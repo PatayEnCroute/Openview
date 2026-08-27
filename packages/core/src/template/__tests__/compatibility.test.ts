@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ConditionNode, DocumentNode, LoopNode, TextNode } from '../../ast/nodes.js';
-import { findNodeById, visitSegment, walk } from '../../ast/visitor.js';
+import { findNodeById, walk } from '../../ast/traverse.js';
+import { visitSegment } from '../../ast/visitor.js';
 import {
   childScope,
   type EvaluationScope,

@@ -14,6 +14,26 @@ interface NodeBase {
   readonly keepTogether?: true | undefined;
 }
 
+/**
+ * What the runtime requires at the exact position a value is read.
+ *
+ * A closed vocabulary, not a type system. It lives with the AST because a position is a property of
+ * the AST; which declared natures satisfy a position is a property of the catalogue.
+ */
+export const DATA_EXPECTATIONS = [
+  'any',
+  'printable',
+  'number',
+  'boolean',
+  'text',
+  'civil-date',
+  'primitive',
+  'orderable',
+  'list',
+] as const;
+
+export type DataExpectation = (typeof DATA_EXPECTATIONS)[number];
+
 /** Static raw text segment. */
 export interface TextLiteralSegment {
   readonly kind: 'literal';

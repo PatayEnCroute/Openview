@@ -1,4 +1,9 @@
-import { type Expression, pathsOf, rootSegment } from '../expression/expression.js';
+/**
+ * Dispatch over the document Composite: one exhaustive entry point per union.
+ *
+ * The traversals derived from a node -- children, reads, data paths -- live in `traverse.ts`, and
+ * the single description they derive from lives in `shape.ts`.
+ */
 import { kindOf } from '../expression/value-type.js';
 import type {
   ConditionNode,
