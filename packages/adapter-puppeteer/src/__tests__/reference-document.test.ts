@@ -1,6 +1,9 @@
 import {
   collectTemplateDataPaths,
   type EvaluationScope,
+  formatDate,
+  formatMoney,
+  type Presentation,
   roundDecimal,
   type Template,
 } from '@openview/core';
@@ -13,22 +16,40 @@ import {
   inspectPdf,
   LOGO_PNG,
   renderCapturing,
+  templateOf,
 } from './fixtures.js';
 import {
   APPEARANCES,
   type Appearance,
   BARE,
   DATASETS,
+  ENGLISH_VALUES,
   FRAMED,
+  FRENCH_VALUES,
   layeredReferenceDocument,
   ONE_ROW,
   referenceDocument,
   SIXTY_ROWS,
   THREE_ROWS,
+  WRITINGS,
+  WRITTEN_ROWS,
+  worded,
+  writtenReferenceDocument,
 } from './reference-document.js';
 
-const CHROMIUM_TIMEOUT_MS = 60_000;
+/**
+ * Room for Chromium to launch and lay a document out, under a loaded machine.
+ *
+ * A watchdog against a hung browser, never a performance budget: the slowest case of this package
+ * measures 28 s when it runs alone, and the whole suite holds several browsers at once, so a
+ * threshold near the uncontended figure fails on contention rather than on a fault.
+ */
+const CHROMIUM_TIMEOUT_MS = 120_000;
 const PT_PER_MM = 72 / 25.4;
+
+/** The two spaces a French writing puts around its figures, which nothing may normalise. */
+const NARROW_NO_BREAK = ' ';
+const NO_BREAK = ' ';
 
 const prepared = new Map<string, Promise<PdfSourceDocument>>();
 
@@ -702,3 +723,408 @@ describe('the C11 recette: a gridded heading and three page layers on the same m
     CHROMIUM_TIMEOUT_MS,
   );
 });
+
+describe('the E4 recette: the same statement in two writings', () => {
+  /** One template object for both diagonals: what makes this a recette is that it does not move. */
+  const template = writtenReferenceDocument(FRAMED);
+
+  const diagonals = new Map<string, Promise<CapturedRender>>();
+
+  const render = (
+    language: 'fr' | 'en',
+    values: Readonly<Record<string, string>>,
+    data: EvaluationScope = SIXTY_ROWS,
+  ): Promise<CapturedRender> => {
+    const at = `${language}|${Object.values(values).join()}|${JSON.stringify(data.render)}|${String(
+      (data.order as Record<string, unknown> | undefined)?.reference,
+    )}`;
+    const found = diagonals.get(at);
+    if (found !== undefined) {
+      return found;
+    }
+    const running = renderCapturing(template, worded(data, language), {
+      presentationSelection: values,
+    });
+    diagonals.set(at, running);
+    return running;
+  };
+
+  const sheets = (html: string): readonly string[] => html.split('class="ov-page"').slice(1);
+
+  /** The text of one declaration, in order of appearance. */
+  const written = (html: string, nodeId: string): readonly string[] =>
+    html
+      .split(`data-openview-node="${nodeId}"`)
+      .slice(1)
+      .map((piece) =>
+        [...piece.slice(0, piece.indexOf('</div>')).matchAll(/>([^<]*)</g)]
+          .map((match) => match[1] ?? '')
+          .join('')
+          .trim(),
+      );
+
+  /** The markers of one region of one sheet, which is where a counter and a report differ. */
+  const markersIn = (sheet: string, region: 'header' | 'footer'): readonly string[] => {
+    const band = sheet.split(`data-openview-region="${region}"`)[1] ?? '';
+    const slot = band.slice(0, band.indexOf('data-openview-region='));
+    return [...slot.matchAll(/class="ov-marker"[^>]*>([^<]*)</g)].map((match) => match[1] ?? '');
+  };
+
+  /** The writing one key declares, so an oracle formats with the ICU of THIS build. */
+  const writingAt = (key: string): Presentation => {
+    const found = WRITINGS[key];
+    if (found === undefined) {
+      throw new Error(`the fixture should declare the writing ${key}`);
+    }
+    return found;
+  };
+
+  const money = (value: number, key: string): string => {
+    const found = formatMoney(value, writingAt(key));
+    if (found === undefined) {
+      throw new Error('the writing should format a finite amount');
+    }
+    return found;
+  };
+
+  it.each([
+    ['French words and euros', 'fr', FRENCH_VALUES] as const,
+    ['English words and dollars', 'en', ENGLISH_VALUES] as const,
+  ])(
+    'prints %s on exactly four A4 sheets',
+    async (_label, language, values) => {
+      // A successful render IS the no-clipping assertion: the pipeline refuses on any marker whose
+      // value overflowed its reserved box, so a localised figure one character too wide would have
+      // raised `layout-measurement-failed` instead of producing these bytes.
+      const { bytes } = await render(language, values);
+      const { pages, sizes } = await inspectPdf(bytes);
+
+      expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
+      expect(pages).toBe(4);
+      for (const size of sizes) {
+        expect(Math.abs(size.width - 210 * PT_PER_MM)).toBeLessThan(0.5);
+        expect(Math.abs(size.height - 297 * PT_PER_MM)).toBeLessThan(0.5);
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'carries the report forward on sheets two to four, localised AFTER rounding',
+    async () => {
+      // The oracle is derived from the printed sheets, rounded the way the model declared, then
+      // written with the formatter of THIS build -- never compared with a pinned currency string.
+      const { html } = (await render('fr', FRENCH_VALUES)).printed;
+      const perSheet = sheets(html).map((sheet) => ({
+        amounts: written(sheet, 'd-amount'),
+        carried: markersIn(sheet, 'header'),
+      }));
+
+      expect(perSheet).toHaveLength(4);
+      expect(perSheet[0]?.carried).toStrictEqual([]);
+      let running = 0;
+      for (const [index, sheet] of perSheet.entries()) {
+        if (index > 0) {
+          expect(sheet.carried).toStrictEqual([
+            money(roundDecimal(running, 2, 'halfExpand'), 'fr-eur-2'),
+          ]);
+        }
+        for (const amount of sheet.amounts) {
+          running = roundDecimal(running + unlocalised(amount), 2, 'halfExpand');
+        }
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'writes the figures with the separators, spaces and symbol ICU produced',
+    async () => {
+      // D12: what core wrote is what the html carries, code point for code point. The narrow
+      // no-break group separator and the no-break space before the symbol are the two an html
+      // serialiser would most plausibly have normalised away.
+      const { html } = (await render('fr', FRENCH_VALUES)).printed;
+      const total = written(html, 'f-amount')[0] ?? '';
+
+      expect(total).toContain(NARROW_NO_BREAK);
+      expect(total).toContain(NO_BREAK);
+      expect(total).toContain('€');
+      expect(total).toBe(money(unlocalised(total), 'fr-eur-2'));
+      /* And nothing turned into an entity or a plain space on the way through the serialiser. */
+      expect(html).toContain(total);
+      expect(html).not.toContain('&#8239;');
+      expect(html).not.toContain('&nbsp;');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'leaves every identifier of the document exactly as the host supplied it',
+    async () => {
+      // The whole reason a site declares its writing instead of the engine guessing: an order
+      // number of eight digits and an item code that begins with digits are TEXT, not amounts.
+      const french = (await render('fr', FRENCH_VALUES)).printed.html;
+      const english = (await render('en', ENGLISH_VALUES)).printed.html;
+
+      for (const html of [french, english]) {
+        expect(html).toContain('20260016');
+        expect(html).not.toContain(`20${NARROW_NO_BREAK}260${NARROW_NO_BREAK}016`);
+        expect(html).not.toContain('20,260,016');
+        for (const rank of ['001', '030', '060']) {
+          expect(written(html, 'd-sku').some((sku) => sku.startsWith(`${rank} - `))).toBe(true);
+        }
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'gives each of the three profiles its own writing within one render',
+    async () => {
+      // Three profiles, three writings, one render: a quantity with no currency at all, a unit
+      // price at four decimals, and an amount at exactly two. One writing per render could not do.
+      const { html } = (await render('fr', FRENCH_VALUES, WRITTEN_ROWS)).printed;
+      const units = written(html, 'd-units');
+      const rates = written(html, 'd-rate');
+      const amounts = written(html, 'd-amount');
+
+      expect(units[0]).toBe('2,125');
+      expect(units[0]).not.toContain('€');
+      expect(rates[0]).toBe(money(7.1234, 'fr-eur-4'));
+      expect(amounts[0]).toBe(money(2.125 * 7.1234, 'fr-eur-2'));
+      /* The amount writing rounds to two decimals; the unit-price one keeps four. */
+      expect(amounts[0]).not.toBe(money(2.125 * 7.1234, 'fr-eur-4'));
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'writes the two dates in the writing the amount profile also carries',
+    async () => {
+      // The date reuses the `amount` profile: the same writing carries the currency and the date
+      // style, and its currency plays no part here. That reuse is why one render resolves three
+      // writings and not four.
+      const { html } = (await render('fr', FRENCH_VALUES, WRITTEN_ROWS)).printed;
+      const dates = written(html, 'dates')[0] ?? '';
+
+      expect(dates).toContain(formatDate('2026-04-16', writingAt('fr-eur-2')));
+      expect(dates).toContain(formatDate('2026-04-30', writingAt('fr-eur-2')));
+      expect(dates).not.toContain('2026-04-16');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'writes the page rank and the page total at the writing their site declared',
+    async () => {
+      const { html } = (await render('fr', FRENCH_VALUES)).printed;
+
+      expect(sheets(html).map((sheet) => markersIn(sheet, 'footer'))).toStrictEqual([
+        ['1', '4'],
+        ['2', '4'],
+        ['3', '4'],
+        ['4', '4'],
+      ]);
+      /* Nothing of the measuring pass survives: no placeholder and no unresolved marker. */
+      expect(html).not.toContain('pageField');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it.each([
+    ['fr', 'euros', FRENCH_VALUES, 'Article', '€'] as const,
+    ['fr', 'dollars', ENGLISH_VALUES, 'Article', '$'] as const,
+    ['en', 'euros', FRENCH_VALUES, 'Item', '€'] as const,
+    ['en', 'dollars', ENGLISH_VALUES, 'Item', '$'] as const,
+  ])(
+    'keeps the words (%s) and the figures (%s) independent of one another',
+    async (language, _label, values, word, symbol) => {
+      // E4-11. The words come from a path of the data set and the figures from the port's
+      // selection. Neither reads the other, so all four pairs are legitimate documents: their
+      // coherence is the integrator's business, and no table here couples a language to a currency.
+      const { html } = (await render(language, values, WRITTEN_ROWS)).printed;
+
+      expect(written(html, 'h-sku')[0]).toBe(word);
+      expect(written(html, 'd-amount')[0]).toContain(symbol);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'prints an unknown but well-formed currency as itself, with no fallback',
+    async () => {
+      // E4-5, on a document of its own rather than on the statement: the engine holds no ISO list,
+      // so a declaration naming `ZZZ` prints `ZZZ` and never a currency someone thought it meant.
+      const exotic = templateOf({
+        presentations: {
+          'fr-zzz-2': {
+            locale: 'fr-FR',
+            currency: 'ZZZ',
+            minFractionDigits: 2,
+            maxFractionDigits: 2,
+            dateStyle: 'short',
+          },
+        },
+        root: {
+          type: 'container',
+          id: 'root',
+          children: [
+            {
+              type: 'text',
+              id: 'exotic-amount',
+              content: [
+                {
+                  kind: 'binding',
+                  value: { kind: 'path', path: 'payload.amount' },
+                  format: { kind: 'money', profile: 'amount' },
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const { printed } = await renderCapturing(
+        exotic,
+        { payload: { amount: 1234.5 } },
+        { presentationSelection: { amount: 'fr-zzz-2' } },
+      );
+
+      expect(printed.html).toContain('ZZZ');
+      expect(printed.html).not.toContain('EUR');
+      expect(printed.html).not.toContain('€');
+      expect(printed.html).not.toContain('$');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it.each([
+    ['no selection at all', undefined] as const,
+    ['a selection missing a profile the document reaches', {}] as const,
+    [
+      'a profile pointing at a writing the document does not declare',
+      { amount: 'absent', quantity: 'fr-decimal-3', unitPrice: 'fr-eur-4' },
+    ] as const,
+  ])(
+    'refuses to print with %s, and prints nothing',
+    async (_label, values) => {
+      // Failure, never a blank. A statement with empty boxes where its amounts belong reads as though
+      // every figure were zero, which is worse than no document at all.
+      const caught: unknown = await createPdfRenderPort(
+        hostStrategy(),
+        values === undefined ? undefined : { presentationSelection: values },
+      )
+        .render({ template, data: worded(WRITTEN_ROWS, 'fr') })
+        .catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(DocumentRenderError);
+      if (caught instanceof DocumentRenderError) {
+        expect(caught.code).toBe('presentation-refused');
+        expect(caught.message).not.toContain('amount');
+        expect(caught.message).not.toContain('fr-eur-2');
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses a writing whose scale contradicts the rounding the report declares',
+    async () => {
+      // D8. A writing allowing three decimals where the marker rounds to two would let `Intl`
+      // reshape the figure the declared rounding had just produced. On the sixty-line data set,
+      // because the report marker lives in a band no one-page document ever reaches.
+      const caught: unknown = await createPdfRenderPort(hostStrategy(), {
+        presentationSelection: { ...FRENCH_VALUES, amount: 'fr-decimal-3' },
+      })
+        .render({ template, data: worded(SIXTY_ROWS, 'fr') })
+        .catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(DocumentRenderError);
+      if (caught instanceof DocumentRenderError) {
+        expect(caught.code).toBe('presentation-refused');
+        expect(caught.details.limit).toBe(2);
+      }
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses a formatted site whose value is not of the nature it asked for, and prints nothing',
+    async () => {
+      // A site that declares a writing states what it requires. Text where a quantity belongs is a
+      // wiring fault of the host: the render stops, and nothing reaches the printer.
+      const wrongly = templateOf({
+        presentations: WRITINGS,
+        root: {
+          type: 'container',
+          id: 'root',
+          children: [
+            {
+              type: 'text',
+              id: 'quantity',
+              content: [
+                {
+                  kind: 'binding',
+                  value: { kind: 'path', path: 'payload.label' },
+                  format: { kind: 'decimal', profile: 'quantity' },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const inner = hostStrategy();
+      let printedAnything = false;
+      const observing = createPdfRenderPort(
+        {
+          format: 'pdf',
+          async open(resources) {
+            const session = await inner.open(resources);
+            return {
+              measure: (source: PdfSourceDocument) => session.measure(source),
+              print: (source: PdfSourceDocument) => {
+                printedAnything = true;
+                return session.print(source);
+              },
+              close: () => session.close(),
+            };
+          },
+        },
+        { presentationSelection: FRENCH_VALUES },
+      );
+
+      const caught: unknown = await observing
+        .render({ template: wrongly, data: { payload: { label: 'two' } } })
+        .catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(DocumentRenderError);
+      if (caught instanceof DocumentRenderError) {
+        expect(caught.code).toBe('unformattable-binding-value');
+        expect(caught.details.actualType).toBe('string');
+        expect(caught.details.formatKind).toBe('decimal');
+        expect(caught.details.nodeId).toBe('quantity');
+        expect(caught.message).not.toContain('two');
+      }
+      expect(printedAnything).toBe(false);
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+});
+
+/**
+ * Reads a localised French figure back to a number.
+ *
+ * So the report oracle depends on the writing and on nothing else: it re-derives the amounts from
+ * what was PRINTED rather than from a figure copied out of the engine.
+ */
+function unlocalised(figure: string): number {
+  const spelt = [...figure]
+    .filter((char) => char === '-' || char === ',' || (char >= '0' && char <= '9'))
+    .join('')
+    .replace(',', '.');
+  const value = Number(spelt);
+  if (!Number.isFinite(value)) {
+    throw new Error('a localised figure should read back as a number');
+  }
+  return value;
+}

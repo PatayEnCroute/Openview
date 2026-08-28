@@ -26,6 +26,7 @@ export function RenderDownloadPanel() {
   const [catalogue, setCatalogue] = useState<CatalogueView | undefined>(undefined);
   const [templateId, setTemplateId] = useState('');
   const [datasetId, setDatasetId] = useState('');
+  const [writingId, setWritingId] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [done, setDone] = useState<string | undefined>(undefined);
@@ -40,6 +41,7 @@ export function RenderDownloadPanel() {
         setCatalogue(view);
         setTemplateId(view.templates[0]?.id ?? '');
         setDatasetId(view.datasets[0]?.id ?? '');
+        setWritingId(view.writings[0]?.id ?? '');
       })
       .catch((error: unknown) => {
         if (live) {
@@ -59,7 +61,7 @@ export function RenderDownloadPanel() {
     setBusy(true);
     setRefusal(undefined);
     setDone(undefined);
-    void downloadPdf(templateId, datasetId)
+    void downloadPdf(templateId, datasetId, writingId)
       .then((filename) => {
         setDone(filename);
       })
@@ -75,7 +77,8 @@ export function RenderDownloadPanel() {
       });
   };
 
-  const ready = catalogue !== undefined && templateId !== '' && datasetId !== '';
+  const ready =
+    catalogue !== undefined && templateId !== '' && datasetId !== '' && writingId !== '';
 
   return (
     <section style={panelStyle}>
@@ -83,6 +86,12 @@ export function RenderDownloadPanel() {
       <p>
         Le rendu s'exécute côté serveur — un navigateur ne lance pas Chromium. Les deux routes
         n'existent que sous <code>pnpm dev</code> et n'acceptent que les identifiants ci-dessous.
+      </p>
+      <p>
+        Deux commutateurs <strong>indépendants</strong> : les mots viennent d'un chemin du jeu de
+        données, les valeurs de l'écriture choisie ici. Les quatre combinaisons sont valides ;
+        croiser français et dollars est indépendant par conception, et la cohérence reste à la
+        charge de l'application intégratrice.
       </p>
       <div style={rowStyle}>
         <label style={fieldStyle}>
@@ -100,13 +109,27 @@ export function RenderDownloadPanel() {
           </select>
         </label>
         <label style={fieldStyle}>
-          <span>Jeu de données</span>
+          <span>Mots (jeu de données)</span>
           <select
             value={datasetId}
             onChange={(event) => setDatasetId(event.target.value)}
             disabled={catalogue === undefined}
           >
             {(catalogue?.datasets ?? []).map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={fieldStyle}>
+          <span>Écriture des valeurs</span>
+          <select
+            value={writingId}
+            onChange={(event) => setWritingId(event.target.value)}
+            disabled={catalogue === undefined}
+          >
+            {(catalogue?.writings ?? []).map((choice) => (
               <option key={choice.id} value={choice.id}>
                 {choice.label}
               </option>

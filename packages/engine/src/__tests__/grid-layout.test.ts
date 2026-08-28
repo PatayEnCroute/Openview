@@ -2,6 +2,7 @@ import { createBudget, GridNodeSchema } from '@openview/core';
 import { describe, expect, it } from 'vitest';
 import { documentImages } from '../document/images.js';
 import { createKeySource, materializeBodyEntry } from '../document/materialize.js';
+import { createPresentationSession } from '../document/presentation.js';
 import { markerSignatures } from '../pagination/markers.js';
 import { progressionBound } from '../pagination/progress.js';
 import {
@@ -102,6 +103,7 @@ describe('the materialisation of a grid', () => {
         scope: {},
         budget: createBudget(),
         keys: createKeySource(),
+        presentations: createPresentationSession(undefined, undefined),
         region: 'root',
         column: undefined,
         path: [],
@@ -292,7 +294,7 @@ describe('the collections a grid participates in', () => {
   });
 
   it('registers the marker typography of a zone for the glyph probe', () => {
-    const signatures = [...markerSignatures(mixedDocument()).keys()];
+    const signatures = [...markerSignatures(mixedDocument(), { pages: 10, report: 0 }).keys()];
     expect(signatures.some((signature) => signature.includes('Marianne'))).toBe(true);
   });
 

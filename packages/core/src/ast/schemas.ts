@@ -12,6 +12,8 @@ import {
   COLUMN_WIDTH_TYPE_MESSAGE,
   KEEP_TOGETHER_VALUE_MESSAGE,
   PAGE_FIELD_NAME_MESSAGE,
+  PRESENTATION_FORMAT_KIND_MESSAGE,
+  PRESENTATION_FORMAT_PROFILE_MESSAGE,
 } from '../validation-messages.js';
 import {
   type BlockNode,
@@ -24,6 +26,8 @@ import {
   MIN_GRID_TRACKS,
   PAGE_FIELDS,
   type PageField,
+  PRESENTATION_FORMAT_KINDS,
+  type PresentationFormatKind,
   TABLE_COLUMN_ALIGNMENTS,
   type TableCell,
   type TableNode,
@@ -74,6 +78,29 @@ const imageSourceSchema = z
     'An image src may not carry the javascript:, vbscript:, file: or a non-image data: scheme. Use an http(s) URL, a data:image/... URI, or a path the host application resolves.',
   );
 
+/** A profile is the author's own name for a writing role: non-empty, and reserved by nobody. */
+const formatProfileSchema = z.string().min(1, PRESENTATION_FORMAT_PROFILE_MESSAGE);
+
+/** The two numeric functions, spelt from the closed list so a fourth kind cannot be forgotten. */
+const NUMERIC_FORMAT_KINDS = PRESENTATION_FORMAT_KINDS.filter(
+  (kind): kind is Exclude<PresentationFormatKind, 'date'> => kind !== 'date',
+);
+
+export const PresentationFormatSchema = z.object({
+  kind: z.enum(PRESENTATION_FORMAT_KINDS, PRESENTATION_FORMAT_KIND_MESSAGE),
+  profile: formatProfileSchema,
+});
+
+export const NumericPresentationFormatSchema = z.object({
+  kind: z.enum(NUMERIC_FORMAT_KINDS, PRESENTATION_FORMAT_KIND_MESSAGE),
+  profile: formatProfileSchema,
+});
+
+export const DecimalPresentationFormatSchema = z.object({
+  kind: z.literal('decimal', PRESENTATION_FORMAT_KIND_MESSAGE),
+  profile: formatProfileSchema,
+});
+
 export const TextLiteralSegmentSchema = z.object({
   kind: z.literal('literal'),
   text: z.string(),
@@ -83,6 +110,7 @@ export const TextLiteralSegmentSchema = z.object({
 export const TextBindingSegmentSchema = z.object({
   kind: z.literal('binding'),
   value: PrintableExpressionSchema,
+  format: PresentationFormatSchema.optional(),
   typography: typographyField,
 });
 
@@ -94,6 +122,7 @@ const COUNTING_FIELDS = PAGE_FIELDS.filter(
 export const TextPageCountSegmentSchema = z.object({
   kind: z.literal('pageField'),
   field: z.enum(COUNTING_FIELDS),
+  format: DecimalPresentationFormatSchema.optional(),
   typography: typographyField,
 });
 
@@ -102,6 +131,7 @@ export const TextPageReportSegmentSchema = z.object({
   field: z.literal('report'),
   decimals: RoundingPositionSchema,
   mode: z.enum(ROUND_MODES),
+  format: NumericPresentationFormatSchema.optional(),
   typography: typographyField,
 });
 

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import type { PresentationFormat } from '../../ast/nodes.js';
 import type { Expression, PrintableExpression } from '../../expression/expression.js';
 import { checkTemplateDataCompatibility } from '../compatibility.js';
-import type { DataCatalogue, DataExpectation, DataReadStatus, DataType } from '../types.js';
+import type {
+  DataCatalogue,
+  DataExpectation,
+  DataReadStatus,
+  DataScalarKind,
+  DataType,
+} from '../types.js';
 import {
   band,
   bandedTable,
@@ -17,6 +24,7 @@ import {
   rowGroupTable,
   staticText,
   templateOf,
+  writtenBinding,
 } from './fixtures.js';
 
 /** A catalogue whose single root carries the given type, under a fixed key and label. */
@@ -604,6 +612,75 @@ describe('the expectation each position imposes', () => {
       ['root', 'children', 0, 'when', 'operands', 0],
       ['root', 'children', 0, 'when', 'operands', 1, 'operand'],
     ]);
+  });
+});
+
+describe('the expectation a declared writing imposes', () => {
+  /** The status one path receives at a site declaring one writing, under one declared nature. */
+  function statusAtSite(format: PresentationFormat, kind: DataScalarKind): DataReadStatus {
+    const template = templateOf(container([writtenBinding(path('root'), format)]));
+    const read = checkTemplateDataCompatibility(template, rooted({ kind })).reads[0];
+    if (read === undefined) {
+      throw new Error('a written site should record its reading');
+    }
+    return read.status;
+  }
+
+  it('keeps a site that declares none on the printable expectation', () => {
+    // The half of "purely additive" that matters to a host: a model that asked for nothing goes on
+    // asking for nothing, so a catalogue accepted before this contract is accepted after it.
+    expect(statusOfBinding('root', { kind: 'number' })).toBe('available');
+    expect(statusOfBinding('root', { kind: 'string' })).toBe('available');
+    expect(statusOfBinding('root', { kind: 'civil-date' })).toBe('available');
+  });
+
+  it.each([
+    ['money', 'amount'],
+    ['decimal', 'quantity'],
+  ] as const)(
+    'requires a number of a %s site, and reports the reading it names',
+    (kind, profile) => {
+      const format: PresentationFormat = { kind, profile };
+      expect(statusAtSite(format, 'number')).toBe('available');
+      expect(statusAtSite(format, 'string')).toBe('incompatible');
+      expect(statusAtSite(format, 'civil-date')).toBe('incompatible');
+    },
+  );
+
+  it('requires a civil date of a date site, and refuses a text that looks like one', () => {
+    const format: PresentationFormat = { kind: 'date', profile: 'issued' };
+    expect(statusAtSite(format, 'civil-date')).toBe('available');
+    expect(statusAtSite(format, 'string')).toBe('incompatible');
+    expect(statusAtSite(format, 'number')).toBe('incompatible');
+  });
+
+  it('names the accepted natures and the declared one on the refusal it raises', () => {
+    const template = templateOf(
+      container([writtenBinding(path('root'), { kind: 'money', profile: 'amount' })]),
+    );
+
+    const result = checkTemplateDataCompatibility(template, rooted({ kind: 'string' }));
+
+    expect(result.compatible).toBe(false);
+    expect(result.diagnostics[0]).toMatchObject({
+      source: 'data-compatibility',
+      code: 'incompatible-data-kind',
+      dataPath: 'root',
+      actualKind: 'string',
+      expectedKinds: ['number'],
+    });
+  });
+
+  it('declares no path for the profile it was given', () => {
+    // A profile is a name the model author owns and the caller maps at render time. A host reading
+    // this analysis must never be told to declare a field called `amount`.
+    const template = templateOf(
+      container([writtenBinding(path('root'), { kind: 'money', profile: 'amount' })]),
+    );
+
+    const result = checkTemplateDataCompatibility(template, rooted({ kind: 'number' }));
+
+    expect(result.reads.map((read) => read.writtenPath)).toStrictEqual(['root']);
   });
 });
 

@@ -1,5 +1,4 @@
 import type { MaterialBlock, MaterialDocument, MaterialPageLayer } from '../document/types.js';
-import { CANONICAL_NUMBER_ALPHABET } from '../pagination/markers.js';
 import type { MarkerReserve, MaterialPage, PaginatedDocument } from '../pagination/types.js';
 import { wholeFragment } from '../pagination/whole.js';
 import { buildFragment, characters, element, type PaintContext } from './build.js';
@@ -144,36 +143,36 @@ export function buildProbeTree(document: MaterialDocument, markers: MarkerReserv
   return { tree, keys: keysOf(tree) };
 }
 
-/** The key a measured glyph is filed under, by its rank in the canonical alphabet. */
-export const glyphKey = (signature: string, at: number): string => `g${at}:${signature}`;
+/** The key one measured sample is filed under, by its rank among the samples of its shape. */
+export const sampleKey = (signature: string, at: number): string => `s${at}:${signature}`;
 
 /**
- * The glyph probe: one box per character of the canonical alphabet and per typography a marker uses.
+ * The width probe: one box per sample of every shape a marker of this document is painted in.
  *
- * The widest glyph of a font decides the reserve, so every character is measured rather than
- * assumed equal -- and a report may draw a sign, a point or an exponent, none of which a digit
- * bounds. Kerning and ligatures are off on the same class the printed marker uses, which is what
- * makes the sum of the advances the width of the value.
+ * A canonical shape offers the characters of its alphabet and its width is multiplied; a shape with
+ * a declared writing offers the whole strings that writing can produce, so the separators, the
+ * spaces and the currency symbol `Intl` really emits are measured rather than guessed. Kerning and
+ * ligatures are off on the same class the printed marker uses.
  */
-export function buildGlyphProbe(
+export function buildMarkerProbe(
   document: MaterialDocument,
-  signatures: ReadonlyMap<string, { readonly css: string }>,
+  signatures: ReadonlyMap<string, { readonly css: string; readonly samples: readonly string[] }>,
 ): ProbeTree {
   const rows: HtmlElement[] = [];
-  for (const [signature, { css }] of signatures) {
+  for (const [signature, { css, samples }] of signatures) {
     rows.push(
       element(
         'div',
         { class: CSS_CLASSES.container },
-        [...CANONICAL_NUMBER_ALPHABET].map((glyph, at) =>
+        samples.map((sample, at) =>
           element(
             'span',
             {
               class: CSS_CLASSES.marker,
               style: css,
-              'data-openview-key': glyphKey(signature, at),
+              'data-openview-key': sampleKey(signature, at),
             },
-            [characters(glyph)],
+            [characters(sample)],
           ),
         ),
       ),

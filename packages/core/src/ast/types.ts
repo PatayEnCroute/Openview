@@ -31,6 +31,40 @@ export const DATA_EXPECTATIONS = [
 
 export type DataExpectation = (typeof DATA_EXPECTATIONS)[number];
 
+/**
+ * The writing functions a stored site can name, one per presentation formatter.
+ *
+ * Closed on purpose: a percentage, a unit or a scientific notation would be a fourth function with
+ * no contract behind it, and inferring one from a path or a value would reserve a business meaning.
+ */
+export const PRESENTATION_FORMAT_KINDS = ['money', 'decimal', 'date'] as const;
+
+export type PresentationFormatKind = (typeof PRESENTATION_FORMAT_KINDS)[number];
+
+/**
+ * The writing one site asks for: which function, and under which logical profile.
+ *
+ * The profile is a name its author owns -- `amount`, `quantity`, anything -- and never a key of the
+ * presentation table. The caller maps profiles to declared writings at render time, so the same
+ * stored site prints in another language and another currency without being edited.
+ */
+export interface PresentationFormat {
+  readonly kind: PresentationFormatKind;
+  readonly profile: string;
+}
+
+/** A site whose value is a number: an amount or a plain decimal, never a date. */
+export interface NumericPresentationFormat {
+  readonly kind: 'money' | 'decimal';
+  readonly profile: string;
+}
+
+/** A site whose value is a plain decimal: a counter is neither money nor a date. */
+export interface DecimalPresentationFormat {
+  readonly kind: 'decimal';
+  readonly profile: string;
+}
+
 /** Static raw text segment. */
 export interface TextLiteralSegment {
   readonly kind: 'literal';
@@ -42,6 +76,8 @@ export interface TextLiteralSegment {
 export interface TextBindingSegment {
   readonly kind: 'binding';
   readonly value: PrintableExpression;
+  /** The writing this position asks for. Absent means the canonical, unlocalised form. */
+  readonly format?: PresentationFormat | undefined;
   readonly typography?: Typography | undefined;
 }
 
@@ -54,6 +90,8 @@ export type PageField = (typeof PAGE_FIELDS)[number];
 export interface TextPageCountSegment {
   readonly kind: 'pageField';
   readonly field: 'number' | 'count';
+  /** A counter is a whole number of pages: a currency or a date would have nothing to write. */
+  readonly format?: DecimalPresentationFormat | undefined;
   readonly typography?: Typography | undefined;
 }
 
@@ -61,14 +99,17 @@ export interface TextPageCountSegment {
  * Pagination text segment showing what the pages before this one carried forward.
  *
  * Rounding is declared, never guessed: `decimals` and `mode` are the two parameters of a round
- * expression and are required here for the same reason. The writing is the canonical decimal one;
- * a currency symbol or a digit grouping belongs to a literal the model places beside it.
+ * expression and are required here for the same reason. Without `format` the writing is the
+ * canonical decimal one and a symbol belongs to a literal beside it; with one, the rounding still
+ * runs before the formatter sees the value.
  */
 export interface TextPageReportSegment {
   readonly kind: 'pageField';
   readonly field: 'report';
   readonly decimals: number;
   readonly mode: RoundMode;
+  /** An amount or a plain decimal. The rounding above still runs first, whatever the writing. */
+  readonly format?: NumericPresentationFormat | undefined;
   readonly typography?: Typography | undefined;
 }
 

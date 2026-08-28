@@ -96,6 +96,18 @@ export const TEMPLATE_MIGRATIONS: readonly TemplateMigration[] = [
      */
     migrate: (input) => ({ ...input, schemaVersion: 10 }),
   },
+  {
+    from: 10,
+    to: 11,
+    /**
+     * Stamp only. A v10 site asks for no writing, which is exactly the canonical form it already
+     * printed; inventing a profile would name a writing its author never chose.
+     *
+     * The stamp is the whole work: the three `format` fields are optional, so a v10 build opening a
+     * v11 document would drop them in silence and an `onSave` would persist the loss.
+     */
+    migrate: (input) => ({ ...input, schemaVersion: 11 }),
+  },
 ];
 
 const recordSchema = z.record(z.string(), z.unknown());

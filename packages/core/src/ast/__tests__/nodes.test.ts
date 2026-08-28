@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v4';
+import * as core from '../../index.js';
 import { parseTemplate } from '../../template/migrate.js';
 import { CURRENT_SCHEMA_VERSION } from '../../template/template.js';
-import { PAGE_FIELD_NAME_MESSAGE } from '../../validation-messages.js';
+import {
+  PAGE_FIELD_NAME_MESSAGE,
+  PRESENTATION_FORMAT_KIND_MESSAGE,
+  PRESENTATION_FORMAT_PROFILE_MESSAGE,
+} from '../../validation-messages.js';
 import {
   BlockNodeSchema,
   type ConditionNode,
@@ -40,6 +45,8 @@ import {
   type TextSegment,
   type TextSegmentSchema,
 } from '../nodes.js';
+import { nodeShape } from '../shape.js';
+import { collectDataPaths } from '../traverse.js';
 import { type MutuallyAssignable, RECIPE_TABLE } from './fixtures.js';
 
 /** Asserts bidirectional type compatibility between TextSegment schema and interface. */
@@ -733,5 +740,92 @@ describe('keepTogether', () => {
     expect(totaux?.keepTogether).toBe(true);
     // Stored, not merely constructed: the round trip is what proves the mark survives a save.
     expect(JSON.parse(JSON.stringify(parsed))).toStrictEqual(stored);
+  });
+});
+
+describe('the writing a binding site declares', () => {
+  const site = (format: unknown) => ({
+    type: 'text',
+    id: 'line',
+    content: [{ kind: 'binding', value: { kind: 'path', path: 'payload.amount' }, format }],
+  });
+
+  it('publishes the three functions as a closed list', () => {
+    expect(core.PRESENTATION_FORMAT_KINDS).toStrictEqual(['money', 'decimal', 'date']);
+  });
+
+  it('accepts each of the three, under a profile its author names', () => {
+    for (const kind of core.PRESENTATION_FORMAT_KINDS) {
+      const parsed = TextNodeSchema.parse(site({ kind, profile: 'anything' }));
+      expect(parsed.content[0]).toStrictEqual({
+        kind: 'binding',
+        value: { kind: 'path', path: 'payload.amount' },
+        format: { kind, profile: 'anything' },
+      });
+    }
+  });
+
+  it('leaves a site that declares none with no key at all', () => {
+    // On the own property, not the value: a schema writing `format: undefined` onto every segment
+    // would survive a JSON comparison while travelling into an `onSave` and inventing a second
+    // canonical spelling of "the canonical writing".
+    const [segment] = TextNodeSchema.parse({
+      type: 'text',
+      id: 'line',
+      content: [{ kind: 'binding', value: { kind: 'path', path: 'payload.amount' } }],
+    }).content;
+
+    expect(segment).toStrictEqual({
+      kind: 'binding',
+      value: { kind: 'path', path: 'payload.amount' },
+    });
+    expect(segment !== undefined && Object.hasOwn(segment, 'format')).toBe(false);
+  });
+
+  it('refuses a function outside the closed list, and says which ones exist', () => {
+    const parsed = TextNodeSchema.safeParse(site({ kind: 'percent', profile: 'rate' }));
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toStrictEqual(['content', 0, 'format', 'kind']);
+    expect(parsed.error?.issues[0]?.message).toBe(PRESENTATION_FORMAT_KIND_MESSAGE);
+  });
+
+  it('refuses an unnamed profile and a missing one', () => {
+    const empty = TextNodeSchema.safeParse(site({ kind: 'money', profile: '' }));
+    expect(empty.success).toBe(false);
+    expect(empty.error?.issues[0]?.message).toBe(PRESENTATION_FORMAT_PROFILE_MESSAGE);
+    expect(TextNodeSchema.safeParse(site({ kind: 'money' })).success).toBe(false);
+  });
+
+  it('reserves no profile name, and the table of writings is not where they come from', () => {
+    // The profile is a logical role, not a key of `presentations`: a model that named one after a
+    // writing would have to be edited to print in another language, which is the whole point of
+    // the indirection.
+    for (const profile of ['constructor', 'fr-eur-2', 'money', '0', 'valueOf']) {
+      expect(TextNodeSchema.safeParse(site({ kind: 'decimal', profile })).success).toBe(true);
+    }
+  });
+
+  it('asks the host for a number or a civil date once a site declares a writing', () => {
+    // The requirement is read from the site, never from the path or the id: a plain site still
+    // accepts anything printable, and that is what keeps an identifier an identifier.
+    const readingOf = (format: unknown) => {
+      const node = TextNodeSchema.parse(site(format));
+      return nodeShape(node).readings()[0]?.expectation;
+    };
+
+    expect(readingOf(undefined)).toBe('printable');
+    expect(readingOf({ kind: 'money', profile: 'amount' })).toBe('number');
+    expect(readingOf({ kind: 'decimal', profile: 'quantity' })).toBe('number');
+    expect(readingOf({ kind: 'date', profile: 'issued' })).toBe('civil-date');
+  });
+
+  it('never turns a profile into a path the host has to declare', () => {
+    // `collectDataPaths` is what an integrator reads to build its catalogue. A profile is the model
+    // author's own name and belongs nowhere in it.
+    const node = TextNodeSchema.parse(site({ kind: 'money', profile: 'amount' }));
+
+    expect(collectDataPaths(node)).toStrictEqual(['payload.amount']);
+    expect(nodeShape(node).readings()).toHaveLength(1);
   });
 });

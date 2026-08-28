@@ -6,7 +6,13 @@
  * forgotten in another.
  */
 import type { Expression, PrintableExpression } from '../expression/expression.js';
-import type { DocumentNode, GridNode, TableRowNode, TextNode } from './nodes.js';
+import type {
+  DocumentNode,
+  GridNode,
+  PresentationFormat,
+  TableRowNode,
+  TextNode,
+} from './nodes.js';
 import type { DataExpectation } from './types.js';
 import { type NodeVisitor, type SegmentVisitor, visitNode, visitSegment } from './visitor.js';
 
@@ -74,10 +80,35 @@ function blockSlot(children: readonly DocumentNode[]): readonly NodeChildSlot[] 
   return [{ nodes: children, at: ['children'] }];
 }
 
+/** What one binding segment reads: its expression, under the expectation its writing imposes. */
+interface SegmentReading {
+  readonly expression: PrintableExpression;
+  readonly expectation: DataExpectation;
+}
+
+/**
+ * What a position requires of the value it is about to write.
+ *
+ * A site that asks for money or a plain decimal requires a number, and one that asks for a date
+ * requires a civil date: the writing is declared by the model, so the requirement is read from it
+ * and never guessed from the path, the id or the value.
+ */
+function expectationOfFormat(format: PresentationFormat | undefined): DataExpectation {
+  if (format === undefined) {
+    return 'printable';
+  }
+  return format.kind === 'date' ? 'civil-date' : 'number';
+}
+
 /** The expression a segment binds, or nothing when it reads no data. */
-const SEGMENT_BINDING: SegmentVisitor<PrintableExpression | undefined> = {
+const SEGMENT_BINDING: SegmentVisitor<SegmentReading | undefined> = {
   literal: () => undefined,
-  binding: (segment) => segment.value,
+  binding: (segment) => ({
+    expression: segment.value,
+    expectation: expectationOfFormat(segment.format),
+  }),
+  /* A marker reads no data: a counter comes from the cuts and a report from declared contributions,
+     so the profile it may carry is never a path of the catalogue. */
   pageField: () => undefined,
 };
 
@@ -87,7 +118,11 @@ function textReadings(node: TextNode): readonly NodeReading[] {
   for (const [index, segment] of node.content.entries()) {
     const bound = visitSegment(segment, SEGMENT_BINDING);
     if (bound !== undefined) {
-      found.push({ expression: bound, expectation: 'printable', at: ['content', index, 'value'] });
+      found.push({
+        expression: bound.expression,
+        expectation: bound.expectation,
+        at: ['content', index, 'value'],
+      });
     }
   }
   return found;

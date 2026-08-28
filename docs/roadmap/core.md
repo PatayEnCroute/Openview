@@ -317,6 +317,14 @@ rectifier rouvrirait l'ordonnancement de la vague. — **Dépend de :** C2, C5
 > `20260014` s'imprimerait `20 260 014`, qui désigne une autre commande. C'est
 > l'attente **E4-1**, l'une des **onze** que l'ADR 0008 nomme avec leur propriétaire.
 >
+> ✅ **E4-1 est tranchée le 2026-08-27** ([ADR 0017](../adr/0017-langue-et-devise-au-rendu.md)) :
+> un site stocke `{ kind, profile }` — la fonction, et un profil logique que l'auteur du
+> modèle possède — et l'appelant associe les profils aux clés de cette table **à la
+> construction du port**. Le champ de segment que ce lot avait différé est donc ouvert,
+> sous **estampille 11**, sur les bindings et sur les deux marqueurs de page. Un site qui
+> ne déclare rien garde exactement sa forme canonique, ce qui est ce qui laisse
+> `20260014` lisible.
+>
 > Zéro code d'erreur nouveau, zéro champ sur aucun nœud, aucun `switch` neuf ; le barrel
 > public passe de **117** à **126** valeurs, mesuré par émission ESM réelle.
 

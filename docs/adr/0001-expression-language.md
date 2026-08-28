@@ -183,9 +183,14 @@ toutefois reçu un comportement, parce qu'il fallait bien en choisir un :
   le document ne s'interrompt pas ;
 - une boucle sur une donnée absente n'itère pas — zéro ligne, pas d'erreur.
 
-Reste à décider pour les **valeurs textuelles** rendues dans le document : un
-`{{ invoice.total }}` absent doit-il imprimer un blanc ou faire échouer le
-rendu ? À trancher à l'étape 2, quand `DataBindingStep` existera.
+✅ **Tranchée : échec, jamais blanc.** E1 l'a décidé pour une valeur absente
+(`missing-binding-value`) et E4 l'a étendu à tout site qui déclare une écriture
+(`presentation-refused`, `unformattable-binding-value`) — voir
+[ADR 0012](0012-une-facture-d-une-page-sort-en-pdf.md) et
+[ADR 0017](0017-langue-et-devise-au-rendu.md). Un blanc laissé à une position imprimée
+se lit comme un zéro, ce qui est plus dangereux qu'un refus : le modèle doit dire ce que
+l'absence signifie, avec `isEmpty`, un `if` qui rend un texte vide, ou une condition
+autour du bloc.
 
 > **[ADR 0010](0010-un-refus-comprehensible.md) a eu l'occasion de fermer cette question, et
 > l'a laissée ouverte volontairement.** La roadmap demandait à C8 de « pointer un champ

@@ -53,6 +53,15 @@
 
 ---
 
+> ⚠️ **Repris par E4 (2026-08-27).** Ce lot décrivait **tout** binding visible sous l'attente
+> `printable`. Depuis [ADR 0017](0017-langue-et-devise-au-rendu.md), un binding qui déclare une
+> écriture impose l'attente que sa **fonction** exige : `number` pour `money` et `decimal`,
+> `civil-date` pour `date`. Un binding sans écriture reste `printable`, donc aucun catalogue
+> accepté avant E4 ne devient incompatible. Les tables d'acceptation de ce lot sont **inchangées**
+> — il n'existe pas de nature `money` — et le **profil** d'une écriture ne rejoint jamais
+> `collectDataPaths()` : un intégrateur ne se voit jamais demander de déclarer un champ nommé
+> `amount`.
+
 ## Contexte
 
 Trois ADR successives ont buté sur le même trou, et l'ont écrit chacune à leur tour.

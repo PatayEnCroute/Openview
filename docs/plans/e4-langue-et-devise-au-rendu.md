@@ -4,8 +4,11 @@
 > les sondes, les tests, les risques et l'ordre d'exécution d'E4. Après livraison, une ADR
 > d'exécution prendra le relais et ce plan sera marqué périmé.
 >
-> **Statut : À EXÉCUTER.** Le contrat de présentation C6 existe déjà ; E4 relie des sites précis
-> du document aux écritures choisies par l'appelant, puis prouve le résultat dans deux PDF réels.
+> **Statut : ⛔ PÉRIMÉ.** Le lot est livré le 2026-08-27 ; l'
+> [ADR 0017](../adr/0017-langue-et-devise-au-rendu.md) fait foi, y compris sur les écarts à ce
+> plan (§ « Ce que l'exécution a corrigé du plan »). Ce document est conservé pour l'historique du
+> raisonnement et **ne doit plus être suivi** : sa baseline, sa forme de `MarkerReserve` et son
+> ordonnancement ont tous été corrigés à l'exécution.
 >
 > **Baseline relevée le 2026-08-27 :** `HEAD=686f735`, branche
 > `feat/c11-grille-colonnes-et-calques`, schéma stocké en version **10**. Une modification locale

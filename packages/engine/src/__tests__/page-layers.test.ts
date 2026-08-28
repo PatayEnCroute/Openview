@@ -286,7 +286,7 @@ describe('the observations a layer joins', () => {
         }),
       ]),
     });
-    const signatures = [...markerSignatures(document).keys()];
+    const signatures = [...markerSignatures(document, { pages: 10, report: 0 }).keys()];
     expect(signatures.some((signature) => signature.includes('Marianne'))).toBe(true);
   });
 });

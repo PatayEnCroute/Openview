@@ -1,6 +1,7 @@
 import { type BoxBorder, kindOf, roundDecimal } from '@openview/core';
+import { type MarkerWriting, writeMarker } from '../document/presentation.js';
 import type { MaterialPageFieldRun, MaterialRun, ResolvedTypography } from '../document/types.js';
-import { CANONICAL_NUMBER_MAX_CHARS } from '../pagination/markers.js';
+import type { DocumentRenderErrorDetails } from '../errors.js';
 import type {
   CellFragment,
   GridFragment,
@@ -62,25 +63,42 @@ const runAttribute = (index: number, context: PaintContext): HtmlAttributes =>
   context.keyed ? { 'data-openview-run': String(index) } : {};
 
 /**
- * Computes rendered text for a page marker, using digit placeholders during measurement.
+ * The characters one page marker prints, or the placeholder a probe shows in its place.
+ *
+ * A report is ROUNDED first and written second: handing the raw sum to a formatter would apply
+ * `Intl`'s own half-expand default and print a figure the declared rounding never produced.
  */
 function markerText(run: MaterialPageFieldRun, context: PaintContext): string {
   const page = context.page;
   if (page === undefined) {
-    return '0'.repeat(run.field === 'report' ? CANONICAL_NUMBER_MAX_CHARS : context.markers.digits);
+    return context.markers.placeholderOf(run);
   }
+  const details = { pageNumber: page.number };
   switch (run.field) {
     case 'number':
-      return String(page.number);
+      return countText(run.writing, page.number, details);
     case 'count':
-      return String(page.count);
-    case 'report':
-      return String(roundDecimal(page.report, run.decimals, run.mode));
+      return countText(run.writing, page.count, details);
+    case 'report': {
+      const rounded = roundDecimal(page.report, run.decimals, run.mode);
+      return run.writing === undefined
+        ? String(rounded)
+        : writeMarker(run.writing, rounded, details);
+    }
     default: {
       const exhaustive: never = run;
       throw new TypeError(`Unhandled page marker: ${kindOf(exhaustive, 'field')}`);
     }
   }
+}
+
+/** A page rank or a page total, written at the marker's writing or in the canonical form. */
+function countText(
+  writing: MarkerWriting | undefined,
+  value: number,
+  details: DocumentRenderErrorDetails,
+): string {
+  return writing === undefined ? String(value) : writeMarker(writing, value, details);
 }
 
 /**
