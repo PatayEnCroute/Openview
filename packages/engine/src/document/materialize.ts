@@ -3,6 +3,7 @@ import {
   childScope,
   createBudget,
   type DocumentNode,
+  type DocumentNodeType,
   type EvaluationBudget,
   type EvaluationLimits,
   type EvaluationScope,
@@ -11,7 +12,9 @@ import {
   evaluateSequence,
   type GridNode,
   type ImageNode,
+  type IterationAddress,
   type LoopNode,
+  type OccurrenceReference,
   type PageBand,
   type PageBandOccurrence,
   type PageLayer,
@@ -31,7 +34,13 @@ import {
   visitNode,
   visitSegment,
 } from '@openview/core';
-import { type DocumentArea, type DocumentRegion, refusal, refusalOf } from '../errors.js';
+import {
+  type DocumentArea,
+  type DocumentRegion,
+  type DocumentRenderErrorDetails,
+  refusal,
+  refusalOf,
+} from '../errors.js';
 import {
   createPresentationSession,
   type PresentationSelection,
@@ -114,10 +123,45 @@ export interface MaterializeContext {
   readonly region: DocumentArea;
   /** Alignment of the enclosing table column, which a block alignment overrides. */
   readonly column: TableColumnAlignment | undefined;
-  readonly path: readonly (string | number)[];
+  /** Position of the node being materialised in the stored template, with no rank interleaved. */
+  readonly declarationPath: readonly (string | number)[];
+  /** The repetitions above it, outermost first. Empty outside every loop and row group. */
+  readonly iterations: readonly IterationAddress[];
 }
 
 type Context = MaterializeContext;
+
+/**
+ * The address of the occurrence being built, attached to a refusal only when one repeats.
+ *
+ * Outside every repetition the declaration path already says everything, and a second empty
+ * ancestry beside it would be noise on every refusal the engine raises.
+ */
+function iterationDetail(context: Context): Pick<DocumentRenderErrorDetails, 'occurrence'> {
+  if (context.iterations.length === 0) {
+    return {};
+  }
+  return {
+    occurrence: {
+      declarationPath: context.declarationPath,
+      iterations: context.iterations,
+    },
+  };
+}
+
+/** The four fields naming one occurrence, projected from the context and the declaration. */
+function addressOf(
+  nodeId: string,
+  nodeType: DocumentNodeType,
+  context: Context,
+): OccurrenceReference {
+  return {
+    nodeId,
+    nodeType,
+    declarationPath: context.declarationPath,
+    iterations: context.iterations,
+  };
+}
 
 function rejectAsBlock(node: DocumentNode): never {
   throw refusal(
@@ -135,14 +179,26 @@ function rejectAsRow(node: DocumentNode): never {
   );
 }
 
-function within<TResult>(nodeId: string, context: Context, evaluate: () => TResult): TResult {
+/**
+ * Runs one evaluation and attributes a refusal to the exact site it happened at.
+ *
+ * `at` is the site inside the declaration -- a segment, a contribution -- and stays distinct from
+ * the declaration path of the occurrence, which travels beside it when a repetition is open.
+ */
+function within<TResult>(
+  nodeId: string,
+  at: readonly (string | number)[],
+  context: Context,
+  evaluate: () => TResult,
+): TResult {
   try {
     return evaluate();
   } catch (error) {
     throw refusalOf(error, EXPRESSION_REFUSED, 'expression-refused', {
       nodeId,
-      path: context.path,
+      path: at,
       region: context.region,
+      ...iterationDetail(context),
     });
   }
 }
@@ -155,8 +211,13 @@ function runOf(
 ): MaterialRun {
   const complete = (run: Typography | undefined): ResolvedTypography =>
     resolveRunTypography(run, block.typography);
-  const at = [...context.path, 'content', index];
-  const details = { nodeId: block.id, path: at, region: context.region };
+  const at = [...context.declarationPath, 'content', index];
+  const details = {
+    nodeId: block.id,
+    path: at,
+    region: context.region,
+    ...iterationDetail(context),
+  };
   return visitSegment<MaterialRun>(segment, {
     literal: (literal) => ({
       kind: 'text',
@@ -166,7 +227,7 @@ function runOf(
     /* Evaluated, then guarded, then written: the writing a site declares decides which formatter
        runs, and a site declaring none keeps the canonical form to the character. */
     binding: (binding) => {
-      const value = within(block.id, { ...context, path: at }, () =>
+      const value = within(block.id, at, context, () =>
         evaluateExpression(binding.value, context.scope, { budget: context.budget }),
       );
       const format = binding.format;
@@ -220,8 +281,7 @@ function materializeText(node: TextNode, context: Context): MaterialText {
   return {
     kind: 'text',
     key: context.keys.next(),
-    nodeId: node.id,
-    path: context.path,
+    ...addressOf(node.id, 'text', context),
     box: node.box,
     keepTogether: node.keepTogether === true,
     align: resolveTextAlign({ text: node.align, column: context.column }) ?? DEFAULT_ALIGN,
@@ -233,8 +293,7 @@ function materializeImage(node: ImageNode, context: Context): MaterialBlock {
   return {
     kind: 'image',
     key: context.keys.next(),
-    nodeId: node.id,
-    path: context.path,
+    ...addressOf(node.id, 'image', context),
     box: node.box,
     keepTogether: node.keepTogether === true,
     src: node.src,
@@ -247,7 +306,10 @@ function materializeChildren(
   context: Context,
 ): readonly MaterialBlock[] {
   return children.flatMap((child, index) =>
-    materializeNode(child, { ...context, path: [...context.path, 'children', index] }),
+    materializeNode(child, {
+      ...context,
+      declarationPath: [...context.declarationPath, 'children', index],
+    }),
   );
 }
 
@@ -259,15 +321,16 @@ function materializeChildren(
  * still flattens, so no document pays for a boundary nothing reads.
  */
 function transparentGroup(
-  nodeId: string,
+  node: LoopNode | ConditionNode,
   children: readonly MaterialBlock[],
   context: Context,
 ): MaterialContainer {
   return {
     kind: 'container',
     key: context.keys.next(),
-    nodeId,
-    path: context.path,
+    /* Addressed as the declaration it wraps, not as a container the template never held: a marked
+       loop is reported as a `loop` occurrence, one per item. */
+    ...addressOf(node.id, node.type, context),
     box: undefined,
     keepTogether: true,
     children,
@@ -275,7 +338,7 @@ function transparentGroup(
 }
 
 function materializeLoop(node: LoopNode, context: Context): readonly MaterialBlock[] {
-  const items = within(node.id, context, () =>
+  const items = within(node.id, context.declarationPath, context, () =>
     evaluateSequence(node.each, context.scope, { budget: context.budget, caller: 'loop' }),
   );
   /* One group per item, never one around all of them: a marked loop asks for each iteration to
@@ -284,15 +347,15 @@ function materializeLoop(node: LoopNode, context: Context): readonly MaterialBlo
     const inner: Context = {
       ...context,
       scope: childScope(context.scope, node.as, item),
-      path: [...context.path, index],
+      iterations: [...context.iterations, { declarationPath: context.declarationPath, index }],
     };
     const children = materializeChildren(node.children, inner);
-    return node.keepTogether === true ? [transparentGroup(node.id, children, inner)] : children;
+    return node.keepTogether === true ? [transparentGroup(node, children, inner)] : children;
   });
 }
 
 function materializeCondition(node: ConditionNode, context: Context): readonly MaterialBlock[] {
-  const holds = within(node.id, context, () =>
+  const holds = within(node.id, context.declarationPath, context, () =>
     evaluatePredicate(node.when, context.scope, { budget: context.budget, caller: 'condition' }),
   );
   if (!holds) {
@@ -300,16 +363,20 @@ function materializeCondition(node: ConditionNode, context: Context): readonly M
     return [];
   }
   const children = materializeChildren(node.children, context);
-  return node.keepTogether === true ? [transparentGroup(node.id, children, context)] : children;
+  /* A condition repeats nothing, so it adds no rank: the ancestry it passes down is the one it
+     received. */
+  return node.keepTogether === true ? [transparentGroup(node, children, context)] : children;
 }
 
-function materializeCell(
-  row: TableRowNode,
-  column: TableColumn,
-  index: number,
-  context: Context,
-): MaterialCell {
-  const declared = row.cells.find((candidate) => candidate.columnId === column.id);
+/**
+ * One cell per declared column, addressed by where the cell really sits in the stored row.
+ *
+ * The rank of the column is not the rank of the cell: a row may omit a column or declare its cells
+ * in another order, and a path built from the column would then point at somebody else's cell.
+ */
+function materializeCell(row: TableRowNode, column: TableColumn, context: Context): MaterialCell {
+  const at = row.cells.findIndex((candidate) => candidate.columnId === column.id);
+  const declared = row.cells[at];
   return {
     key: context.keys.next(),
     columnId: column.id,
@@ -319,7 +386,7 @@ function materializeCell(
         : materializeChildren(declared.children, {
             ...context,
             column: column.align,
-            path: [...context.path, 'cells', index],
+            declarationPath: [...context.declarationPath, 'cells', at],
           }),
   };
 }
@@ -347,13 +414,14 @@ function contributionOf(
       'page-report-refused',
       {
         nodeId: row.id,
-        path: context.path,
+        path: context.declarationPath,
         region: context.region,
+        ...iterationDetail(context),
       },
     );
   }
-  const at = [...context.path, 'pageReport', 'value'];
-  const raw = within(row.id, { ...context, path: at }, () =>
+  const at = [...context.declarationPath, 'pageReport', 'value'];
+  const raw = within(row.id, at, context, () =>
     evaluateExpression(declared.value, context.scope, { budget: context.budget }),
   );
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
@@ -362,6 +430,7 @@ function contributionOf(
       path: at,
       region: context.region,
       actualType: valueTypeOf(raw),
+      ...iterationDetail(context),
     });
   }
   return { key, order: context.keys.nextReportOrder(), value: raw };
@@ -376,13 +445,12 @@ function materializeRow(
   const key = context.keys.next();
   return {
     key,
-    nodeId: row.id,
-    path: context.path,
+    ...addressOf(row.id, 'tableRow', context),
     box: row.box,
     keepTogether: row.keepTogether === true,
     pageReport: contributionOf(row, key, context),
     keptGroup,
-    cells: columns.map((column, index) => materializeCell(row, column, index, context)),
+    cells: columns.map((column) => materializeCell(row, column, context)),
   };
 }
 
@@ -409,8 +477,10 @@ function groupOccurrenceOf(
   }
   return {
     key: context.keys.next(),
-    nodeId: group.id,
-    path: [...context.path, index],
+    ...addressOf(group.id, 'tableRowGroup', {
+      ...context,
+      iterations: [...context.iterations, { declarationPath: context.declarationPath, index }],
+    }),
     firstRow,
     rowCount: group.rows.length,
   };
@@ -425,7 +495,7 @@ export function materializeBodyEntry(
   return visitNode<readonly MaterialRow[]>(entry, {
     tableRow: (row) => [materializeRow(row, columns, context)],
     tableRowGroup: (group) => {
-      const items = within(group.id, context, () =>
+      const items = within(group.id, context.declarationPath, context, () =>
         evaluateSequence(group.each, context.scope, {
           budget: context.budget,
           caller: 'tableRowGroup',
@@ -436,6 +506,10 @@ export function materializeBodyEntry(
       return items.flatMap((item, index) => {
         const at = firstRow + index * group.rows.length;
         const occurrence = groupOccurrenceOf(group, index, at, context);
+        const iterations = [
+          ...context.iterations,
+          { declarationPath: context.declarationPath, index },
+        ];
         return group.rows.map((row, rowIndex) =>
           materializeRow(
             row,
@@ -443,7 +517,8 @@ export function materializeBodyEntry(
             {
               ...context,
               scope: childScope(context.scope, group.as, item),
-              path: [...context.path, index, 'rows', rowIndex],
+              declarationPath: [...context.declarationPath, 'rows', rowIndex],
+              iterations,
             },
             occurrence,
           ),
@@ -482,13 +557,12 @@ function materializeTable(node: TableNode, context: Context): MaterialBlock {
   const section = (name: 'header' | 'body' | 'footer', index: number): Context => ({
     ...context,
     column: undefined,
-    path: [...context.path, name, index],
+    declarationPath: [...context.declarationPath, name, index],
   });
   return {
     kind: 'table',
     key,
-    nodeId: node.id,
-    path: context.path,
+    ...addressOf(node.id, 'table', context),
     box: node.box,
     keepTogether: node.keepTogether === true,
     columns: node.columns,
@@ -512,21 +586,25 @@ function materializeGrid(node: GridNode, context: Context): MaterialGrid {
   return {
     kind: 'grid',
     key: context.keys.next(),
-    nodeId: node.id,
-    path: context.path,
+    ...addressOf(node.id, 'grid', context),
     box: node.box,
     keepTogether: node.keepTogether === true,
     columns: node.columns,
     rows: node.rows,
     step: node.step,
     items: node.items.map((item, index) => {
-      const at = [...context.path, 'items', index, 'content'];
-      const [content] = materializeNode(item.content, { ...context, path: at });
+      const at = [...context.declarationPath, 'items', index, 'content'];
+      const [content] = materializeNode(item.content, { ...context, declarationPath: at });
       if (content?.kind !== 'container') {
         throw refusal(
           'A grid zone did not materialise into a container, which is the only shape a zone declares.',
           'template-refused',
-          { nodeId: item.content.id, path: at, region: context.region },
+          {
+            nodeId: item.content.id,
+            path: at,
+            region: context.region,
+            ...iterationDetail(context),
+          },
         );
       }
       return {
@@ -555,8 +633,7 @@ export function materializeNode(node: DocumentNode, context: Context): readonly 
       {
         kind: 'container',
         key: context.keys.next(),
-        nodeId: container.id,
-        path: context.path,
+        ...addressOf(container.id, 'container', context),
         box: container.box,
         keepTogether: container.keepTogether === true,
         children: materializeChildren(container.children, context),
@@ -580,7 +657,7 @@ function bandContainer(
     ...context,
     region,
     column: undefined,
-    path: ['page', region, band.on, 'content'],
+    declarationPath: ['page', region, band.on, 'content'],
   });
   if (content?.kind !== 'container') {
     throw refusal(
@@ -629,7 +706,7 @@ function materializeLayers(
         ...context,
         region: plane,
         column: undefined,
-        path: at,
+        declarationPath: at,
       });
       if (content?.kind !== 'container') {
         throw refusal(
@@ -674,7 +751,15 @@ export function materializeDocument(
   const budget = createBudget(evaluationLimits);
   const keys = createKeySource();
   const presentations = createPresentationSession(template.presentations, selection);
-  const shared = { scope: data, budget, keys, presentations, column: undefined, path: [] };
+  const shared = {
+    scope: data,
+    budget,
+    keys,
+    presentations,
+    column: undefined,
+    declarationPath: [],
+    iterations: [],
+  };
   /* Evaluation follows paint order and never varies per page: background layers, top bands, flow,
      bottom bands, foreground layers. The order stays observable when a budget stops it. */
   const backgroundLayers = materializeLayers(template.page.layers, 'background', {
@@ -688,7 +773,7 @@ export function materializeDocument(
   const root = materializeNode(template.root, {
     ...shared,
     region: 'root',
-    path: ['root'],
+    declarationPath: ['root'],
   });
   const footerBands = materializeBands(template.page.footer, reachable, 'footer', {
     ...shared,
@@ -737,7 +822,8 @@ export function extendBands(
        band bound here, so one render resolves one writing key exactly once. */
     presentations: previous.presentations,
     column: undefined,
-    path: [],
+    declarationPath: [],
+    iterations: [],
   };
   const header = materializeBands(template.page.header, added, 'header', {
     ...shared,

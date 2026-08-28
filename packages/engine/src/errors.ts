@@ -1,6 +1,7 @@
 import {
   diagnosticsOf,
   type ExpressionValueType,
+  type OccurrenceAddress,
   type OpenviewDiagnostic,
   OpenviewError,
   type PresentationFormatKind,
@@ -59,6 +60,13 @@ export interface DocumentRenderErrorDetails {
   readonly nodeId?: string | undefined;
   /** Segments from the template root to the offending declaration. */
   readonly path?: readonly (string | number)[] | undefined;
+  /**
+   * The repetition ancestry of the occurrence being built, when the refusal happened inside one.
+   *
+   * Declaration paths and zero-based ranks only: it names which iteration failed without carrying a
+   * bound value, so it stays as safe to log as every other field here.
+   */
+  readonly occurrence?: OccurrenceAddress | undefined;
   /** Closed category of an unusable value, from the core value-type vocabulary. */
   readonly actualType?: ExpressionValueType | undefined;
   /**

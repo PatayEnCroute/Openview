@@ -84,6 +84,7 @@ export function paginate(
       count,
       root: reported.root,
       incomingReport: reported.incomingReport,
+      completedBy: reported.completedBy,
       header: bandBlocks(document.headerBands, role),
       footer: bandBlocks(document.footerBands, role),
     };

@@ -227,7 +227,7 @@ export function placeTable(
   if (overhead > fresh) {
     throw refusal(HEADER_TOO_TALL, 'pagination-impossible', {
       nodeId: table.nodeId,
-      path: table.path,
+      path: table.declarationPath,
     });
   }
 
@@ -249,7 +249,7 @@ export function placeTable(
     if (freshRoom <= 0) {
       throw refusal(HEADER_TOO_TALL, 'pagination-impossible', {
         nodeId: table.nodeId,
-        path: table.path,
+        path: table.declarationPath,
       });
     }
     return undefined;

@@ -133,6 +133,13 @@ export interface MaterialPage {
    * two roundings write two spellings of this one total.
    */
   readonly incomingReport: number;
+  /**
+   * The contributing rows whose occurrence ends on this page, in contribution order.
+   *
+   * Kept from the pass that computed the sums rather than derived again: what a caller is told
+   * closed the boundary is exactly the set the next page's marker was written from.
+   */
+  readonly completedBy: readonly MaterialRow[];
   readonly header: readonly MaterialBlock[];
   readonly root: readonly MaterialFragment[];
   readonly footer: readonly MaterialBlock[];

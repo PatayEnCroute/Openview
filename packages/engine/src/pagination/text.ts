@@ -129,7 +129,7 @@ export function sliceText(
     if (height > fresh) {
       throw refusal(TOO_TALL, 'pagination-impossible', {
         nodeId: block.nodeId,
-        path: block.path,
+        path: block.declarationPath,
       });
     }
     if (height > available) {
@@ -156,7 +156,10 @@ export function sliceText(
     return undefined;
   }
   if (padding + (firstLine.height - before) > fresh) {
-    throw refusal(TOO_TALL, 'pagination-impossible', { nodeId: block.nodeId, path: block.path });
+    throw refusal(TOO_TALL, 'pagination-impossible', {
+      nodeId: block.nodeId,
+      path: block.declarationPath,
+    });
   }
 
   const greedy = (room: number): number => {

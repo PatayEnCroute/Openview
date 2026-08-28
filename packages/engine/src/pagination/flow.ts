@@ -146,7 +146,7 @@ function placeAtomic(
 ): BlockPlacement | undefined {
   const height = metrics.height(block.key);
   if (height > fresh) {
-    throw refusal(tooTall, code, { nodeId: block.nodeId, path: block.path });
+    throw refusal(tooTall, code, { nodeId: block.nodeId, path: block.declarationPath });
   }
   if (height > available) {
     return undefined;
@@ -169,7 +169,7 @@ function placeContainer(
   if (fresh - padding <= 0) {
     throw refusal(NO_ROOM_INSIDE, 'pagination-impossible', {
       nodeId: block.nodeId,
-      path: block.path,
+      path: block.declarationPath,
     });
   }
   const from = containerFlowOf(inner);

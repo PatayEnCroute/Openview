@@ -12,7 +12,7 @@ function collect(blocks: readonly MaterialBlock[], into: DocumentImage[]): void 
   for (const block of blocks) {
     switch (block.kind) {
       case 'image':
-        into.push({ nodeId: block.nodeId, path: block.path, src: block.src });
+        into.push({ nodeId: block.nodeId, path: block.declarationPath, src: block.src });
         break;
       case 'container':
         collect(block.children, into);
