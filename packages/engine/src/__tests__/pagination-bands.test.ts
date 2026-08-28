@@ -30,10 +30,12 @@ import {
   literalText,
   materializedOf,
   multiPageOf,
+  NO_FONTS,
   paginateOnGrid,
   refusalOfCut,
   SAMPLE_DATA,
   TINY_PNG,
+  typographyOf,
 } from './fixtures.js';
 
 const flow = (children: readonly Record<string, unknown>[]): Record<string, unknown> => ({
@@ -280,13 +282,7 @@ describe('the two reserves are the same on every page', () => {
   });
 });
 
-const PROBE_TYPOGRAPHY: ResolvedTypography = {
-  family: 'sans-serif',
-  sizePt: 10,
-  bold: false,
-  italic: false,
-  color: '#000000',
-};
+const PROBE_TYPOGRAPHY: ResolvedTypography = typographyOf();
 
 /** Bounds a counter of three digits and no contribution at all: the canonical case. */
 const PROBE_BOUNDS: MarkerBounds = { pages: 100, report: 0 };
@@ -321,12 +317,14 @@ function shapeOf(
 const counterRun = (): MaterialPageFieldRun => ({
   kind: 'pageField',
   field: 'number',
+  site: {},
   typography: PROBE_TYPOGRAPHY,
 });
 
 const reportRun = (): MaterialPageFieldRun => ({
   kind: 'pageField',
   field: 'report',
+  site: {},
   decimals: 2,
   mode: 'halfExpand',
   typography: PROBE_TYPOGRAPHY,
@@ -356,7 +354,7 @@ describe('the page markers', () => {
 
   it('writes the rank of the page that holds them, and the same count everywhere', () => {
     const paginated = paginateOnGrid(document(), {}, constantMarkers(2, 6));
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
     const shown = printedMarkers(html);
     expect(shown).toHaveLength(paginated.pages.length);
     const count = String(paginated.pages.length);
@@ -398,7 +396,7 @@ describe('the page markers', () => {
       {},
       constantMarkers(1, 6),
     );
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
     expect(html).not.toContain('pageField');
     for (const id of ['top-t', 'inflow', 'incell']) {
       const at = html.indexOf(`data-openview-node="${id}"`);
@@ -409,7 +407,7 @@ describe('the page markers', () => {
 
   it('reserves the same box whatever digits land in it, so 9 to 10 moves no cut', () => {
     const paginated = paginateOnGrid(document(), {}, constantMarkers(3, 6));
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
     const widths = [...html.matchAll(/class="ov-marker" style="[^"]*width:([\d.]+)px/g)].map(
       (match) => match[1],
     );
@@ -421,7 +419,7 @@ describe('the page markers', () => {
     const signatures = markerSignatures(document(), PROBE_BOUNDS);
     expect(signatures.size).toBe(1);
     const [signature] = [...signatures.values()];
-    expect(signature?.css).toContain('font-family:sans-serif');
+    expect(signature?.css).toContain('font-family:"__openview_noto_sans_2_015"');
   });
 
   it('finds a marker wherever it is nested, and ignores what is not one', () => {
@@ -474,8 +472,8 @@ describe('the page markers', () => {
     const signatures = [...markerSignatures(nested, PROBE_BOUNDS).keys()].sort();
     /* Plain, bold and italic: three typographies, and nothing from the image or the plain text. */
     expect(signatures).toHaveLength(3);
-    expect(signatures.some((entry) => entry.includes('b n'))).toBe(true);
-    expect(signatures.some((entry) => entry.includes('n i'))).toBe(true);
+    expect(signatures.some((entry) => entry.includes('700 normal'))).toBe(true);
+    expect(signatures.some((entry) => entry.includes('400 italic'))).toBe(true);
   });
 
   it('refuses a width for a shape the width probe never measured', () => {

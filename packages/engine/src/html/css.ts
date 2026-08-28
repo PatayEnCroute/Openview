@@ -11,7 +11,6 @@ import {
   type TextAlignment,
 } from '@openview/core';
 import type { ResolvedTypography } from '../document/types.js';
-import { cssFontFamily } from './escape.js';
 
 /** Class names the engine puts on the boxes it builds. */
 export const CSS_CLASSES = {
@@ -32,13 +31,7 @@ export const CSS_CLASSES = {
   layer: 'ov-layer',
 } as const;
 
-/**
- * Writes a number for css.
- *
- * Only guards the exponent form, which no valid declaration accepts. It is not a rounding: a value
- * that already writes as a decimal passes through untouched, so a column weight keeps every digit
- * its division produced.
- */
+/** Formats a numeric value for CSS, avoiding exponential notation. */
 function cssNumber(value: number): string {
   const written = String(value);
   return written.includes('e') ? value.toFixed(9) : written;
@@ -48,7 +41,7 @@ const mm = (value: number): string => `${cssNumber(value)}mm`;
 
 const px = (value: number): string => `${cssNumber(value)}px`;
 
-/** Percentage of the table's content width a column takes, from its weight alone. */
+/** Percentage of table content width allocated to each column based on width weights. */
 export function columnWidths(columns: readonly TableColumn[]): readonly string[] {
   let total = 0;
   for (const column of columns) {
@@ -75,15 +68,9 @@ const COMMON = [
   `.${CSS_CLASSES.image}{display:block;width:100%;height:auto}`,
   `.${CSS_CLASSES.table}{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}`,
   `.${CSS_CLASSES.cell}{padding:0;vertical-align:top}`,
-  /* Kerning off and no ligature, so the width of a marker is the sum of its digit advances and the
-     reserve measured on one digit is a real bound. */
   `.${CSS_CLASSES.marker}{display:inline-block;font-kerning:none;font-variant-ligatures:none;overflow:hidden;vertical-align:baseline}`,
   `.${CSS_CLASSES.grid}{display:grid}`,
-  /* No overflow:hidden anywhere: a zone whose content escapes is measured and refused, never
-     clipped. min-width 0 keeps a long word from widening a 1fr track past its equal share. */
   `.${CSS_CLASSES.gridItem}{min-width:0;min-height:0;position:relative}`,
-  /* A layer covers the whole sheet, margins included, and consumes no place in the flow. Its
-     single container child is stretched so a background it declares paints the full sheet. */
   `.${CSS_CLASSES.layer}{position:absolute;top:0;left:0;width:100%;height:100%}`,
   `.${CSS_CLASSES.layer}>.${CSS_CLASSES.container}{height:100%}`,
 ];
@@ -108,11 +95,7 @@ export function documentCss(geometry: PageGeometry): string {
 }
 
 /**
- * The stylesheet of a probe: the same widths, and no height anywhere.
- *
- * A probe exists to be measured, so nothing in it may clip or stretch a box. The sheet width and
- * the printable width are the real ones, which is what makes a measured line break the line break
- * the printed page will have.
+ * Generates stylesheet for measurement probe pages without height constraints.
  */
 export function probeCss(geometry: Omit<PageGeometry, 'headerReserve' | 'footerReserve'>): string {
   const { sheet, margins, printable } = geometry;
@@ -127,18 +110,12 @@ export function probeCss(geometry: Omit<PageGeometry, 'headerReserve' | 'footerR
   ].join('');
 }
 
-/** Width one page marker reserves, whatever digits it ends up showing. */
+/** Returns CSS inline styles for a fixed-width marker container. */
 export function markerCss(typography: ResolvedTypography, width: number): string {
   return `${runCss(typography)};width:${px(width)}`;
 }
 
-/**
- * Paints a rule as an inset shadow rather than a css border.
- *
- * A css border joins the width formula, which the box model reserves for `padding` alone, and two
- * bordered neighbours add their widths. An inset band paints inside the box, consumes no layout and
- * cannot add to the band of the box next to it.
- */
+/** Generates inset box-shadow rules representing border edges. */
 function insetBands(edges: BoxBorder | undefined): readonly string[] {
   const band = (offsetX: string, offsetY: string, edge: BorderEdge | undefined) =>
     edge === undefined ? undefined : `inset ${offsetX} ${offsetY} 0 0 ${edge.color}`;
@@ -153,12 +130,7 @@ function insetBands(edges: BoxBorder | undefined): readonly string[] {
 const paddingCss = (padding: BoxSpacing): string =>
   `padding:${mm(padding.top)} ${mm(padding.right)} ${mm(padding.bottom)} ${mm(padding.left)}`;
 
-/**
- * Inline declarations for a box: its background, its padding and the rules it may paint.
- *
- * `border` overrides the box's own edges, which is how a table cell paints the rules its row was
- * assigned rather than the four its row declared.
- */
+/** Generates inline CSS declarations for box background, padding, and border shadows. */
 export function boxCss(
   box: BoxStyle | undefined,
   border?: BoxBorder | undefined,
@@ -177,23 +149,24 @@ export function boxCss(
   return declarations.length > 0 ? declarations.join(';') : undefined;
 }
 
-/** Inline declarations for one run. Every property is present, so nothing cascades in by accident. */
+/** Generates inline CSS declarations for typography. */
 export function runCss(typography: ResolvedTypography): string {
+  const face = typography.face;
   return [
-    `font-family:${cssFontFamily(typography.family)}`,
+    /* One family, quoted, and no stack behind it: the browser cannot prefer a local installation
+       of the same typeface and cannot continue past the face this build embedded. */
+    `font-family:"${face.cssFamily}"`,
     `font-size:${mm(mmFromPt(typography.sizePt))}`,
-    `font-weight:${typography.bold ? 700 : 400}`,
-    `font-style:${typography.italic ? 'italic' : 'normal'}`,
+    `font-weight:${face.weight}`,
+    `font-style:${face.style}`,
+    /* No invented boldness and no invented slant: all four faces of a family are embedded, so a
+       synthesised one would be a shape this build never measured. */
+    'font-synthesis:none',
     `color:${typography.color}`,
   ].join(';');
 }
 
-/**
- * Inline declarations for a grid: its tracks, written from validated numbers alone, plus its box.
- *
- * Columns are equal fractions of the content width, `minmax(0, 1fr)` so content can never widen a
- * track; rows are the declared step in millimetres, so content can never heighten one.
- */
+/** Generates inline CSS declarations for a grid container. */
 export function gridCss(
   columns: number,
   rows: number,
@@ -207,7 +180,7 @@ export function gridCss(
   return boxDeclarations === undefined ? tracks : `${tracks};${boxDeclarations}`;
 }
 
-/** Inline declarations placing one grid zone, 1-based with resolved spans. */
+/** Generates inline CSS declarations for positioning a grid item. */
 export function gridItemCss(
   row: number,
   column: number,
@@ -220,12 +193,12 @@ export function gridItemCss(
   );
 }
 
-/** Inline declarations for one layer wrapper: its whole-layer opacity, when one is declared. */
+/** Generates inline CSS opacity declaration for a layer wrapper. */
 export function layerCss(opacity: number | undefined): string | undefined {
   return opacity === undefined ? undefined : `opacity:${cssNumber(opacity)}`;
 }
 
-/** Inline declarations for a text block: its resolved alignment, plus its box. */
+/** Generates inline CSS declarations for a text block. */
 export function textCss(align: TextAlignment, box: BoxStyle | undefined): string {
   const boxDeclarations = boxCss(box);
   const alignment = `text-align:${align}`;
