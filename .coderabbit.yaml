@@ -15,6 +15,9 @@ reviews:
   changed_files_summary: true
   poem: false
   in_progress_fortune: false
+  slop_detection:
+    enabled: true
+    label: "slop"
   auto_review:
     enabled: true
     drafts: false
