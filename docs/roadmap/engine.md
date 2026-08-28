@@ -253,12 +253,12 @@ pages et ce que chacune contient », sans produire le PDF.
 > ⚠️ **J4 n'est pas atteint.** E5 en est une *condition*. V1 à V3 restent propriétaires de
 > l'encastrement, de la navigation et de la comparaison visuelle automatique.
 
-### E6. Le même document, à chaque fois
+### E6. Le même document, à chaque fois ✅
 
-**Pourquoi.** Deux exécutions du même modèle sur deux machines doivent donner le
-même document, au caractère près : polices, images, et surtout **résultats de
-formules** — un montant qui varie d'un centime selon la machine ruinerait la confiance
-plus sûrement qu'un défaut de mise en page.
+**Pourquoi.** Deux exécutions du même modèle sur deux machines **portant le même profil
+de reproductibilité** doivent donner le même document, au caractère près : polices,
+images, et surtout **résultats de formules** — un montant qui varie d'un centime selon
+la machine ruinerait la confiance plus sûrement qu'un défaut de mise en page.
 
 **Conséquence non négociable : le moteur ne lit ni l'horloge, ni le fuseau, ni la
 locale de la machine.** Toute date, y compris « aujourd'hui », arrive dans le jeu de
@@ -269,10 +269,32 @@ Les arrondis déclarés par le modèle
 ([core](core.md) C2) doivent être honorés à la lettre. Sans ce lot, ni contrôle
 automatique, ni confiance possible.
 
-**Prêt quand** la même facture produite dix fois, sur deux machines, donne dix
-fichiers équivalents.
+**La garantie est profilée, et elle ne peut pas être absolue.** Deux builds d'ICU
+différents n'écrivent pas les mêmes octets : dans `1 234,50 €` en `fr-FR`, le
+séparateur de milliers est **U+202F** depuis CLDR 42 / ICU 72 et **U+00A0** sur les
+builds antérieurs — c'est la réserve **E4-6** de
+l'[ADR 0008](../adr/0008-langue-devise-et-formats.md), et elle vaut pour tout ce qui
+décide de la forme des octets : Node, V8, ICU, Unicode, Chromium, cible
+plateforme/architecture, catalogue de fontes, canonicaliseur, arguments de lancement.
+D'où le **profil** : treize champs comparés d'abord, et un refus nommant le champ qui
+diffère plutôt qu'une différence de documents maquillée.
+
+**Prêt quand** la même facture produite dix fois, sur deux machines **du même profil**,
+donne dix fichiers identiques octet pour octet.
 
 **Poids :** M — **Dépend de :** E4
+
+> ✅ **Livré le 2026-08-28** — [ADR 0019](../adr/0019-le-meme-document-a-chaque-fois.md).
+> Trois familles incorporées (Inter, Noto Sans, Noto Serif — douze faces, SIL OFL 1.1), aucun
+> générique CSS et aucune pile derrière la face : une famille hors catalogue ou un point de code
+> absent du `cmap` est **refusé**, jamais replié sur une police de l'hôte. Chromium **prouve** le
+> chargement de chaque face au lieu de l'attendre — `document.fonts.ready` se résout que les faces
+> aient chargé ou échoué. Le PDF est réécrit par `pdf-lib` : métadonnées fixes, dates à l'époque
+> Unix, identifiant de trailer supprimé.
+>
+> **La porte inter-machines est verte.** Deux runners `ubuntu-24.04` indépendants rendent chacun
+> dix fois les deux apparences ; le comparateur exige treize champs de profil identiques **avant**
+> de lire une empreinte, puis constate **une seule empreinte par document** sur les vingt rendus.
 
 ### E7. Le lot de documents figés de non-régression
 
