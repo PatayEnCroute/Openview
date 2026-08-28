@@ -1,8 +1,8 @@
 # ADR 0019 — Le même document, à chaque fois
 
-- **Statut :** 🟡 **Accepté sous réserve** (2026-08-28) — implémenté et mesuré localement ; la porte
-  inter-machines est écrite mais **n'a pas encore tourné en CI**. E6 n'est pas déclaré livré tant
-  que ce run n'est pas vert (voir [§ Ce qui reste avant de dire « livré »](#ce-qui-reste-avant-de-dire--livré-)).
+- **Statut :** 🟢 **Accepté** (2026-08-28) — implémenté, mesuré, et la porte inter-machines est
+  **verte en CI** : deux runners indépendants, vingt rendus, une seule empreinte par document
+  (voir [§ Ce qu'il fallait pour dire « livré »](#ce-quil-fallait-pour-dire--livré-)).
 - **Date :** 2026-08-28
 - **Impact :** `@openview/engine` (un catalogue de fontes incorporées, une identité de face dans
   `ResolvedTypography`, deux codes de refus, la CSP ouverte aux octets embarqués, un visiteur de
@@ -19,10 +19,9 @@
   comme le sous-ensemble d'images que l'adaptateur accepte — un moteur antérieur ne perd aucune clé
   et aucune union n'est élargie.
 - **Mandats exercés :** M-2 (manifestes, ressources tierces) et M-3 (workflow), plus le mandat
-  `vitest.config.ts` qu'appelait CH2. **M-1 n'a pas été accordé :**
-  [`docs/roadmap/engine.md`](../roadmap/engine.md) n'est **pas** modifié par ce lot, et sa phrase
-  « sur deux machines » reste donc plus large que ce que le lot démontre — voir
-  [§ La dette que M-1 laisse ouverte](#la-dette-que-m-1-laisse-ouverte).
+  `vitest.config.ts` qu'appelait CH2. **M-1 a été accordé après le merge** et exercé dans le suivi :
+  [`docs/roadmap/engine.md`](../roadmap/engine.md) énonce désormais la garantie **profilée** — voir
+  [§ Ce que M-1 a rectifié](#ce-que-m-1-a-rectifié).
 - **Plan d'implémentation :**
   [docs/plans/e6-le-meme-document-a-chaque-fois.md](../plans/e6-le-meme-document-a-chaque-fois.md)
   — les écarts sont au [§ Ce que l'exécution a corrigé du plan](#ce-que-lexécution-a-corrigé-du-plan).
@@ -334,23 +333,28 @@ traitement réservé aux fontes. Rien n'encode d'image au moment des tests.
 
 ---
 
-## La dette que M-1 laisse ouverte
+## Ce que M-1 a rectifié
 
-M-1 proposait de remplacer, dans la roadmap moteur, la comparaison entre « deux machines » par la
-comparaison entre deux machines **portant le même profil de reproductibilité**, et d'y recopier la
-réserve ICU de l'ADR 0008. **Le mandat n'a pas été accordé, et la roadmap n'est donc pas touchée.**
+Le lot a d'abord été livré **sans** M-1 : la roadmap moteur promettait le même document « sur deux
+machines », sans qualifier lesquelles, et cet ADR portait seul le périmètre réel de la garantie. Le
+mandat a été accordé au lot de suivi, et [`docs/roadmap/engine.md`](../roadmap/engine.md) dit
+maintenant ce que E6 démontre :
 
-La conséquence doit être écrite ici plutôt que subie : la roadmap promet aujourd'hui davantage que ce
-que le lot démontre. Ce que E6 établit est la garantie **profilée** — même Node, même V8, même ICU,
-même Unicode, même Chromium, même catalogue, même canonicaliseur, même cible, mêmes arguments. La
-garantie absolue entre deux machines quelconques est fausse, et C6 l'avait déjà démontrée fausse.
+- la comparaison porte sur deux machines **portant le même profil de reproductibilité** — même Node,
+  même V8, même ICU, même Unicode, même Chromium, même catalogue, même canonicaliseur, même cible,
+  mêmes arguments de lancement ;
+- la réserve ICU de l'[ADR 0008](0008-langue-devise-et-formats.md) (attente **E4-6**, l'espace
+  insécable de `fr-FR` qui passe de U+00A0 à U+202F avec CLDR 42 / ICU 72) y est recopiée : c'est la
+  raison la plus concrète pour laquelle la garantie absolue est fausse ;
+- le critère de recette passe de « dix fichiers équivalents » à « dix fichiers identiques octet pour
+  octet », ce qui est à la fois plus exigeant et exactement ce qui est mesuré.
 
-Tant que M-1 n'est pas exercé, **cet ADR fait foi sur le périmètre de la garantie** et la roadmap est
-en avance sur son implémentation.
+La garantie absolue entre deux machines quelconques reste fausse, et C6 l'avait déjà démontrée
+fausse. La différence est qu'aucun des deux documents ne la promet plus.
 
 ---
 
-## Ce qui reste avant de dire « livré »
+## Ce qu'il fallait pour dire « livré »
 
 Le plan est explicite : E6 est terminé lorsque le PDF **renvoyé au client** satisfait l'égalité
 binaire sur deux machines du même profil. À cet instant :
@@ -372,9 +376,8 @@ binaire sur deux machines du même profil. À cet instant :
 - [x] aucun `minimumReleaseAgeExclude` ajouté ;
 - [x] quatre portes vertes, audit production vert ;
 - [x] mutations jouées et restaurées ;
-- [ ] **deux profils CI identiques et vingt empreintes PDF identiques** — les jobs sont écrits et
-      épinglés (`ubuntu-24.04`, Node `24.11.1`), mais n'ont pas encore tourné ;
-- [ ] **M-1**, ou la mention explicite dans la roadmap que la garantie est profilée.
+- [x] **deux profils CI identiques et vingt empreintes PDF identiques** — verts au merge du
+      2026-08-28 sur deux runners `ubuntu-24.04` indépendants, Node `24.11.1` ;
+- [x] **M-1** — la roadmap énonce la garantie profilée (§ ci-dessus).
 
-Les deux cases ouvertes sont la raison du statut 🟡. E7 ne peut pas commencer à figer une histoire
-avant que la première soit cochée.
+Toutes les cases sont cochées : le statut passe à 🟢 et E7 peut commencer à figer une histoire.

@@ -35,6 +35,11 @@ reviews:
     - "!**/.gemini/**"
     - "!**/*.min.js"
     - "!**/*.map"
+    - "!**/*.md"
+    - "!docs/**"
+    - "!**/*.txt"
+    - "!LICENSE"
+    - "!**/*.{png,jpg,jpeg,gif,svg,ico,webp,woff,woff2,ttf,eot}"
 
   path_instructions:
     - path: "**/*.{ts,tsx}"

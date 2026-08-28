@@ -30,6 +30,11 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # These jobs run repository code on a pull_request trigger, and checkout
+          # otherwise leaves the token in the local git config for it to read.
+          # No job in this workflow pushes, so nothing needs the credential.
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -61,6 +66,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Must precede setup-node: resolving the pnpm cache shells out to
       # `pnpm store path`, which needs pnpm already on PATH. Getting this order
@@ -107,9 +114,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # These jobs run repository code on a pull_request trigger, and checkout
-          # otherwise leaves the token in the local git config for it to read.
-          # Neither job pushes anything, so nothing needs the credential.
           persist-credentials: false
 
       - name: Setup pnpm
