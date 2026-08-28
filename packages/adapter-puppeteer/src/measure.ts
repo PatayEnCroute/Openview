@@ -1,14 +1,14 @@
-import type { PdfLayoutMeasurement } from '@openview/engine';
+import type { LayoutObservation } from './observation.js';
 
 /**
  * Runs inside Chromium. Self-contained on purpose: the function is serialised and evaluated in the
  * page, so it can close over nothing from this module.
  *
- * It reports boxes under the keys the engine annotated and line ends as cursors into the runs the
- * engine already holds. No bound text, no markup and no style ever travels back.
+ * Collection only. It reads rectangles, insets and lengths under the keys the engine annotated and
+ * hands them back untouched; `deriveMeasurement` decides what they mean. No bound text, no markup
+ * and no style ever travels back.
  */
-export async function measureInPage(): Promise<PdfLayoutMeasurement> {
-  const tolerance = 0.5;
+export async function collectInPage(): Promise<LayoutObservation> {
   const need = (root: ParentNode, selector: string): Element => {
     const found = root.querySelector(selector);
     if (found === null) {
@@ -17,31 +17,81 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     return found;
   };
 
-  /* Measured from descendant edges rather than scrollHeight, which is an integer and would make a
-     sub-pixel layout look like an overflow. */
-  const contentHeightOf = (element: Element): number => {
-    const own = element.getBoundingClientRect();
-    let bottom = own.top;
+  const rectOf = (element: Element): LayoutObservation['pages'][number]['rect'] => {
+    const rect = element.getBoundingClientRect();
+    return {
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+  };
+
+  const rectOfRange = (range: Range): LayoutObservation['pages'][number]['rect'] => {
+    const rect = range.getBoundingClientRect();
+    return {
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+  };
+
+  /** What the padding and the rules of a box take off each of its edges. */
+  const insetsOf = (element: Element): LayoutObservation['boxes'][number]['insets'] => {
+    const style = getComputedStyle(element);
+    return {
+      top: Number.parseFloat(style.paddingTop) + Number.parseFloat(style.borderTopWidth),
+      right: Number.parseFloat(style.paddingRight) + Number.parseFloat(style.borderRightWidth),
+      bottom: Number.parseFloat(style.paddingBottom) + Number.parseFloat(style.borderBottomWidth),
+      left: Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth),
+    };
+  };
+
+  /** The lowest edge any visible descendant reached, or the element's own top when it has none. */
+  const contentBottomOf = (element: Element): number => {
+    let bottom = element.getBoundingClientRect().top;
     for (const descendant of element.querySelectorAll('*')) {
       const rect = descendant.getBoundingClientRect();
       if (rect.width > 0 || rect.height > 0) {
         bottom = Math.max(bottom, rect.bottom);
       }
     }
-    return bottom - own.top;
+    return bottom;
   };
 
-  /** The content box of an element: what its own padding and rules leave inside it. */
-  const contentBoxOf = (element: Element): { top: number; height: number } => {
-    const style = getComputedStyle(element);
-    const rect = element.getBoundingClientRect();
-    const top = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.borderTopWidth);
-    const bottom =
-      Number.parseFloat(style.paddingBottom) + Number.parseFloat(style.borderBottomWidth);
-    return { top: rect.top + top, height: rect.height - top - bottom };
+  /** The union of every visible descendant box, or nothing when the element has none. */
+  const spreadOf = (element: Element): LayoutObservation['gridItems'][number]['descendants'] => {
+    let found: { left: number; top: number; right: number; bottom: number } | undefined;
+    for (const descendant of element.querySelectorAll('*')) {
+      const rect = descendant.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        continue;
+      }
+      found =
+        found === undefined
+          ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+          : {
+              left: Math.min(found.left, rect.left),
+              top: Math.min(found.top, rect.top),
+              right: Math.max(found.right, rect.right),
+              bottom: Math.max(found.bottom, rect.bottom),
+            };
+    }
+    return found === undefined
+      ? undefined
+      : {
+          ...found,
+          width: found.right - found.left,
+          height: found.bottom - found.top,
+        };
   };
 
-  interface Boundary {
+  interface Position {
     node: Node;
     offset: number;
   }
@@ -52,10 +102,10 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
    * A marker is one position rather than the digits it happens to show: it is atomic, and its
    * placeholder is not the value the printed page will carry.
    */
-  const boundariesOf = (
+  const positionsOf = (
     block: Element,
-  ): { positions: Boundary[]; cursors: { run: number; offset: number }[] } => {
-    const positions: Boundary[] = [];
+  ): { positions: Position[]; cursors: { run: number; offset: number }[] } => {
+    const positions: Position[] = [];
     const cursors: { run: number; offset: number }[] = [];
     /* Direct children only: a container box also has runs under it, but they belong to the text
        blocks inside it and their ranks restart at zero in each one. */
@@ -90,89 +140,40 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     return { positions, cursors };
   };
 
-  const lines: PdfLayoutMeasurement['lines'][number][] = [];
-  const boxes: PdfLayoutMeasurement['boxes'][number][] = [];
   const range = document.createRange();
-
+  const boxes: LayoutObservation['boxes'][number][] = [];
   for (const box of document.querySelectorAll('[data-openview-key]')) {
-    const key = box.getAttribute('data-openview-key') ?? '';
-    const rect = box.getBoundingClientRect();
-    boxes.push({ key, width: rect.width, height: rect.height });
-
-    const { positions, cursors } = boundariesOf(box);
-    const first = positions[0];
-    const total = positions.length - 1;
-    if (first === undefined || total <= 0) {
-      continue;
-    }
-    const content = contentBoxOf(box);
-    const rectAt = (at: number): DOMRect | undefined => {
+    const { positions, cursors } = positionsOf(box);
+    const units: LayoutObservation['boxes'][number]['units'][number][] = [];
+    for (let at = 1; at < positions.length; at += 1) {
       const from = positions[at - 1];
       const to = positions[at];
-      if (from === undefined || to === undefined) {
-        return undefined;
+      const cursor = cursors[at - 1];
+      if (from === undefined || to === undefined || cursor === undefined) {
+        continue;
       }
       range.setStart(from.node, from.offset);
       range.setEnd(to.node, to.offset);
-      return range.getBoundingClientRect();
-    };
-
-    /* A unit opens a new visual line when its own box starts at or below everything already on the
-       current one. Comparing whole prefixes instead would split a line that mixes two font sizes,
-       and would merge a blank line into the one after it. */
-    let bottom: number | undefined;
-    let ending: { run: number; offset: number } | undefined;
-    let index = 0;
-    const close = (): void => {
-      if (bottom === undefined || ending === undefined) {
-        return;
-      }
-      lines.push({ key, index, ...ending, height: bottom - content.top });
-      index += 1;
-      bottom = undefined;
-    };
-    for (let at = 1; at <= total; at += 1) {
-      const rect = rectAt(at);
-      if (rect === undefined || (rect.width === 0 && rect.height === 0)) {
-        continue;
-      }
-      if (bottom !== undefined && rect.top >= bottom - tolerance) {
-        close();
-      }
-      bottom = bottom === undefined ? rect.bottom : Math.max(bottom, rect.bottom);
-      ending = cursors[at - 1];
+      units.push({ run: cursor.run, offset: cursor.offset, rect: rectOfRange(range) });
     }
-    close();
-
-    /* The last line closes the content box: a browser reports the ink of a range, and the sum of
-       the fragments has to be the whole box the paginator was told about. */
-    const last = lines.at(-1);
-    if (last !== undefined && last.key === key) {
-      lines[lines.length - 1] = { ...last, height: Math.max(last.height, content.height) };
-    }
+    boxes.push({
+      key: box.getAttribute('data-openview-key') ?? '',
+      rect: rectOf(box),
+      insets: insetsOf(box),
+      units,
+    });
   }
 
-  const pages = [...document.querySelectorAll('.ov-page')].map((page) => {
-    const pageBox = page.getBoundingClientRect();
-    const printableBox = need(page, '.ov-printable').getBoundingClientRect();
-    return {
-      page: { width: pageBox.width, height: pageBox.height },
-      printable: { width: printableBox.width, height: printableBox.height },
-      regions: (['header', 'root', 'footer'] as const).map((region) => {
-        const element = need(page, `[data-openview-region="${region}"]`);
-        return {
-          region,
-          height: element.getBoundingClientRect().height,
-          contentHeight: contentHeightOf(element),
-        };
-      }),
-    };
-  });
-  if (pages.length === 0) {
-    throw new Error('the rendered document has no .ov-page');
-  }
+  const pages = [...document.querySelectorAll('.ov-page')].map((page) => ({
+    rect: rectOf(page),
+    printable: rectOf(need(page, '.ov-printable')),
+    regions: (['header', 'root', 'footer'] as const).map((region) => {
+      const element = need(page, `[data-openview-region="${region}"]`);
+      return { region, rect: rectOf(element), contentBottom: contentBottomOf(element) };
+    }),
+  }));
 
-  const images: PdfLayoutMeasurement['images'][number][] = [];
+  const images: LayoutObservation['images'][number][] = [];
   for (const image of document.querySelectorAll('img')) {
     let decoded = true;
     try {
@@ -193,75 +194,30 @@ export async function measureInPage(): Promise<PdfLayoutMeasurement> {
     });
   }
 
-  const escaping: string[] = [];
+  const nodes: LayoutObservation['nodes'][number][] = [];
   for (const node of document.querySelectorAll('[data-openview-node]')) {
     const sheet = node.closest('.ov-page');
     if (sheet === null) {
       continue;
     }
-    const rect = node.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) {
-      continue;
-    }
-    const bounds = sheet.getBoundingClientRect();
-    const outside =
-      rect.left < bounds.left - tolerance ||
-      rect.top < bounds.top - tolerance ||
-      rect.right > bounds.right + tolerance ||
-      rect.bottom > bounds.bottom + tolerance;
-    if (outside) {
-      escaping.push(node.getAttribute('data-openview-node') ?? '');
-    }
+    nodes.push({
+      nodeId: node.getAttribute('data-openview-node') ?? '',
+      rect: rectOf(node),
+      sheet: rectOf(sheet),
+    });
   }
 
-  /* A grid zone is never clipped, so content past its content box is visible only here. Compared
-     on both axes against the wrapper's content box; only the zone container's id travels back. */
-  const overflowingGridItems: string[] = [];
-  for (const wrapper of document.querySelectorAll('[data-openview-grid-item]')) {
-    const style = getComputedStyle(wrapper);
-    const rect = wrapper.getBoundingClientRect();
-    const content = {
-      left:
-        rect.left + Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth),
-      top: rect.top + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.borderTopWidth),
-      right:
-        rect.right -
-        Number.parseFloat(style.paddingRight) -
-        Number.parseFloat(style.borderRightWidth),
-      bottom:
-        rect.bottom -
-        Number.parseFloat(style.paddingBottom) -
-        Number.parseFloat(style.borderBottomWidth),
-    };
-    let escapes = false;
-    for (const descendant of wrapper.querySelectorAll('*')) {
-      const box = descendant.getBoundingClientRect();
-      if (box.width === 0 && box.height === 0) {
-        continue;
-      }
-      if (
-        box.left < content.left - tolerance ||
-        box.top < content.top - tolerance ||
-        box.right > content.right + tolerance ||
-        box.bottom > content.bottom + tolerance
-      ) {
-        escapes = true;
-        break;
-      }
-    }
-    if (escapes) {
-      overflowingGridItems.push(wrapper.getAttribute('data-openview-grid-item') ?? '');
-    }
-  }
+  const gridItems = [...document.querySelectorAll('[data-openview-grid-item]')].map((wrapper) => ({
+    nodeId: wrapper.getAttribute('data-openview-grid-item') ?? '',
+    rect: rectOf(wrapper),
+    insets: insetsOf(wrapper),
+    descendants: spreadOf(wrapper),
+  }));
 
-  /* A marker box is a fixed width with `overflow: hidden`, so a value one character too wide is
-     invisible in the paint and visible only here. Counted, never read: the digits are render data. */
-  let clippedMarkerCount = 0;
-  for (const marker of document.querySelectorAll('.ov-marker')) {
-    if (marker.scrollWidth > marker.clientWidth + tolerance) {
-      clippedMarkerCount += 1;
-    }
-  }
+  const markers = [...document.querySelectorAll('.ov-marker')].map((marker) => ({
+    scrollWidth: marker.scrollWidth,
+    clientWidth: marker.clientWidth,
+  }));
 
-  return { pages, boxes, lines, images, escaping, overflowingGridItems, clippedMarkerCount };
+  return { pages, boxes, images, nodes, gridItems, markers };
 }

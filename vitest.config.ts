@@ -24,7 +24,19 @@ export default defineConfig({
       // Without `include`, v8 only instruments files a test imported, so a package
       // with one tested function and ten untested ones still reported 100%.
       include: ['packages/*/src/**/*.{ts,tsx}'],
-      exclude: ['packages/*/src/**/*.{test,spec}.{ts,tsx}', 'packages/*/src/**/*.d.ts'],
+      exclude: [
+        'packages/*/src/**/*.{test,spec}.{ts,tsx}',
+        'packages/*/src/**/*.d.ts',
+        // `measure.ts` is serialised and evaluated inside Chromium, so v8 running
+        // in Node cannot instrument it and never will: it reported 0% by
+        // construction, and left the whole adapter under any floor worth setting.
+        // It is excluded only because it now holds nothing but DOM collection --
+        // every decision it used to make about line boundaries, overflow and the
+        // sub-pixel tolerance moved to `derive.ts`, which is gated below. Moving
+        // arithmetic back into it would put that arithmetic beyond measurement
+        // again; that, and not the exclusion, is what a reviewer must refuse.
+        'packages/adapter-puppeteer/src/measure.ts',
+      ],
       thresholds: {
         // The global floor alone is not enough: core carries ~150 statements at
         // 100%, which is sufficient to hold the aggregate above 90% no matter how
@@ -33,6 +45,9 @@ export default defineConfig({
         ...THRESHOLD,
         'packages/core/src/**': THRESHOLD,
         'packages/engine/src/**': THRESHOLD,
+        // The adapter carries the arithmetic that decides where pages are cut.
+        // It had no floor while that arithmetic was unreachable from Node.
+        'packages/adapter-puppeteer/src/**': THRESHOLD,
       },
     },
   },
