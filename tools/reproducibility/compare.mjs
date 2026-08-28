@@ -6,9 +6,12 @@
  * The profile is compared first and the digests only afterwards. Two runs carrying two ICU builds
  * may legitimately produce two different space characters, so reporting that as a document defect
  * would be a lie: a profile mismatch is reported as a profile mismatch.
+ *
+ * Imports nothing but the field list: this runs on a checkout that was never installed and never
+ * built, and reading two JSON files is the whole job.
  */
 import { readFileSync } from 'node:fs';
-import { PROFILE_FIELDS } from './profile.mjs';
+import { PROFILE_FIELDS } from './fields.mjs';
 
 const [left, right] = process.argv.slice(2);
 if (left === undefined || right === undefined) {

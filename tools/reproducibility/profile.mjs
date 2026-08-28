@@ -11,6 +11,10 @@
 import { createRequire } from 'node:module';
 import { BUNDLED_FACES } from '../../packages/engine/dist/document/fonts/catalogue.js';
 
+/* Re-exported for the producer, which needs both halves; the comparator imports the list straight
+   from `fields.mjs` so it never reaches the built catalogue above. */
+export { PROFILE_FIELDS } from './fields.mjs';
+
 /* Anchored at the adapter rather than at this file: `tools/` is not a workspace package, so pnpm
    installs nothing beside it and a bare specifier would not resolve here. */
 export const fromAdapter = createRequire(
@@ -78,20 +82,3 @@ export function serializeProfile(profile) {
     2,
   );
 }
-
-/** The fields a profile must carry. A manifest missing one is not an attestation. */
-export const PROFILE_FIELDS = [
-  'platform',
-  'architecture',
-  'node',
-  'v8',
-  'icu',
-  'unicode',
-  'engine',
-  'adapter',
-  'puppeteer',
-  'chromium',
-  'fonts',
-  'pdfCanonicalizer',
-  'launchArguments',
-];
