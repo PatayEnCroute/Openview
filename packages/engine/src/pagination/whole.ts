@@ -1,10 +1,10 @@
-import { kindOf } from '@openview/core';
+import { visitBlock } from '../document/traverse.js';
 import type { MaterialBlock, MaterialRow } from '../document/types.js';
 import type { MaterialFragment, RowFragment, TextCursor } from './types.js';
 
 const START: TextCursor = { run: 0, offset: 0 };
 
-/** One page holds the whole row, so every cell paints all of its own flow. */
+/** Constructs an uncut whole RowFragment from a materialized table row. */
 export function wholeRow(row: MaterialRow): RowFragment {
   return {
     source: row,
@@ -17,20 +17,17 @@ export function wholeRow(row: MaterialRow): RowFragment {
 }
 
 /**
- * The fragment of a block that was never cut.
- *
- * Everything painted on a page is a fragment, including what fits entirely: one shape means the
- * html builder has a single path, and a whole box and a cut box cannot drift apart.
+ * Constructs an uncut whole MaterialFragment from a materialized block.
  */
 export function wholeFragment(block: MaterialBlock): MaterialFragment {
-  switch (block.kind) {
-    case 'text': {
-      const last = block.runs.length - 1;
-      const end = block.runs[last];
+  return visitBlock<MaterialFragment>(block, {
+    text: (text) => {
+      const last = text.runs.length - 1;
+      const end = text.runs[last];
       return {
         kind: 'text',
-        source: block,
-        runs: block.runs,
+        source: text,
+        runs: text.runs,
         from: START,
         to:
           end === undefined
@@ -38,31 +35,23 @@ export function wholeFragment(block: MaterialBlock): MaterialFragment {
             : { run: last, offset: end.kind === 'text' ? end.text.length : 1 },
         edge: 'whole',
       };
-    }
-    case 'image':
-      return { kind: 'image', source: block };
-    case 'grid':
-      return { kind: 'grid', source: block };
-    case 'container':
-      return {
-        kind: 'container',
-        source: block,
-        children: block.children.map(wholeFragment),
-        edge: 'whole',
-      };
-    case 'table':
-      return {
-        kind: 'table',
-        source: block,
-        header: block.header.map(wholeRow),
-        rows: [...block.body, ...block.footer].map(wholeRow),
-        footerFrom: block.body.length,
-        includesFooterEnd: true,
-        edge: 'whole',
-      };
-    default: {
-      const exhaustive: never = block;
-      throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
-    }
-  }
+    },
+    image: (image) => ({ kind: 'image', source: image }),
+    grid: (grid) => ({ kind: 'grid', source: grid }),
+    container: (container) => ({
+      kind: 'container',
+      source: container,
+      children: container.children.map(wholeFragment),
+      edge: 'whole',
+    }),
+    table: (table) => ({
+      kind: 'table',
+      source: table,
+      header: table.header.map(wholeRow),
+      rows: [...table.body, ...table.footer].map(wholeRow),
+      footerFrom: table.body.length,
+      includesFooterEnd: true,
+      edge: 'whole',
+    }),
+  });
 }

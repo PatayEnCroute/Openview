@@ -1,42 +1,11 @@
-﻿import { kindOf } from '@openview/core';
-import type { MaterialBlock, MaterialDocument } from './types.js';
+import { walkDocument } from './traverse.js';
+import type { MaterialDocument } from './types.js';
 
 /** One image the document references, named by the declaration it came from. */
 export interface DocumentImage {
   readonly nodeId: string;
   readonly path: readonly (string | number)[];
   readonly src: string;
-}
-
-function collect(blocks: readonly MaterialBlock[], into: DocumentImage[]): void {
-  for (const block of blocks) {
-    switch (block.kind) {
-      case 'image':
-        into.push({ nodeId: block.nodeId, path: block.declarationPath, src: block.src });
-        break;
-      case 'container':
-        collect(block.children, into);
-        break;
-      case 'table':
-        for (const row of [...block.header, ...block.body, ...block.footer]) {
-          for (const cell of row.cells) {
-            collect(cell.children, into);
-          }
-        }
-        break;
-      case 'grid':
-        for (const item of block.items) {
-          collect([item.content], into);
-        }
-        break;
-      case 'text':
-        break;
-      default: {
-        const exhaustive: never = block;
-        throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
-      }
-    }
-  }
 }
 
 /**
@@ -48,18 +17,10 @@ function collect(blocks: readonly MaterialBlock[], into: DocumentImage[]): void 
  */
 export function documentImages(document: MaterialDocument): readonly DocumentImage[] {
   const found: DocumentImage[] = [];
-  for (const layer of document.backgroundLayers) {
-    collect([layer.content], found);
-  }
-  for (const band of document.headerBands) {
-    collect([band.content], found);
-  }
-  collect(document.root, found);
-  for (const band of document.footerBands) {
-    collect([band.content], found);
-  }
-  for (const layer of document.foregroundLayers) {
-    collect([layer.content], found);
+  for (const block of walkDocument(document)) {
+    if (block.kind === 'image') {
+      found.push({ nodeId: block.nodeId, path: block.declarationPath, src: block.src });
+    }
   }
   return found;
 }
