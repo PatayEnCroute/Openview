@@ -32,70 +32,48 @@ const NOT_A_CIVIL_DATE =
 const UNWRITTEN =
   'A formatter returned no characters for a site of this template. A blank left in a printed position is more dangerous than a refusal, so the render stops here.';
 
-/**
- * One writing a render resolved, with the identity a reserve signature distinguishes it by.
- *
- * The id is opaque and local to one render: it separates two writings in a signature without
- * putting a writing key, or the name the caller chose for it, anywhere a log could reach.
- */
+/** Resolved presentation writing paired with a render-unique identifier. */
 export interface ResolvedWriting {
-  /** The canonical writing the resolver returned. Never an object assembled here. */
   readonly presentation: Presentation;
   readonly id: string;
 }
 
-/** The writing one page marker prints with: the function it names, and the writing it resolved. */
+/** Formatter kind and resolved writing for a page marker. */
 export interface MarkerWriting extends ResolvedWriting {
   readonly kind: NumericPresentationFormat['kind'];
 }
 
-/** How the caller maps the profiles a template names to the writings that template declares. */
+/** Mapping from template presentation profile names to declared writing keys. */
 export type PresentationSelection = Readonly<Record<string, string>>;
 
 /**
- * The writings of one render: resolved on first use, and once per writing key.
- *
- * Local to a render by construction -- created beside the evaluation budget and never exported --
- * so two renders of one template under two selections cannot share a resolution. Lazy on purpose:
- * a false condition, an empty loop or a band no page reaches names no profile, so a template can
- * declare a site the caller selected nothing for and still render.
+ * Session managing lazy resolution and caching of presentation formats for a single render.
  */
 export interface PresentationSession {
-  /** The writing a binding site asks for, cached by the key its profile selected. */
+  /** Resolves and caches the presentation writing for a binding site. */
   resolve(format: PresentationFormat, details: DocumentRenderErrorDetails): ResolvedWriting;
-  /** The writing a page counter asks for. A counter writes a whole number of pages and nothing else. */
+  /** Resolves the presentation writing for a page counter. */
   resolveCounter(
     format: DecimalPresentationFormat,
     details: DocumentRenderErrorDetails,
   ): MarkerWriting;
-  /**
-   * The writing a page report asks for, checked against the rounding the marker declared.
-   *
-   * @param decimals the rounding position the marker carries, which the writing has to match
-   */
+  /** Resolves the presentation writing for a page report, validating fraction digit alignment. */
   resolveReport(
     format: NumericPresentationFormat,
     decimals: number,
     details: DocumentRenderErrorDetails,
   ): MarkerWriting;
-  /** How many writings this render has resolved so far. Read by tests, never by the pipeline. */
+  /** Total number of resolved presentation formats in this session. */
   readonly resolved: number;
 }
 
-/**
- * How many fraction digits a report rounded at this position can reach.
- *
- * A negative position rounds to tens or hundreds, so the rounded figure has no fraction at all.
- */
+/** Returns the maximum fraction digits allowed for a report decimal position. */
 export function reportFractionDigits(decimals: number): number {
   return Math.max(decimals, 0);
 }
 
 /**
- * Writes one evaluated value at the writing its site declared, or refuses.
- *
- * The guard comes before the formatter and is closed on the three functions: no number is read out
- * of a string, no date is built from an instant, and nothing is inferred from the value's own type.
+ * Formats an evaluated value according to the given presentation writing.
  */
 export function writeValue(
   format: PresentationFormat,
@@ -118,12 +96,7 @@ export function writeValue(
   }
 }
 
-/**
- * The characters one marker writing produces for a value, or nothing when it produces none.
- *
- * The single dispatch of the two numeric formatters, shared by the paint and by the width probe, so
- * a reserve is measured on the strings the print really writes.
- */
+/** Formats a numeric marker sample value without raising errors on non-finite input. */
 export function sampleMarker(writing: MarkerWriting, value: number): string | undefined {
   if (!Number.isFinite(value)) {
     return undefined;
@@ -133,12 +106,7 @@ export function sampleMarker(writing: MarkerWriting, value: number): string | un
     : formatDecimal(value, writing.presentation);
 }
 
-/**
- * Writes a page marker's value at the writing it resolved, or refuses.
- *
- * The value arrives already rounded when the marker declared a rounding: this function never
- * rounds, and `Intl` is never handed a rounding mode of its own.
- */
+/** Formats a page marker value using its resolved writing. */
 export function writeMarker(
   writing: MarkerWriting,
   value: number,
@@ -168,7 +136,6 @@ function civilDateAt(value: unknown, details: DocumentRenderErrorDetails): strin
   });
 }
 
-/** The characters a formatter produced, or a refusal: a formatted site is never left blank. */
 function written(text: string | undefined, details: DocumentRenderErrorDetails): string {
   if (text === undefined) {
     throw refusal(UNWRITTEN, 'unformattable-binding-value', details);
@@ -184,17 +151,12 @@ function refuseRefusal(cause: PresentationRefusal, details: DocumentRenderErrorD
 }
 
 /**
- * Opens the writings of one render.
- *
- * `Object.hasOwn` guards both tables: a profile named `constructor` reaches nothing unless the
- * caller really declared it, and a key of that name really declared stays usable.
+ * Creates a presentation session scoped to a single render execution.
  */
 export function createPresentationSession(
   presentations: PresentationTable | undefined,
   selection: PresentationSelection | undefined,
 ): PresentationSession {
-  /* Keyed by the writing the profile selected, not by the profile: two profiles pointing at one
-     writing share one resolution, which is what makes the reserve signatures agree with the paint. */
   const cache = new Map<string, ResolvedWriting>();
 
   const keyOf = (format: PresentationFormat, details: DocumentRenderErrorDetails): string => {
@@ -238,8 +200,6 @@ export function createPresentationSession(
     resolveReport: (format, decimals, details) => {
       const found = resolve(format, details);
       const asked = reportFractionDigits(decimals);
-      /* Refused rather than corrected: a writing allowing fewer digits would round the figure a
-         second time, and one allowing more would print digits the declared rounding removed. */
       if (found.presentation.maxFractionDigits !== asked) {
         throw refusal(REPORT_SCALE, 'presentation-refused', {
           ...details,

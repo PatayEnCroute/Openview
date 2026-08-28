@@ -25,10 +25,7 @@ async function printComposed(
 }
 
 /**
- * Assembles the PDF render port executing validation, binding, pagination, and printing.
- *
- * Printing is all this port adds to the shared composition: the bytes come from the very html the
- * pagination port returns, so the two façades can never disagree on where the cuts fell.
+ * Creates the PDF render port for end-to-end rendering (validation, pagination, PDF generation).
  *
  * @see docs/adr/0006-la-page.md
  */
@@ -40,8 +37,6 @@ export function createPdfRenderPort(
     format: 'pdf',
     async render(request: RenderRequest): Promise<RenderResult> {
       const { template, bound } = prepare(request.template, request.data, options);
-      /* Opening is where a pdf backend first refuses, and this port has always named that refusal
-         an export failure: the code is kept so an existing caller keeps reading one contract. */
       const session = await openSession(strategy, bound, 'pdf-export-failed', EXPORT_FAILED);
       let bytes: Uint8Array;
       try {

@@ -1,4 +1,4 @@
-﻿import { refusal } from '../errors.js';
+import { refusal } from '../errors.js';
 import type { PageMeasurement, PdfLayoutMeasurement } from '../strategy/pdf.js';
 import type { PaginatedDocument } from './types.js';
 import { TOLERANCE_PX } from './validate-measurement.js';
@@ -24,19 +24,13 @@ const GRID_CONTENT_OVERFLOWS =
 const MARKER_CLIPPED =
   'A page marker holds more than the width reserved for it, so the printed document would show a truncated figure. Read `details.limit` for how many markers are involved; what they read is deliberately not reported.';
 
-/** A page whose flow reached past its slot, and by how much. */
+/** Information about a flow region height overflow on a paginated page. */
 export interface FlowOverflow {
   readonly pageNumber: number;
   readonly excess: number;
 }
 
-/**
- * The divergences no cut of the flow could repair, refused on the first one observed.
- *
- * A missing page, an image that did not decode, a box painted off the sheet, a grid zone its
- * content outgrew and a clipped marker all share that property, so none of them reaches the loop
- * that settles an overflow.
- */
+/** Checks and refuses unrecoverable layout anomalies such as failed images or off-sheet paints. */
 function refuseUnrepairable(paginated: PaginatedDocument, measurement: PdfLayoutMeasurement): void {
   if (measurement.pages.length !== paginated.pages.length) {
     throw refusal(WRONG_PAGE_COUNT, 'layout-measurement-failed', {
@@ -55,16 +49,11 @@ function refuseUnrepairable(paginated: PaginatedDocument, measurement: PdfLayout
     throw refusal(PAINTS_OUTSIDE, 'layout-measurement-failed', { nodeId: escaped });
   }
 
-  /* A refusal, not an overflow to settle: no cut of the flow shrinks the content of a zone, and a
-     grid is atomic anyway. */
   const [overflowingZone] = measurement.overflowingGridItems;
   if (overflowingZone !== undefined) {
     throw refusal(GRID_CONTENT_OVERFLOWS, 'grid-content-overflow', { nodeId: overflowingZone });
   }
 
-  /* A refusal, not an overflow to settle: no cut of the flow makes a marker narrower, and the
-     `overflow: hidden` that keeps a marker inside its box is a visual barrier, never a licence to
-     print half a number. */
   if (measurement.clippedMarkerCount > 0) {
     throw refusal(MARKER_CLIPPED, 'layout-measurement-failed', {
       limit: measurement.clippedMarkerCount,
@@ -72,7 +61,6 @@ function refuseUnrepairable(paginated: PaginatedDocument, measurement: PdfLayout
   }
 }
 
-/** The sheet and printable area, in css pixels, every page must have been laid out at. */
 interface ExpectedPageBox {
   readonly width: number;
   readonly height: number;
@@ -80,7 +68,6 @@ interface ExpectedPageBox {
   readonly printableHeight: number;
 }
 
-/** Refuses a page laid out at a sheet or a printable area other than the declared one. */
 function checkPageBox(page: PageMeasurement, expected: ExpectedPageBox, pageNumber: number): void {
   const off =
     Math.abs(page.page.width - expected.width) > TOLERANCE_PX ||
@@ -92,12 +79,6 @@ function checkPageBox(page: PageMeasurement, expected: ExpectedPageBox, pageNumb
   }
 }
 
-/**
- * The worst flow overflow between one page and what was already found, bands refused on the way.
- *
- * A band over its reserve is a refusal: the reserve is a declared height, so no cut of the flow
- * gives it back. Only the root region yields an overflow the paginator can answer.
- */
 function worstFlowOverflow(
   page: PageMeasurement,
   pageNumber: number,
@@ -123,12 +104,7 @@ function worstFlowOverflow(
 }
 
 /**
- * Checks the composed sequence against what the browser really laid out, before anything is printed.
- *
- * A flow that reached past its slot is returned rather than thrown: it is the one divergence the
- * paginator can answer, by withholding that much height from the page and cutting again. Everything
- * else -- a missing page, a wrong sheet, a band over its reserve, an image that did not decode, a
- * box painted off the sheet -- is a refusal, because no cut of the flow would repair it.
+ * Validates measured layout against pagination expectations and returns any flow overflow to settle.
  */
 export function verifyLayout(
   paginated: PaginatedDocument,
