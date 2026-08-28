@@ -34,7 +34,14 @@ if (output === undefined) {
  * Production passes none. A container may need `--no-sandbox`, and both legs of a comparison must
  * then carry exactly the same list -- which is why it travels in the profile.
  */
-const launchArguments = flags.filter((flag) => flag.startsWith('--'));
+const stray = flags.filter((flag) => !flag.startsWith('--'));
+if (stray.length > 0) {
+  /* Refused rather than dropped: `-no-sandbox` for `--no-sandbox` would launch a browser the
+     operator believed was configured otherwise, and a recipe whose whole job is to attest an
+     environment must not start by quietly discarding part of what it was told. */
+  throw new Error(`unrecognised launch argument: ${stray.join(', ')}`);
+}
+const launchArguments = [...flags];
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 

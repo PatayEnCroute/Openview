@@ -42,8 +42,13 @@ export declare function profileOf(
   launchArguments: readonly string[],
 ): Promise<ReproducibilityProfile>;
 
-/** The profile written with its keys in a fixed order. */
-export declare function serializeProfile(profile: Readonly<Record<string, unknown>>): string;
+/**
+ * The profile written with its keys in a fixed order.
+ *
+ * Takes a whole profile, not a loose record: the body reads all thirteen fields and maps over
+ * `fonts`, so a partial object would type-check and then fail at run time.
+ */
+export declare function serializeProfile(profile: ReproducibilityProfile): string;
 
 /** The fields a profile must carry. A manifest missing one is not an attestation. */
 export declare const PROFILE_FIELDS: readonly string[];

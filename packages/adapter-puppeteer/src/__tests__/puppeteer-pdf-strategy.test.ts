@@ -245,6 +245,13 @@ describe('printing a real document', () => {
         modificationDate: '1970-01-01T00:00:00.000Z',
       });
       expect(await hasTrailerId(bytes)).toBe(false);
+      /* No second place for a timestamp to hide. This build of Chromium writes no XMP packet and
+         no `/Metadata` stream, so the info dictionary is the whole of what has to be fixed. If an
+         upgrade starts emitting one, this reddens and that upgrade decides how to canonicalise it
+         -- the assertion is not the thing to loosen. */
+      expect(raw).not.toContain('/Metadata');
+      expect(raw).not.toContain('xpacket');
+      expect(raw.toLowerCase()).not.toContain('xmp');
     },
     CHROMIUM_TIMEOUT_MS,
   );

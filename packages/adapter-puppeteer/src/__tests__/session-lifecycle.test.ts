@@ -46,6 +46,9 @@ const OBSERVATION = {
   markers: [],
 };
 
+/** What the font probe answers with when every declared face loaded. */
+const FONTS_LOADED = { declared: 12, broken: 0 };
+
 interface Recorder {
   readonly closedBrowser: () => number;
   readonly closedContext: () => number;
@@ -56,7 +59,10 @@ interface Recorder {
 }
 
 /** A puppeteer whose every step succeeds, unless a step is told to fail. */
-function fakePuppeteer(failing: 'context' | 'page' | 'none' = 'none'): Recorder {
+function fakePuppeteer(
+  failing: 'context' | 'page' | 'none' = 'none',
+  fonts: { declared: number; broken: number } = FONTS_LOADED,
+): Recorder {
   let closedBrowser = 0;
   let closedContext = 0;
   let closedPage = 0;
@@ -75,7 +81,16 @@ function fakePuppeteer(failing: 'context' | 'page' | 'none' = 'none'): Recorder 
     setContent: async () => {
       setContent += 1;
     },
-    evaluate: async (fn: unknown) => (typeof fn === 'function' ? OBSERVATION : undefined),
+    /* `load()` evaluates two different functions -- the font probe, then the collector -- and
+       answering the same value to both would leave `broken` undefined, so the guard would never
+       fire and these tests would pass by stepping around it. Told apart by what the serialised
+       source reads, rather than by a call counter that a reordering would silently break. */
+    evaluate: async (fn: unknown) => {
+      if (typeof fn !== 'function') {
+        return undefined;
+      }
+      return String(fn).includes('document.fonts') ? fonts : OBSERVATION;
+    },
     pdf: async () => ONE_PAGE_PDF,
     close: async () => {
       closedPage += 1;
@@ -178,6 +193,56 @@ describe('what a session closes when it cannot finish opening', () => {
     await session.close();
     const source = { html: '<html></html>', sheet: A4, images: [] };
     await expect(session.measure(source)).rejects.toThrow(DocumentRenderError);
+  });
+});
+
+describe('the faces the browser reports', () => {
+  it('measures a document whose every declared face loaded', async () => {
+    fakePuppeteer();
+    const session = await openPuppeteerSession(RESOURCES);
+    await expect(
+      session.measure({ html: '<html></html>', sheet: A4, images: [] }),
+    ).resolves.toBeDefined();
+    await session.close();
+  });
+
+  it.each([
+    ['one face of twelve', { declared: 12, broken: 1 }],
+    ['every face', { declared: 12, broken: 12 }],
+    ['the only face', { declared: 1, broken: 1 }],
+  ])('refuses to measure when %s failed to load', async (_name, fonts) => {
+    /* Without this the browser would lay the document out in whatever the machine has installed,
+       which is the substitution the engine embeds its own faces to prevent. */
+    fakePuppeteer('none', fonts);
+    const session = await openPuppeteerSession(RESOURCES);
+    const refused = session.measure({ html: '<html></html>', sheet: A4, images: [] });
+    await expect(refused).rejects.toThrow(DocumentRenderError);
+    await expect(refused).rejects.toThrow(/did not load in the browser/);
+    await session.close();
+  });
+
+  it('refuses to print, not only to measure, when a face failed to load', async () => {
+    fakePuppeteer('none', { declared: 12, broken: 1 });
+    const session = await openPuppeteerSession(RESOURCES);
+    await expect(session.print({ html: '<html></html>', sheet: A4, images: [] })).rejects.toThrow(
+      DocumentRenderError,
+    );
+    await session.close();
+  });
+
+  it('names how many faces the document declared, and nothing of the document', async () => {
+    fakePuppeteer('none', { declared: 7, broken: 2 });
+    const session = await openPuppeteerSession(RESOURCES);
+    let refused: DocumentRenderError | undefined;
+    try {
+      await session.measure({ html: '<html>secret</html>', sheet: A4, images: [] });
+    } catch (error: unknown) {
+      refused = error instanceof DocumentRenderError ? error : undefined;
+    }
+    expect(refused?.code).toBe('layout-measurement-failed');
+    expect(refused?.details.limit).toBe(7);
+    expect(`${refused?.message} ${JSON.stringify(refused?.details)}`).not.toContain('secret');
+    await session.close();
   });
 });
 

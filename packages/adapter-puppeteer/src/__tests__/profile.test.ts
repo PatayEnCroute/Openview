@@ -90,8 +90,24 @@ describe('the shape of a reproducibility profile', () => {
   });
 
   it('serialises its keys in a fixed order, whatever order they were built in', () => {
-    const shuffled = Object.fromEntries(Object.entries(PROFILE).reverse());
-    expect(serializeProfile(shuffled)).toBe(serializeProfile(PROFILE));
+    /* The same profile with every key written in the opposite order. Spelt out rather than
+       shuffled at run time, so it is still a whole profile and the compiler says so. */
+    const reversed: typeof PROFILE = {
+      launchArguments: PROFILE.launchArguments,
+      pdfCanonicalizer: PROFILE.pdfCanonicalizer,
+      fonts: PROFILE.fonts,
+      chromium: PROFILE.chromium,
+      puppeteer: PROFILE.puppeteer,
+      adapter: PROFILE.adapter,
+      engine: PROFILE.engine,
+      unicode: PROFILE.unicode,
+      icu: PROFILE.icu,
+      v8: PROFILE.v8,
+      node: PROFILE.node,
+      architecture: PROFILE.architecture,
+      platform: PROFILE.platform,
+    };
+    expect(serializeProfile(reversed)).toBe(serializeProfile(PROFILE));
     const keys = [...serializeProfile(PROFILE).matchAll(/^ {2}"([a-zA-Z0-9]+)":/gm)].map(
       (match) => match[1],
     );
