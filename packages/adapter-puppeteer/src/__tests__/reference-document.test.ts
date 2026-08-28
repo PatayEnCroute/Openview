@@ -327,13 +327,19 @@ describe('the paginated recette: sixty lines on the same model', () => {
   /** Everything one sheet of the printed document holds, split on the boxes themselves. */
   const sheets = (html: string): readonly string[] => html.split('class="ov-page"').slice(1);
 
+  /** `value` on every sheet but the last, `other` on it: the shape a band domain really states. */
+  const exceptLast = (total: number, value: number, other: number): readonly number[] => [
+    ...Array(total - 1).fill(value),
+    other,
+  ];
+
   for (const appearance of APPEARANCES) {
     it(
-      `prints ${appearance.name} on exactly four A4 sheets`,
+      `prints ${appearance.name} on exactly ${appearance.sheets} A4 sheets`,
       async () => {
         const { bytes } = await renderSixty(appearance);
         const { pages, sizes } = await inspectPdf(bytes);
-        expect(pages).toBe(4);
+        expect(pages).toBe(appearance.sheets);
         for (const size of sizes) {
           expect(Math.abs(size.width - 210 * PT_PER_MM)).toBeLessThan(0.5);
           expect(Math.abs(size.height - 297 * PT_PER_MM)).toBeLessThan(0.5);
@@ -347,9 +353,15 @@ describe('the paginated recette: sixty lines on the same model', () => {
     'repeats the column header on every sheet the table reaches',
     async () => {
       const { html } = (await renderSixty(FRAMED)).printed;
-      expect(count(html, 'class="ov-page"')).toBe(4);
-      expect(count(html, 'data-openview-node="head"')).toBe(4);
-      for (const sheet of sheets(html)) {
+      expect(count(html, 'class="ov-page"')).toBe(FRAMED.sheets);
+      /* On every sheet the table reaches, and on no other: the tail of the statement may need a
+         sheet of its own after the last row, and no header is repeated onto it. */
+      const carrying = sheets(html).filter(
+        (sheet) => count(sheet, 'data-openview-node="detail"') > 0,
+      );
+      expect(carrying.length).toBeGreaterThan(1);
+      expect(count(html, 'data-openview-node="head"')).toBe(carrying.length);
+      for (const sheet of carrying) {
         expect(count(sheet, 'data-openview-node="head"')).toBe(1);
       }
     },
@@ -364,9 +376,12 @@ describe('the paginated recette: sixty lines on the same model', () => {
       const written = [...html.matchAll(/>(\d{3}) - /g)].map((match) => match[1]);
       expect(written).toHaveLength(60);
       expect(written).toStrictEqual([...written].sort());
-      for (const sheet of sheets(html)) {
-        expect(count(sheet, 'data-openview-node="detail"')).toBeGreaterThan(0);
-      }
+      /* The sheets carrying rows are the leading run: no sheet in the middle of the table is
+         empty of them, even if the statement needs one more sheet after the last row. */
+      const carried = sheets(html).map((sheet) => count(sheet, 'data-openview-node="detail"'));
+      const rowed = carried.filter((one) => one > 0).length;
+      expect(carried.slice(0, rowed).every((one) => one > 0)).toBe(true);
+      expect(carried.slice(rowed).every((one) => one === 0)).toBe(true);
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -379,14 +394,16 @@ describe('the paginated recette: sixty lines on the same model', () => {
       expect(count(html, 'data-openview-node="totals"')).toBe(1);
       expect(count(html, 'data-openview-node="dates"')).toBe(1);
       /* The footer of the table follows the body: it is on the last sheet the table reaches. */
-      const last = sheets(html).at(-1) ?? '';
-      expect(count(last, 'data-openview-node="total"')).toBe(1);
+      const reaching = sheets(html).filter(
+        (sheet) => count(sheet, 'data-openview-node="detail"') > 0,
+      );
+      expect(count(reaching.at(-1) ?? '', 'data-openview-node="total"')).toBe(1);
     },
     CHROMIUM_TIMEOUT_MS,
   );
 
   it(
-    'numbers the sheets one to four and shows the same count on all of them',
+    'numbers every sheet in order and shows the same count on all of them',
     async () => {
       const { html } = (await renderSixty(FRAMED)).printed;
       /* Read by REGION, not by rank: a sheet holds a report marker in its top band and the two
@@ -401,15 +418,14 @@ describe('the paginated recette: sixty lines on the same model', () => {
         );
       };
 
-      expect(sheets(html).map((sheet) => markersIn(sheet, 'footer'))).toStrictEqual([
-        ['1', '4'],
-        ['2', '4'],
-        ['3', '4'],
-        ['4', '4'],
-      ]);
+      const total = sheets(html).length;
+      expect(sheets(html).map((sheet) => markersIn(sheet, 'footer'))).toStrictEqual(
+        Array.from({ length: total }, (_, at) => [String(at + 1), String(total)]),
+      );
       /* One report box on every sheet but the first, whose band domain excludes it. */
       expect(sheets(html).map((sheet) => markersIn(sheet, 'header').length)).toStrictEqual([
-        0, 1, 1, 1,
+        0,
+        ...Array(total - 1).fill(1),
       ]);
       /* Nothing of the measuring pass survives: no placeholder digit and no unresolved marker. */
       expect(html).not.toContain('pageField');
@@ -427,17 +443,18 @@ describe('the paginated recette: sixty lines on the same model', () => {
       const final = sheets(html).map((sheet) =>
         count(sheet, 'data-openview-node="final-foot-num"'),
       );
-      expect(running).toStrictEqual([1, 1, 1, 0]);
-      expect(final).toStrictEqual([0, 0, 0, 1]);
-      /* `firstOnly` plus `exceptFirst` covers every sheet exactly once, so the banner appears
-         four times even though no single domain names all four. */
-      expect(count(html, 'data-openview-node="stripe"')).toBe(4);
+      const total = sheets(html).length;
+      expect(running).toStrictEqual(exceptLast(total, 1, 0));
+      expect(final).toStrictEqual(exceptLast(total, 0, 1));
+      /* `firstOnly` plus `exceptFirst` covers every sheet exactly once, so the banner appears on
+         each of them even though no single domain names them all. */
+      expect(count(html, 'data-openview-node="stripe"')).toBe(total);
     },
     CHROMIUM_TIMEOUT_MS,
   );
 
   it(
-    'reserves the same height for each band on all four sheets',
+    'reserves the same height for each band on all five sheets',
     async () => {
       const { printed, measured } = await renderSixty(FRAMED);
       const last = measured.at(-1);
@@ -512,8 +529,9 @@ describe('the paginated recette: sixty lines on the same model', () => {
       const { html } = (await renderSixty(FRAMED)).printed;
       const counted = (nodeId: string) =>
         sheets(html).map((sheet) => count(sheet, `data-openview-node="${nodeId}"`));
-      expect(counted('final-foot-notice')).toStrictEqual([0, 0, 0, 1]);
-      expect(counted('final-foot-payment')).toStrictEqual([0, 0, 0, 1]);
+      const total = sheets(html).length;
+      expect(counted('final-foot-notice')).toStrictEqual(exceptLast(total, 0, 1));
+      expect(counted('final-foot-payment')).toStrictEqual(exceptLast(total, 0, 1));
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -644,12 +662,12 @@ describe('the C11 recette: a gridded heading and three page layers on the same m
   );
 
   it(
-    'prints four sheets, each carrying the three layers in paint order',
+    'prints five sheets, each carrying the three layers in paint order',
     async () => {
       const { bytes, printed } = await renderLayered(true);
-      expect((await inspectPdf(bytes)).pages).toBe(4);
+      expect((await inspectPdf(bytes)).pages).toBe(5);
       const perSheet = sheets(printed.html);
-      expect(perSheet).toHaveLength(4);
+      expect(perSheet).toHaveLength(5);
       for (const sheet of perSheet) {
         const paper = sheet.indexOf('data-openview-node="paper"');
         const watermark = sheet.indexOf('data-openview-node="watermark"');
@@ -791,7 +809,7 @@ describe('the E4 recette: the same statement in two writings', () => {
     ['French words and euros', 'fr', FRENCH_VALUES] as const,
     ['English words and dollars', 'en', ENGLISH_VALUES] as const,
   ])(
-    'prints %s on exactly four A4 sheets',
+    'prints %s on exactly five A4 sheets',
     async (_label, language, values) => {
       // A successful render IS the no-clipping assertion: the pipeline refuses on any marker whose
       // value overflowed its reserved box, so a localised figure one character too wide would have
@@ -800,7 +818,7 @@ describe('the E4 recette: the same statement in two writings', () => {
       const { pages, sizes } = await inspectPdf(bytes);
 
       expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
-      expect(pages).toBe(4);
+      expect(pages).toBe(5);
       for (const size of sizes) {
         expect(Math.abs(size.width - 210 * PT_PER_MM)).toBeLessThan(0.5);
         expect(Math.abs(size.height - 297 * PT_PER_MM)).toBeLessThan(0.5);
@@ -810,7 +828,7 @@ describe('the E4 recette: the same statement in two writings', () => {
   );
 
   it(
-    'carries the report forward on sheets two to four, localised AFTER rounding',
+    'carries the report forward on sheets two to five, localised AFTER rounding',
     async () => {
       // The oracle is derived from the printed sheets, rounded the way the model declared, then
       // written with the formatter of THIS build -- never compared with a pinned currency string.
@@ -820,7 +838,7 @@ describe('the E4 recette: the same statement in two writings', () => {
         carried: markersIn(sheet, 'header'),
       }));
 
-      expect(perSheet).toHaveLength(4);
+      expect(perSheet).toHaveLength(5);
       expect(perSheet[0]?.carried).toStrictEqual([]);
       let running = 0;
       for (const [index, sheet] of perSheet.entries()) {
@@ -919,12 +937,10 @@ describe('the E4 recette: the same statement in two writings', () => {
     async () => {
       const { html } = (await render('fr', FRENCH_VALUES)).printed;
 
-      expect(sheets(html).map((sheet) => markersIn(sheet, 'footer'))).toStrictEqual([
-        ['1', '4'],
-        ['2', '4'],
-        ['3', '4'],
-        ['4', '4'],
-      ]);
+      const total = sheets(html).length;
+      expect(sheets(html).map((sheet) => markersIn(sheet, 'footer'))).toStrictEqual(
+        Array.from({ length: total }, (_, at) => [String(at + 1), String(total)]),
+      );
       /* Nothing of the measuring pass survives: no placeholder and no unresolved marker. */
       expect(html).not.toContain('pageField');
     },

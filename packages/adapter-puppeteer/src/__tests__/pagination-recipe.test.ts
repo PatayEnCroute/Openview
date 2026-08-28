@@ -56,6 +56,10 @@ const sheets = (html: string): readonly string[] => html.split('class="ov-page"'
 const idsOn = (page: { readonly placements: readonly PagePlacement[] }, role: string): string[] =>
   page.placements.filter((one) => one.role === role).map((one) => one.occurrence.nodeId);
 
+/** The one-based ranks of a run of pages, so an assertion states a shape rather than a count. */
+const ranksOf = (from: number, to: number): readonly number[] =>
+  Array.from({ length: to - from + 1 }, (_, at) => from + at);
+
 /** The pages a declaration is placed on, one-based, read from the manifest alone. */
 const pagesOf = (result: PaginationResult, nodeId: string): readonly number[] =>
   result.pages
@@ -65,11 +69,12 @@ const pagesOf = (result: PaginationResult, nodeId: string): readonly number[] =>
 describe('the recette of E5: sixty lines, explained without a pdf', () => {
   for (const appearance of APPEARANCES) {
     it(
-      `announces four pages for ${appearance.name} and prints nothing`,
+      `announces ${appearance.sheets} pages for ${appearance.name} and prints nothing`,
       async () => {
         const { result } = await sixty(appearance);
-        expect(result.pages.map((page) => page.number)).toStrictEqual([1, 2, 3, 4]);
-        expect(count(result.html, 'class="ov-page"')).toBe(4);
+        const ranks = Array.from({ length: appearance.sheets }, (_, at) => at + 1);
+        expect(result.pages.map((page) => page.number)).toStrictEqual(ranks);
+        expect(count(result.html, 'class="ov-page"')).toBe(appearance.sheets);
         expect(result.sheet).toStrictEqual({ width: 210, height: 297 });
       },
       CHROMIUM_TIMEOUT_MS,
@@ -100,22 +105,32 @@ describe('the recette of E5: sixty lines, explained without a pdf', () => {
       );
       expect(perPage).toStrictEqual(painted);
       expect(perPage.reduce((total, one) => total + one, 0)).toBe(60);
-      expect(perPage.every((one) => one > 0)).toBe(true);
+      /* Every sheet the table reaches carries rows, and they are the leading run of sheets: the
+         tail of the statement may need one more sheet after the last row, but no sheet in the
+         middle of the table may be empty of them. */
+      expect(pagesOf(result, 'rows')).toStrictEqual(
+        ranksOf(1, perPage.filter((one) => one > 0).length),
+      );
     },
     CHROMIUM_TIMEOUT_MS,
   );
 
   it(
-    'tells the repeated column header apart from the body rows on all four pages',
+    'tells the repeated column header apart from the body rows on every page',
     async () => {
       const { result } = await sixty(FRAMED);
+      const reached = pagesOf(result, 'rows');
+      expect(reached.length).toBeGreaterThan(1);
       for (const page of result.pages) {
-        expect(idsOn(page, 'table-header')).toContain('head');
-        expect(idsOn(page, 'flow')).toContain('detail');
+        const carriesTable = reached.includes(page.number);
+        const sheet = sheets(result.html)[page.number - 1] ?? '';
+        expect(idsOn(page, 'table-header').includes('head')).toBe(carriesTable);
+        expect(count(sheet, 'data-openview-node="head"')).toBe(carriesTable ? 1 : 0);
+        /* The repeated header is never a body row, on any sheet that carries the table. */
         expect(idsOn(page, 'flow')).not.toContain('head');
-        expect(count(sheets(result.html)[page.number - 1] ?? '', 'data-openview-node="head"')).toBe(
-          1,
-        );
+        if (carriesTable) {
+          expect(idsOn(page, 'flow')).toContain('detail');
+        }
       }
     },
     CHROMIUM_TIMEOUT_MS,
@@ -125,10 +140,12 @@ describe('the recette of E5: sixty lines, explained without a pdf', () => {
     'marks the table as cut on the pages it continues, and whole nowhere',
     async () => {
       const { result } = await sixty(FRAMED);
-      const edges = result.pages.map(
-        (page) => page.placements.find((one) => one.occurrence.nodeId === 'rows')?.fragment,
-      );
-      expect(edges).toStrictEqual(['first', 'middle', 'middle', 'last']);
+      const edges = result.pages
+        .map((page) => page.placements.find((one) => one.occurrence.nodeId === 'rows')?.fragment)
+        .filter((edge) => edge !== undefined);
+      const middles = edges.length - 2;
+      expect(middles).toBeGreaterThan(0);
+      expect(edges).toStrictEqual(['first', ...Array(middles).fill('middle'), 'last']);
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -137,9 +154,13 @@ describe('the recette of E5: sixty lines, explained without a pdf', () => {
     'puts each band on the pages its declared domain names, and under the band role',
     async () => {
       const { result } = await sixty(FRAMED);
-      expect(pagesOf(result, 'stripe-carried')).toStrictEqual([2, 3, 4]);
-      expect(pagesOf(result, 'running-foot-num')).toStrictEqual([1, 2, 3]);
-      expect(pagesOf(result, 'final-foot-num')).toStrictEqual([4]);
+      const last = result.pages.length;
+      /* Relational, not absolute: the domains are "every sheet but the first", "every sheet but
+         the last" and "the last sheet", and a change of face may change how many sheets there are
+         without changing any of the three. */
+      expect(pagesOf(result, 'stripe-carried')).toStrictEqual(ranksOf(2, last));
+      expect(pagesOf(result, 'running-foot-num')).toStrictEqual(ranksOf(1, last - 1));
+      expect(pagesOf(result, 'final-foot-num')).toStrictEqual([last]);
       for (const page of result.pages) {
         expect(idsOn(page, 'page-band')).toContain('stripe');
       }
@@ -148,7 +169,7 @@ describe('the recette of E5: sixty lines, explained without a pdf', () => {
           .filter((one) => one.occurrence.nodeId === 'running-foot-num')
           .map((one) => one.region),
       );
-      expect(regions).toStrictEqual(['footer', 'footer', 'footer']);
+      expect(regions).toStrictEqual(Array(last - 1).fill('footer'));
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -264,11 +285,11 @@ describe('the two writings of E4, paginated', () => {
     ['French words and euros', 'fr', FRENCH_VALUES] as const,
     ['English words and dollars', 'en', ENGLISH_VALUES] as const,
   ])(
-    'explains %s over four pages from the same stored template',
+    'explains %s over five pages from the same stored template',
     async (_label, language, values) => {
       const { result } = await diagonal(language, values);
-      expect(result.pages).toHaveLength(4);
-      expect(count(result.html, 'class="ov-page"')).toBe(4);
+      expect(result.pages).toHaveLength(5);
+      expect(count(result.html, 'class="ov-page"')).toBe(5);
       expect(
         result.pages.map((page) => page.report.completedBy.length).reduce((a, b) => a + b),
       ).toBe(60);

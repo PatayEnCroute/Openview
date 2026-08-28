@@ -348,6 +348,13 @@ export interface Appearance {
   readonly body: Record<string, unknown>;
   readonly accent: Record<string, unknown>;
   readonly noticeAlign: 'start' | 'end' | 'justify';
+  /**
+   * How many A4 sheets the sixty-line statement takes in this appearance.
+   *
+   * A measured consequence of the declared faces, not a target: the two appearances set the same
+   * sixty rows in two families of different metrics, so they do not fill the same number of sheets.
+   */
+  readonly sheets: number;
 }
 
 export const FRAMED: Appearance = {
@@ -366,10 +373,11 @@ export const FRAMED: Appearance = {
   table: { border: { bottom: { width: 0.28, color: '#1b3a6f' } } },
   headRule: { bottom: { width: 0.28, color: '#1b3a6f' } },
   firstRowRule: { top: { width: 1.2, color: '#1b3a6f' } },
-  title: { family: 'Georgia', sizePt: 16, bold: true, color: '#1b3a6f' },
-  body: { family: 'Georgia', sizePt: 8, color: '#22262b' },
+  title: { family: 'Noto Serif', sizePt: 16, bold: true, color: '#1b3a6f' },
+  body: { family: 'Noto Serif', sizePt: 8, color: '#22262b' },
   accent: { bold: true, color: '#1b3a6f' },
   noticeAlign: 'start',
+  sheets: 5,
 };
 
 export const BARE: Appearance = {
@@ -379,10 +387,11 @@ export const BARE: Appearance = {
   table: { background: '#FDF7F4' },
   headRule: { bottom: { width: 1.2, color: '#8C3A1B' } },
   firstRowRule: { top: { width: 0.28, color: '#8C3A1B' } },
-  title: { family: 'Arial', sizePt: 13, italic: true, color: '#8C3A1B' },
-  body: { family: 'Arial', sizePt: 7.5, color: '#3A3A3A' },
+  title: { family: 'Noto Sans', sizePt: 13, italic: true, color: '#8C3A1B' },
+  body: { family: 'Noto Sans', sizePt: 7.5, color: '#3A3A3A' },
   accent: { color: '#8C3A1B' },
   noticeAlign: 'justify',
+  sheets: 4,
 };
 
 /** The contract refuses an empty style object: the canonical spelling of "no style" is no field. */
