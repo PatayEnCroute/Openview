@@ -116,7 +116,7 @@ describe('the report a page carries in', () => {
         },
       ],
     };
-    expect(completedOn([smuggled]).map((one) => one.value)).not.toContain(1000);
+    expect(completedOn([smuggled]).map((one) => one.pageReport?.value)).not.toContain(1000);
     expect(completedOn([smuggled])).toStrictEqual(completedOn([table]));
   });
 
@@ -189,7 +189,7 @@ describe('the report a page carries in', () => {
     /* The order the fragments hand them over, page by page, really is not the order of the ranks. */
     const walked = paginated.pages
       .flatMap((page) => completedOn(page.root))
-      .map((one) => one.order);
+      .map((one) => one.pageReport?.order);
     expect(walked).toStrictEqual([1, 2, 0, 3, 4]);
 
     const last = incoming(paginated).at(-1);
@@ -312,7 +312,9 @@ describe('a contributing row inside another table', () => {
 
   it('counts each contribution once across the whole run', () => {
     const paginated = paginateOnGrid(materializedOf({ page: gridPage(2), ...flow([nested]) }, {}));
-    const keys = paginated.pages.flatMap((page) => completedOn(page.root)).map((one) => one.key);
+    const keys = paginated.pages
+      .flatMap((page) => completedOn(page.root))
+      .map((one) => one.pageReport?.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
 });

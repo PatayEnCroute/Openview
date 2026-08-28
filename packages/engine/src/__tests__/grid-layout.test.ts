@@ -106,7 +106,8 @@ describe('the materialisation of a grid', () => {
         presentations: createPresentationSession(undefined, undefined),
         region: 'root',
         column: undefined,
-        path: [],
+        declarationPath: [],
+        iterations: [],
       }),
     );
     expect(refusal.code).toBe('template-refused');

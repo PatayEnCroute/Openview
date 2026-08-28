@@ -32,7 +32,9 @@ const PLACEHOLDER: MaterialBlock = {
   kind: 'text',
   key: 'absent',
   nodeId: 'absent',
-  path: [],
+  nodeType: 'text',
+  declarationPath: [],
+  iterations: [],
   box: undefined,
   keepTogether: false,
   align: 'start',
@@ -438,7 +440,12 @@ describe('loops, conditions and images', () => {
       ]),
     );
     expect(blocks.map((block) => joined(textAt([block], 0)))).toStrictEqual(['A-1', 'B-2']);
-    expect(blocks[1]?.path).toStrictEqual(['root', 'children', 0, 1, 'children', 0]);
+    /* The declaration path holds no rank of its own; the rank travels in the ancestry beside it. */
+    expect(blocks[1]?.declarationPath).toStrictEqual(['root', 'children', 0, 'children', 0]);
+    expect(blocks[1]?.iterations).toStrictEqual([
+      { declarationPath: ['root', 'children', 0], index: 1 },
+    ]);
+    expect(blocks[1]?.nodeType).toBe('text');
   });
 
   it('produces no occurrence for an absent sequence', () => {
@@ -735,7 +742,8 @@ describe('exhaustive traversal', () => {
     presentations: createPresentationSession(undefined, undefined),
     region: 'root' as const,
     column: undefined,
-    path: [] as readonly (string | number)[],
+    declarationPath: [] as readonly (string | number)[],
+    iterations: [],
   };
 
   it('refuses a row that reached the block flow', () => {

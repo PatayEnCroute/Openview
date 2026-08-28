@@ -205,8 +205,9 @@ contredirait l'arrondi déclaré est refusée plutôt que corrigée.
 > ⛔ **Ce que E4 n'a PAS livré et qui revient à E5 / viewer :** l'attente **E4-9**, « le même
 > ICU à l'aperçu et au rendu ». E4 vérifie le PDF avec l'ICU du processus qui construit
 > l'HTML ; aucun aperçu public n'existe encore, donc l'égalité n'est pas déclarée livrée.
+> **Depuis E5, la moitié moteur est tenue** — voir ci-dessous.
 
-### E5. Le moteur sait dire où il coupe
+### E5. Le moteur sait dire où il coupe ✅
 
 **Pourquoi.** La promesse retenue est un **aperçu identique au PDF, garanti**. Elle
 n'est tenable que si le moteur ne se contente pas de produire un fichier, mais sait
@@ -218,6 +219,39 @@ garantie tombe.
 pages et ce que chacune contient », sans produire le PDF.
 
 **Poids :** M — **Dépend de :** E3 — **Condition de : J4**
+
+> ✅ **Livré le 2026-08-28** — [ADR 0018](../adr/0018-le-moteur-sait-dire-ou-il-coupe.md).
+> `createPaginationPort(strategy, options)` rend un `PaginationResult` sans produire un octet de
+> PDF. La surface exacte, dans `@openview/core` pour qu'un paquet navigateur l'importe **sans
+> dépendre de `engine`** :
+>
+> - `sheet` et l'**HTML autonome**, celui-là même que le port PDF remet à l'imprimeur — égalité
+>   octet pour octet, prouvée sur le fake et sur Chromium ;
+> - `pages[]`, chacune avec la liste **plate et ordonnée** de ce qu'elle peint : occurrence,
+>   région (`background`/`header`/`root`/`footer`/`foreground`), rôle (`flow`, `page-band`,
+>   `table-header`, `page-layer`) et état du fragment (`whole`/`first`/`middle`/`last`) ;
+> - `report` par page : le cumul **brut** entrant et les lignes contributrices qui s'y achèvent ;
+> - `notices[]` : les replis `keepTogether` de la suite **acceptée**, un par occurrence.
+>
+> Une occurrence est adressée par un **chemin de déclaration** et une **ascendance d'itération**
+> séparés : deux boucles imbriquées et des `id` dupliqués produisent des adresses distinctes, et
+> deux rendus identiques les mêmes. Aucune clé de mesure, aucun curseur, aucune métrique et aucune
+> valeur liée ne traversent le contrat.
+>
+> **Recette mesurée** : la facture de soixante lignes rend **quatre pages** dans les deux
+> apparences et dans les deux diagonales E4 (fr/EUR, en/USD) ; chaque ligne de détail est attribuée
+> à la page dont le `<tr>` la peint ; l'en-tête de table répété, les quatre domaines de bande et les
+> deux plans de calque sont distingués ; un document hostile reste inerte et hors ligne dans un
+> `iframe srcdoc sandbox=""` réel. Le manifeste pèse **1,01 fois** la source qu'il explique.
+> **Quinze ablations jouées, quinze tuées.**
+
+> ✅ **E4-9 est fermée côté moteur.** Les caractères ICU sont écrits une fois, avant la
+> sérialisation, et le contrat ne transporte ni locale, ni clé d'écriture, ni valeur brute : il n'y
+> a rien à reformater de l'autre côté. **La moitié viewer reste ouverte** jusqu'à ce que V1 affiche
+> cette source sans la retoucher et que V3 la compare au PDF.
+
+> ⚠️ **J4 n'est pas atteint.** E5 en est une *condition*. V1 à V3 restent propriétaires de
+> l'encastrement, de la navigation et de la comparaison visuelle automatique.
 
 ### E6. Le même document, à chaque fois
 

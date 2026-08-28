@@ -6,21 +6,22 @@ import type {
 } from '../document/types.js';
 import { refusal } from '../errors.js';
 import type { CellFragment, MaterialFragment, TableFragment } from './types.js';
+import { visitFragment } from './visit.js';
 import { wholeFragment } from './whole.js';
 
 const NOT_FINITE =
   'The contributions a page carries forward add up to something that is not a finite number, so no page report can be written from them. Read `details.pageNumber` for the page involved; the values themselves are deliberately not repeated.';
 
 /**
- * The contributions whose row FINISHED on this page, in the order the fragments carry them.
+ * The contributing rows that FINISHED on this page, in the order the fragments carry them.
  *
  * A row that spans several pages is counted once, on the page carrying its last fragment: an amount
  * counted where the row started would be carried forward before the row it belongs to was printed.
  * A repeated header is never a source, and a set of keys makes a second visit of one occurrence
  * impossible.
  */
-export function completedOn(fragments: readonly MaterialFragment[]): readonly MaterialPageReport[] {
-  const found: MaterialPageReport[] = [];
+export function completedOn(fragments: readonly MaterialFragment[]): readonly MaterialRow[] {
+  const found: MaterialRow[] = [];
   const seen = new Set<string>();
 
   const cells = (list: readonly CellFragment[]): void => {
@@ -40,7 +41,7 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
         !seen.has(contribution.key)
       ) {
         seen.add(contribution.key);
-        found.push(contribution);
+        found.push(row.source);
       }
       /* Descended whatever the edge, not only on the finishing ones: a table nested in a cell has
          rows of its own, and one of them may finish here while the row holding it does not. */
@@ -48,31 +49,45 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
     }
   };
 
-  function walk(list: readonly MaterialFragment[]): void {
+  const walk = (list: readonly MaterialFragment[]): void => {
     for (const fragment of list) {
-      if (fragment.kind === 'container') {
-        walk(fragment.children);
-      }
-      if (fragment.kind === 'table') {
-        table(fragment);
-      }
-      if (fragment.kind === 'grid') {
+      visitFragment(fragment, {
+        text: () => undefined,
+        image: () => undefined,
+        container: (container) => walk(container.children),
+        table,
         /* A grid is atomic, so every zone -- and every contributing row inside one -- finishes on
            the page that holds the grid. */
-        walk(fragment.source.items.map((item) => wholeFragment(item.content)));
-      }
+        grid: (grid) => walk(grid.source.items.map((item) => wholeFragment(item.content))),
+      });
     }
-  }
+  };
 
   walk(fragments);
   return found;
 }
 
+const rankOf = (row: MaterialRow): number => row.pageReport?.order ?? 0;
+
+/** The same rows, ranked the way they were materialised rather than the way a page walks them. */
+const byContribution = (rows: readonly MaterialRow[]): readonly MaterialRow[] =>
+  [...rows].sort((left, right) => rankOf(left) - rankOf(right));
+
+/** The contributions the rows carry, in the rank they were materialised at. */
+function contributionsOf(rows: readonly MaterialRow[]): readonly MaterialPageReport[] {
+  const carried: MaterialPageReport[] = [];
+  for (const row of byContribution(rows)) {
+    if (row.pageReport !== undefined) {
+      carried.push(row.pageReport);
+    }
+  }
+  return carried;
+}
+
 /** Adds the terms in the rank they were materialised at, and refuses a total that is not finite. */
-function totalOf(carried: readonly MaterialPageReport[], pageNumber: number): number {
-  const ordered = [...carried].sort((left, right) => left.order - right.order);
+function totalOf(carried: readonly MaterialRow[], pageNumber: number): number {
   let total = 0;
-  for (const contribution of ordered) {
+  for (const contribution of contributionsOf(carried)) {
     total += contribution.value;
   }
   if (!Number.isFinite(total)) {
@@ -130,10 +145,17 @@ export function reportMagnitudeBound(document: MaterialDocument): number {
   return Number.isFinite(total) ? total : Number.MAX_VALUE;
 }
 
-/** One page's fragments, with the raw total the pages before it carry into them. */
+/**
+ * One page's fragments, the raw total the pages before it carry in, and what closed the boundary.
+ *
+ * Both facts come from the same walk on purpose: the sum a marker writes and the rows a caller is
+ * told about it can never name two different sets of contributions.
+ */
 export interface ReportedPage {
   readonly root: readonly MaterialFragment[];
   readonly incomingReport: number;
+  /** The contributing rows whose occurrence FINISHED on this page, in contribution order. */
+  readonly completedBy: readonly MaterialRow[];
 }
 
 /**
@@ -143,11 +165,18 @@ export function withIncomingReports(
   roots: readonly (readonly MaterialFragment[])[],
 ): readonly ReportedPage[] {
   const reported: ReportedPage[] = [];
-  const carried: MaterialPageReport[] = [];
+  const carried: MaterialRow[] = [];
 
   for (const [index, root] of roots.entries()) {
-    reported.push({ root, incomingReport: index === 0 ? 0 : totalOf(carried, index + 1) });
-    carried.push(...completedOn(root));
+    const completed = completedOn(root);
+    reported.push({
+      root,
+      incomingReport: index === 0 ? 0 : totalOf(carried, index + 1),
+      /* Ranked, not left in walk order: a table nested in a cell finishes rows out of the order the
+         enclosing flow visits them, and what a caller reads must be the order the sum used. */
+      completedBy: byContribution(completed),
+    });
+    carried.push(...completed);
   }
   return reported;
 }

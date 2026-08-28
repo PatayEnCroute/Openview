@@ -330,7 +330,14 @@ describe('a marked group of table rows', () => {
       'entries',
       'entries',
     ]);
-    expect(table.body.map((row) => row.keptGroup?.path.at(-1))).toStrictEqual([0, 1, 2]);
+    expect(table.body.map((row) => row.keptGroup?.iterations.at(-1)?.index)).toStrictEqual([
+      0, 1, 2,
+    ]);
+    expect(table.body.map((row) => row.keptGroup?.nodeType)).toStrictEqual([
+      'tableRowGroup',
+      'tableRowGroup',
+      'tableRowGroup',
+    ]);
   });
 
   it('leaves an unmarked group as a plain sequence of rows', () => {

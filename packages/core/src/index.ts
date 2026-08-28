@@ -277,6 +277,36 @@ export {
   SheetSchema,
   STANDARD_SHEETS_MM,
 } from './page/page.js';
+export type {
+  FragmentState,
+  IterationAddress,
+  KeepTogetherFallbackNotice,
+  OccurrenceAddress,
+  OccurrenceReference,
+  PagePlacement,
+  PageReportResult,
+  PaginationNotice,
+  PaginationNoticeCode,
+  PaginationPageResult,
+  PaginationPort,
+  PaginationRegion,
+  PaginationResult,
+  PlacementRole,
+} from './ports/pagination/pagination.js';
+export {
+  FRAGMENT_STATES,
+  IterationAddressSchema,
+  KeepTogetherFallbackNoticeSchema,
+  OccurrenceReferenceSchema,
+  PAGINATION_NOTICE_CODES,
+  PAGINATION_REGIONS,
+  PagePlacementSchema,
+  PageReportResultSchema,
+  PaginationNoticeSchema,
+  PaginationPageResultSchema,
+  PaginationResultSchema,
+  PLACEMENT_ROLES,
+} from './ports/pagination/pagination.js';
 export type { RenderFormat, RenderPort, RenderRequest, RenderResult } from './ports/render.js';
 export type { TemplateStoragePort } from './ports/storage.js';
 export type {

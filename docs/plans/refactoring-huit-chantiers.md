@@ -37,7 +37,7 @@ ou fragilisent un lot devant nous ; les quatre suivants sont de l'hygiène.
 | CH1 | `MaterialBlock` sans Visiteur | structurel | AGENTS.md §3.B ; la marge de la porte des branches |
 | CH2 | `measure.ts` hors de portée de la mesure | risque | E6, E7 |
 | CH3 | La forme d'un nœud écrite trois fois | dérive silencieuse | le contrat de `collectDataPaths` — **livré**, [plan](ch3-la-forme-d-un-noeud.md) |
-| CH4 | Le CSS du moteur réécrit ailleurs | bloque un lot promis | viewer V2 et V3 |
+| CH4 | Le CSS du moteur réécrit ailleurs | dette playground | **reclassé par E5** — voir §CH4 |
 | CH5 | `App.tsx`, 2 303 lignes sans test | maintenabilité | AGENTS.md §1.6 |
 | CH6 | `core/index.ts` réénuméré à la main | frottement | le comptage manuel du barrel |
 | CH7 | Deux modules de 600 lignes | hygiène | AGENTS.md §2 |
@@ -250,6 +250,22 @@ condition est booléen », « une contribution de report est un nombre » — ne
 
 ### CH4 — Le CSS du moteur est réécrit ailleurs, avec des décisions opposées
 
+> 🔻 **Reclassé le 2026-08-28 par E5** ([ADR 0018](../adr/0018-le-moteur-sait-dire-ou-il-coupe.md)).
+> Ce chantier n'est **plus un préalable au viewer**. Le raisonnement « le viewer butera sur le même
+> mur et produira une quatrième orthographe du même CSS » supposait qu'un paquet navigateur doive
+> *écrire* le CSS du document. E5 tranche autrement : le viewer reçoit l'**HTML autonome du moteur**,
+> style compris, et l'affiche dans un contexte isolé sans le retoucher. Il n'écrit aucun CSS de
+> document, donc il ne peut pas en produire une quatrième orthographe.
+>
+> Ce qui reste est réel et inchangé : **la dette du playground**, qui écrit son propre CSS et
+> **diverge déjà sur la géométrie des boîtes** — filets en `border` là où le moteur peint en
+> `box-shadow: inset`. Cette divergence-là reste une fausse promesse de fidélité dans la vitrine, et
+> la piste ci-dessous reste la bonne réponse. Elle n'ordonnance simplement plus V2 ni V3.
+>
+> **Signal de réouverture en tant que bloquant :** un besoin réel, pour le viewer ou l'éditeur,
+> d'écrire lui-même le CSS d'un document — un aperçu partiel pendant l'édition, par exemple, qui ne
+> passerait pas par une composition du moteur.
+
 Le playground réimplémente trois primitives internes du moteur. **Une seule des trois divergences
 est bénigne**, et c'est vérifié plutôt que supposé.
 
@@ -280,11 +296,12 @@ d'ordre de livraison.
 Le lot [**V3**](../roadmap/viewer.md#v3-la-garantie-est-vérifiée-automatiquement) « compare
 automatiquement l'aperçu et le PDF sur les factures de référence, et refuse toute divergence », et
 la roadmap ajoute que ce lot **est** la décision « identique, garanti » : le retirer oblige à
-réécrire le README. Le `viewer` est un paquet navigateur. Il butera sur exactement ce mur et
-produira une **quatrième** orthographe du même CSS.
+réécrire le README.
 
-Le playground est l'alerte avancée, et il diverge déjà sur la géométrie des boîtes — c'est-à-dire
-sur ce que V2 et V3 sont censés garantir.
+**Ce paragraphe concluait que le `viewer` butera sur le même mur. E5 l'a rendu faux** : le viewer
+affiche l'HTML du moteur, style compris, et n'écrit donc aucun CSS de document. La conséquence qui
+subsiste est celle du playground, qui diverge déjà sur la géométrie des boîtes — une vitrine qui
+promet la fidélité et ne la tient pas.
 
 #### Piste
 

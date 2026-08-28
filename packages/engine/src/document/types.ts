@@ -1,6 +1,7 @@
 import type {
   BoxStyle,
   Color,
+  OccurrenceReference,
   PageBandOccurrence,
   PageLayerPlane,
   PageMargins,
@@ -70,7 +71,15 @@ export type MaterialPageFieldRun = MaterialPageCountRun | MaterialPageReportRun;
 
 export type MaterialRun = MaterialTextRun | MaterialPageFieldRun;
 
-interface MaterialBase {
+/**
+ * One materialised occurrence: the address a result publishes, plus what only a render needs.
+ *
+ * Extending the public reference rather than restating it keeps one spelling of an address:
+ * `declarationPath` addresses the stored declaration and `iterations` its repetition ancestry, so a
+ * diagnostic path stays a path into the template and two occurrences of one declaration still
+ * differ. Nothing in the paint reads either of them.
+ */
+interface MaterialBase extends OccurrenceReference {
   /**
    * An occurrence key: unique inside one render, opaque outside it.
    *
@@ -79,13 +88,6 @@ interface MaterialBase {
    * never promised stable between two renders.
    */
   readonly key: string;
-  /** Id of the declaration this occurrence came from. Not unique once a loop has repeated it. */
-  readonly nodeId: string;
-  /**
-   * Path from the template root to this occurrence, with the index of a repetition interleaved
-   * where one happened. Carried for diagnostics only; nothing in the paint reads it.
-   */
-  readonly path: readonly (string | number)[];
   readonly box: BoxStyle | undefined;
   readonly keepTogether: boolean;
 }
@@ -136,11 +138,9 @@ export interface MaterialPageReport {
  * re-deriving a boundary. `firstRow` indexes the table's body-then-footer sequence; groups live in
  * the body, so it is also the index in the body.
  */
-export interface MaterialRowGroupOccurrence {
+export interface MaterialRowGroupOccurrence extends OccurrenceReference {
   /** Occurrence key, unique inside one render. */
   readonly key: string;
-  readonly nodeId: string;
-  readonly path: readonly (string | number)[];
   readonly firstRow: number;
   readonly rowCount: number;
 }

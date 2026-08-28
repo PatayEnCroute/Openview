@@ -38,6 +38,37 @@ première facture longue. **Le viewer affiche la découpe que le moteur lui donn
 (lot E5 de la [roadmap moteur](engine.md)). Sans E5, cette brique ne peut pas
 démarrer honnêtement.
 
+> ✅ **E5 est livré** (2026-08-28,
+> [ADR 0018](../adr/0018-le-moteur-sait-dire-ou-il-coupe.md)) : la dépendance est levée, et V1 peut
+> démarrer. `createPaginationPort()` rend, sans produire un octet de PDF :
+>
+> - **l'HTML autonome**, celui-là même que le moteur remet à l'imprimeur ;
+> - **un manifeste par page** : ce que la page peint, dans quelle région, sous quel rôle, entier ou
+>   coupé ;
+> - **la frontière de report** de chaque page et les lignes qui la ferment ;
+> - **les replis `keepTogether`** que la suite retenue n'a pas pu honorer.
+>
+> Ces types vivent dans `@openview/core` : le viewer les importe **sans dépendre de `engine`**, donc
+> sans embarquer Chromium dans le bundle client.
+>
+> **Trois obligations qui pèsent sur V1, et qu'aucune porte ne tiendra à sa place :**
+>
+> 1. **Ne rien recalculer.** Pas d'expression réévaluée, pas d'écriture résolue, pas d'appel à
+>    `Intl`, pas de largeur de colonne recalculée, et surtout **aucune repagination**. Les
+>    caractères ICU sont déjà écrits dans la source.
+> 2. **Ne jamais injecter l'HTML dans le DOM de l'hôte.** Il porte des données rendues et se traite
+>    comme le PDF. Le contexte prévu est un `iframe srcDoc` **sandboxé sans scripts** ; E5 livre une
+>    source qui fonctionne sous cette contrainte et une sonde hostile qui le prouve dans un Chromium
+>    réel. `dangerouslySetInnerHTML` est hors de question.
+> 3. **Ne pas lire le DOM avec des sélecteurs.** La chaîne HTML est **opaque** : ses classes, sa
+>    structure et l'ordre de ses attributs ne sont pas un contrat. Ce qu'il faut savoir d'une page
+>    est dans le manifeste. Un besoin réel de désigner un nœud à l'écran est un signal de
+>    réouverture côté moteur, pas un sélecteur à écrire côté viewer.
+>
+> **L'attente E4-9 reste ouverte de ce côté.** Sa moitié moteur est fermée : il existe une voie
+> publique sans second ICU. La moitié viewer se ferme quand V1 affiche cette source sans la
+> retoucher, et V3 la compare effectivement au PDF.
+
 Second point à savoir dès maintenant : l'**éditeur réutilisera cette surface
 d'affichage** pour son aperçu en cours d'édition. Ce n'est pas du périmètre en plus,
 c'est une contrainte de conception — le viewer doit pouvoir vivre encastré dans un
@@ -55,7 +86,7 @@ format réels. Rien de plus.
 **Prêt quand** la facture de référence multi-pages s'affiche dans le playground,
 page après page, et qu'on reconnaît le PDF.
 
-**Poids :** M — **Dépend de :** moteur E5
+**Poids :** M — **Dépend de :** moteur E5 ✅ *(livré, la voie est ouverte)*
 
 ### V2. La pagination affichée est celle du PDF
 

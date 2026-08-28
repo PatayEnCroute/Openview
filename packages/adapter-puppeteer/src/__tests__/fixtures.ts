@@ -1,3 +1,4 @@
+import type { PaginationResult } from '@openview/core';
 import {
   CURRENT_SCHEMA_VERSION,
   type EvaluationScope,
@@ -6,6 +7,7 @@ import {
   type Template,
 } from '@openview/core';
 import {
+  createPaginationPort,
   createPdfRenderPort,
   type PdfLayoutMeasurement,
   type PdfRenderSession,
@@ -129,4 +131,43 @@ export async function inspectPdf(
     pages: pdf.getPageCount(),
     sizes: pdf.getPages().map((page) => page.getSize()),
   };
+}
+
+/** What one pagination through a real browser produced, and what it was asked to measure. */
+export interface CapturedPagination {
+  readonly result: PaginationResult;
+  readonly measured: readonly PdfSourceDocument[];
+}
+
+/**
+ * Paginates through Chromium, and fails the moment the port asks the session to print.
+ *
+ * The refusal is the proof: a preview path that reached `print()` would produce a document nobody
+ * asked for, so it reddens here rather than being counted afterwards.
+ */
+export async function paginateCapturing(
+  template: Template,
+  data: EvaluationScope = {},
+  options?: RenderEngineOptions | undefined,
+): Promise<CapturedPagination> {
+  const inner = hostStrategy();
+  const measured: PdfSourceDocument[] = [];
+  const strategy: PdfRenderStrategy = {
+    format: 'pdf',
+    async open(resources): Promise<PdfRenderSession> {
+      const session = await inner.open(resources);
+      return {
+        async measure(source: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
+          measured.push(source);
+          return await session.measure(source);
+        },
+        print(): Promise<Uint8Array> {
+          return Promise.reject(new Error('a pagination must never print'));
+        },
+        close: () => session.close(),
+      };
+    },
+  };
+  const result = await createPaginationPort(strategy, options).paginate({ template, data });
+  return { result, measured };
 }

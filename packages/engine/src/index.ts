@@ -21,6 +21,7 @@ export {
   DOCUMENT_RENDER_ERROR_CODES,
   DocumentRenderError,
 } from './errors.js';
+export { createPaginationPort } from './pipeline/paginate.js';
 export { createPdfRenderPort, PDF_CONTENT_TYPE } from './pipeline/render-pdf.js';
 export type {
   BoxMeasurement,

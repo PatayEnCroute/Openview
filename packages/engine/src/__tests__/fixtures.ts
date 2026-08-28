@@ -1,6 +1,7 @@
 import {
   CURRENT_SCHEMA_VERSION,
   type EvaluationScope,
+  type PaginationResult,
   parseTemplate,
   STANDARD_SHEETS_MM,
   type Template,
@@ -12,6 +13,7 @@ import { DocumentRenderError } from '../errors.js';
 import { buildPagedTree, buildProbeTree } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
 import { paginate } from '../pagination/paginate.js';
+import { paginationResultOf } from '../pagination/result.js';
 import type { MarkerReserve, MaterialFragment, PaginatedDocument } from '../pagination/types.js';
 import { GRID, type GridLayout, gridMetrics } from './metrics.js';
 /** A valid 4x2 navy png, so an image test measures a real decode rather than a placeholder. */
@@ -115,6 +117,21 @@ export function paginateOnGrid(
     printableHeight: document.printable.height * metrics.pxPerMm,
     slack: new Map(),
   });
+}
+
+/**
+ * The public pagination result of a document cut on squared paper, with no session at all.
+ *
+ * The same composition the pdf path prints, projected: it is what `createPaginationPort` returns
+ * once the session that measured it is closed.
+ */
+export function paginationOf(
+  overrides: Record<string, unknown> = {},
+  data: EvaluationScope = SAMPLE_DATA,
+  grid: Partial<GridLayout> = {},
+): PaginationResult {
+  const paginated = paginateOnGrid(materializedOf(overrides, data), grid);
+  return paginationResultOf(paginated, serializeHtml(buildPagedTree(paginated)));
 }
 
 /** The printed html of a document cut on squared paper. */
