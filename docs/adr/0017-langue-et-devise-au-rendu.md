@@ -213,9 +213,28 @@ fait exprès, `date` et `money` partagent la clé `amount` —, donc le `kind` v
 entrée à la porte, donc un template parsé ne porte que des écritures valides. La cause reste
 distinguée et couverte, mais au niveau unitaire, sur une table qui n'est pas passée par la porte.
 
-**Un défaut préexistant du playground a été trouvé et laissé en place.** Le jeu de données
-`soixante-lignes` échoue avec `grid-content-overflow` sur `zone-titre` — vérifié sur `main` avant
-toute modification E4. Hors périmètre ; il appartient à la vitrine, pas au moteur.
+**Un défaut préexistant du playground a été trouvé, laissé en place, puis corrigé.** Vérifié sur
+`main` avant toute modification E4 : `grid-content-overflow` sur `zone-titre`.
+
+**La portée a été mesurée deux fois avant d'être écrite ici, et les deux premières lectures étaient
+fausses.** Une première note ne citait que le jeu `soixante-lignes` ; une seconde a corrigé en
+« les deux jeux de soixante lignes, dans les deux écritures », ce qui est exact mais tait la
+dimension qui décide réellement. La mesure, prise en rétablissant le `rowSpan` fautif : **4 des 16
+combinaisons échouaient, toutes sur l'apparence A** — ses deux jeux de soixante lignes, dans ses
+deux écritures. L'apparence **B rendait déjà**, sur les quatre mêmes combinaisons. Le discriminant
+est donc la **typographie du gabarit**, pas la donnée ni l'écriture : A compose son titre en
+Georgia 9,5 pt et le renvoie sur une troisième ligne, B en Arial 8,5 pt et s'en tient à deux. Le nom
+de client long est la donnée qui déclenche, la fonte est ce qui décide.
+
+Une zone de grille n'est ni rognée ni redimensionnée, donc le moteur avait raison de refuser et la
+correction appartenait à la vitrine : `zone-titre` déclare `rowSpan: 4`, sur les rangs 3 et 4 que la
+grille laissait libres — le même span que la zone de marque à côté d'elle. La grille garde ses six
+rangs, la hauteur du document ne change pas, et aucune ligne du moteur n'a été touchée. Les **16**
+combinaisons gabarit × jeu de données × écriture rendent un PDF, vérifié contre le pont.
+
+**Ce que l'épisode enseigne au-delà du correctif :** une portée de défaut se mesure en rétablissant
+la faute, jamais en raisonnant sur le cas où on l'a rencontrée. Deux notes successives l'ont
+raisonnée, et toutes deux ont manqué la dimension du gabarit.
 
 ## Recette
 

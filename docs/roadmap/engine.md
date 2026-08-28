@@ -196,6 +196,12 @@ contredirait l'arrondi déclaré est refusée plutôt que corrigée.
 > **relecture par un gestionnaire ou un comptable n'a pas eu lieu**. Le lot est techniquement
 > livré ; le jalon reste ouvert sur cette seule condition.
 
+> **Un défaut de la vitrine, trouvé pendant ce lot et corrigé avec lui :** l'apparence A refusait
+> ses quatre combinaisons de soixante lignes en `grid-content-overflow`, sa zone de titre ne
+> déclarant que deux rangs pour un titre qui en compose trois. Le moteur avait raison de refuser —
+> une zone n'est ni rognée ni redimensionnée — et la correction est dans le modèle de démonstration,
+> pas dans `engine`.
+
 > ⛔ **Ce que E4 n'a PAS livré et qui revient à E5 / viewer :** l'attente **E4-9**, « le même
 > ICU à l'aperçu et au rendu ». E4 vérifie le PDF avec l'ICU du processus qui construit
 > l'HTML ; aucun aperçu public n'existe encore, donc l'égalité n'est pas déclarée livrée.

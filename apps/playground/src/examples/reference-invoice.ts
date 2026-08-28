@@ -528,10 +528,13 @@ export const factureAvecApparence = (a: Apparence): Template =>
                 ],
               },
             },
+            /* Four rows, like the brand zone beside it: the title is composed from host data, and a
+               grid zone is never clipped nor resized, so its span has to hold the longest title
+               this demo's data sets compose -- three wrapped lines. Rows 3 and 4 are free here. */
             {
               row: 1,
               column: 4,
-              rowSpan: 2,
+              rowSpan: 4,
               columnSpan: 5,
               content: {
                 type: 'container',
