@@ -38,12 +38,7 @@ function reserveOf(
 }
 
 /**
- * The height each side reserves on every page, and what the flow gets.
- *
- * The tallest band a side can ever show is reserved on all pages, whichever band a page actually
- * paints. A shorter band leaves white space in its slot instead of lending it to the flow: were the
- * flow to grow when a band is short, turning a page that was going to be the last one into an
- * intermediate one would change how much fits on it, and the page count would chase itself.
+ * Computes constant height reserves for header and footer band slots across all pages.
  */
 export function bandReserves(
   document: MaterialDocument,

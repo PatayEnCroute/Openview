@@ -8,11 +8,7 @@ const NON_PRINTABLE =
   'A visible binding produced a value with no printed form. Only text and a finite number print as themselves; `details.actualType` names what arrived, and `text`, `concat` or `round` are how a template turns it into text.';
 
 /**
- * Turns an evaluated binding into the exact characters to print, or refuses.
- *
- * Text prints as itself and a finite number in its canonical form -- no locale, no implicit
- * rounding, since recognising a total as money would reserve a business meaning. Everything else
- * is refused: no `undefined`, no `[object Object]` and no invented json ever reaches a page.
+ * Converts an unformatted evaluated binding value to printable canonical string representation.
  */
 export function printableText(value: unknown, details: DocumentRenderErrorDetails): string {
   if (typeof value === 'string') {

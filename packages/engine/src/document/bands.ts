@@ -6,13 +6,7 @@ export const PAGE_ROLES = ['only', 'first', 'middle', 'last'] as const;
 
 export type PageRole = (typeof PAGE_ROLES)[number];
 
-/**
- * Which occurrences apply to each role a page can take.
- *
- * A one-page document is its own first and last page at once, so `exceptFirst` and `exceptLast`
- * both name a page it is and neither applies. The schema forbids two applicable occurrences on the
- * same side, which is what makes the choice unique rather than a priority to invent.
- */
+/** Map of band occurrence rules applicable to each page role. */
 const APPLIES: Readonly<Record<PageRole, Readonly<Record<PageBandOccurrence, boolean>>>> = {
   only: { every: true, firstOnly: true, exceptFirst: false, exceptLast: false, lastOnly: true },
   first: { every: true, firstOnly: true, exceptFirst: false, exceptLast: true, lastOnly: false },

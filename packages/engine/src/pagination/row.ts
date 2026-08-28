@@ -9,7 +9,7 @@ import type {
 } from './types.js';
 import { boxPaddingPx, FLOW_START, fragmentEdge } from './types.js';
 
-/** One fragment of a row split down its columns, and what the split consumed. */
+/** Placement result for a split row fragment across columns. */
 export interface RowPlacement {
   readonly fragment: RowFragment;
   readonly height: number;
@@ -21,12 +21,7 @@ const spent = (cursor: FlowCursor, cells: number): boolean =>
   cursor.index >= cells && cursor.inner === undefined;
 
 /**
- * Splits one row into a fragment by advancing the vertical flow of each of its cells at once.
- *
- * A row is atomic while a fresh page can hold it; this is the case where none can, which is what
- * makes a table nested inside a cell paginable at all. Every cell keeps its column and its width,
- * a cell whose own flow is spent stays present and empty, and the fragment is as tall as its
- * tallest cell. At least one cell must advance, or nothing is placed.
+ * Splits a table row across pages by advancing vertical flow inside each cell.
  */
 export function placeRow(
   row: MaterialRow,

@@ -8,7 +8,7 @@ import type {
   TextFragment,
 } from './types.js';
 
-/** Dispatch over the fragment Composite: one exhaustive entry point for every painted kind. */
+/** Visitor pattern interface for exhaustive dispatch over MaterialFragment variants. */
 export interface FragmentVisitor<TResult> {
   readonly text: (fragment: TextFragment) => TResult;
   readonly image: (fragment: ImageFragment) => TResult;
@@ -18,10 +18,7 @@ export interface FragmentVisitor<TResult> {
 }
 
 /**
- * Dispatches one page fragment to the matching handler, with a compile-time exhaustiveness check.
- *
- * A sixth painted kind breaks this compilation and the visitors below it, rather than being missed
- * by a traversal that silently descends nothing.
+ * Dispatches a material fragment to the matching visitor handler.
  */
 export function visitFragment<TResult>(
   fragment: MaterialFragment,

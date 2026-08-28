@@ -64,12 +64,7 @@ function collect(
 }
 
 /**
- * The keep-together marks the accepted sequence could not honour, in order of first appearance.
- *
- * Derived from the settled pages and from nothing else: a fallback that happened during a settling
- * round the engine then abandoned left no trace here, because that sequence is not the one read.
- * Spanning more than one page IS the fallback -- an occurrence that fits stays whole, and one that
- * was merely deferred is painted whole on the page it moved to.
+ * Collects pagination notices for occurrences whose keep-together constraint fell back across pages.
  */
 export function noticesOf(paginated: PaginatedDocument): readonly PaginationNotice[] {
   const spreads = new Map<string, Spread>();
