@@ -85,3 +85,81 @@ jobs:
 
       - name: Run Unit Tests with Coverage
         run: pnpm run test:coverage
+
+  # E6: the same document, on two machines. The matrix above proves the code runs
+  # under two Node majors; it deliberately does NOT compare their output, because
+  # two Node builds may carry two ICU versions and ADR 0008 forbids comparing
+  # strings across them. These two legs are pinned to one exact runner and one
+  # exact Node patch so that their bytes ARE comparable, and the third job says so.
+  reproducibility:
+    name: Reproducible Render (${{ matrix.leg }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Two independent machines running the identical recipe. Same OS image and
+        # same Node patch: `24` alone would let a patch bump change V8 or ICU under
+        # one leg and not the other, which is exactly the drift this job exists to
+        # catch rather than to suffer.
+        leg: [first, second]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.11.1
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Monorepo
+        run: pnpm run build
+
+      # `--no-sandbox` is the one launch argument this runner needs, and it travels
+      # in the profile: both legs must carry exactly the same list or the comparison
+      # is refused before a single digest is read.
+      - name: Render Ten Times
+        run: node tools/reproducibility/render.mjs manifest-${{ matrix.leg }}.json --no-sandbox
+
+      # Profile, byte lengths and digests only. No pdf and no data set is ever
+      # published: the artefact is the attestation, not the document.
+      - name: Publish Manifest
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: reproducibility-${{ matrix.leg }}
+          path: manifest-${{ matrix.leg }}.json
+          retention-days: 7
+          if-no-files-found: error
+
+  compare-machines:
+    name: Same Bytes On Both Machines
+    runs-on: ubuntu-24.04
+    needs: reproducibility
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.11.1
+
+      - name: Download Manifests
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: reproducibility-*
+          merge-multiple: true
+
+      # Refuses two different profiles first, and only then compares the twenty
+      # digests. No dependency is installed here: the comparator reads two JSON
+      # files and nothing else.
+      - name: Compare Both Machines
+        run: node tools/reproducibility/compare.mjs manifest-first.json manifest-second.json
