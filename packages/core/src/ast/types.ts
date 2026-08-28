@@ -166,7 +166,10 @@ export const TEXT_ALIGNMENTS = [...TABLE_COLUMN_ALIGNMENTS, 'justify'] as const;
 
 export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
 
+/** Minimum allowed width value for table columns. */
 export const MIN_COLUMN_WIDTH = 1;
+
+/** Maximum allowed width value for table columns. */
 export const MAX_COLUMN_WIDTH = 1000;
 
 /** Table column definition (id, relative width weight, and alignment). */
@@ -209,6 +212,7 @@ export interface TableRowGroupNode extends NodeBase {
   readonly rows: readonly TableRowNode[];
 }
 
+/** Union of row types allowed in table body section. */
 export type TableBodyNode = TableRowNode | TableRowGroupNode;
 
 /** Table block node structured into columns, header, body, and footer. */

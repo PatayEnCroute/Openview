@@ -1,9 +1,15 @@
 import { z } from 'zod/v4';
 
+/** Regular expression source for JavaScript identifier validation. */
 export const IDENTIFIER_SOURCE = String.raw`[A-Za-z_$][\w$]*`;
+
+/** Regular expression pattern matching a single valid identifier. */
 export const IDENTIFIER_PATTERN = new RegExp(`^${IDENTIFIER_SOURCE}$`);
+
+/** Regular expression pattern matching a dotted property path. */
 export const PATH_PATTERN = new RegExp(String.raw`^${IDENTIFIER_SOURCE}(\.${IDENTIFIER_SOURCE})*$`);
 
+/** Set of identifiers forbidden due to Object.prototype pollution risks. */
 export const FORBIDDEN_IDENTIFIERS: ReadonlySet<string> = new Set([
   ...Object.getOwnPropertyNames(Object.prototype),
   'prototype',

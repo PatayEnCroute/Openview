@@ -22,6 +22,7 @@ export interface TextCursor {
   readonly offset: number;
 }
 
+/** Fragment of a text block, including run slice and edge classification. */
 export interface TextFragment {
   readonly kind: 'text';
   readonly source: MaterialText;
@@ -31,16 +32,19 @@ export interface TextFragment {
   readonly edge: FragmentEdge;
 }
 
+/** Fragment containing a complete image block (images are always atomic). */
 export interface ImageFragment {
   readonly kind: 'image';
   readonly source: MaterialImage;
 }
 
+/** Fragment containing a complete grid block (grids are always atomic). */
 export interface GridFragment {
   readonly kind: 'grid';
   readonly source: MaterialGrid;
 }
 
+/** Fragment of a container block with sliced child content. */
 export interface ContainerFragment {
   readonly kind: 'container';
   readonly source: MaterialContainer;
@@ -48,17 +52,20 @@ export interface ContainerFragment {
   readonly edge: FragmentEdge;
 }
 
+/** Fragment of a table cell with sliced child content. */
 export interface CellFragment {
   readonly source: MaterialCell;
   readonly children: readonly MaterialFragment[];
 }
 
+/** Fragment of a table row with sliced cell content. */
 export interface RowFragment {
   readonly source: MaterialRow;
   readonly cells: readonly CellFragment[];
   readonly edge: FragmentEdge;
 }
 
+/** Fragment of a table block, including header, body rows, and optional footer. */
 export interface TableFragment {
   readonly kind: 'table';
   readonly source: MaterialTable;
@@ -69,6 +76,7 @@ export interface TableFragment {
   readonly edge: FragmentEdge;
 }
 
+/** Union of all material fragment types produced during pagination. */
 export type MaterialFragment =
   | TextFragment
   | ImageFragment
@@ -82,18 +90,22 @@ export interface FlowCursor {
   readonly inner: BlockCursor | undefined;
 }
 
+/** Union of cursor types for different block kinds during pagination. */
 export type BlockCursor = TextBlockCursor | ContainerBlockCursor | TableBlockCursor;
 
+/** Cursor tracking line position within a text block. */
 export interface TextBlockCursor {
   readonly kind: 'text';
   readonly line: number;
 }
 
+/** Cursor tracking nested flow progress within a container block. */
 export interface ContainerBlockCursor {
   readonly kind: 'container';
   readonly flow: FlowCursor;
 }
 
+/** Cursor tracking row and cell progress within a table block. */
 export interface TableBlockCursor {
   readonly kind: 'table';
   readonly row: number;
@@ -105,6 +117,7 @@ export interface RowBlockCursor {
   readonly cells: readonly FlowCursor[];
 }
 
+/** Initial cursor position representing the start of flow content. */
 export const FLOW_START: FlowCursor = { index: 0, inner: undefined };
 
 /** Composed page output with metadata, fragments, and band blocks. */

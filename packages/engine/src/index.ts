@@ -34,4 +34,5 @@ export type {
   TextLineMeasurement,
 } from './strategy/pdf.js';
 
+/** Package version string for @openview/engine. */
 export const ENGINE_VERSION = '0.1.0';
