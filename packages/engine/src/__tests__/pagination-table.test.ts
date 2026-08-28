@@ -7,6 +7,7 @@ import {
   idsPerPage,
   literalText,
   materializedOf,
+  NO_FONTS,
   paginateOnGrid,
   refusalOfCut,
   SAMPLE_DATA,
@@ -123,7 +124,7 @@ describe('a table that fits', () => {
     for (const page of headerIdsPerPage(paginated)) {
       expect(page).toStrictEqual([]);
     }
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
     expect(html).toContain('<thead></thead>');
   });
 });
@@ -319,7 +320,9 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(3), ...flow([ruled(5)]) }, {}),
     );
-    const sheets = serializeHtml(buildPagedTree(paginated)).split('class="ov-page"').slice(1);
+    const sheets = serializeHtml(buildPagedTree(paginated, NO_FONTS))
+      .split('class="ov-page"')
+      .slice(1);
     expect(sheets.length).toBeGreaterThan(2);
     for (const sheet of sheets) {
       const rows = rowsOfSheet(sheet);
@@ -335,7 +338,7 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(3), ...flow([ruled(5)]) }, {}),
     );
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
     const sheets = html.split('class="ov-page"').slice(1);
     for (const sheet of sheets) {
       expect(sheet).toContain('inset 0 -1mm 0 0 #000000');
@@ -349,7 +352,7 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(3), ...flow([ruled(6)]) }, {}),
     );
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
     const widths = [...html.matchAll(/<col style="width:([\d.%]+)">/g)].map((match) => match[1]);
     expect(new Set(widths)).toStrictEqual(new Set(['50%']));
     expect(widths).toHaveLength(paginated.pages.length * 2);

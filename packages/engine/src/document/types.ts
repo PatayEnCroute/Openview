@@ -11,58 +11,56 @@ import type {
   TableColumn,
   TextAlignment,
 } from '@openview/core';
+import type { DocumentRenderErrorDetails } from '../errors.js';
+import type { ResolvedFontFace } from './fonts/types.js';
 import type { MarkerWriting } from './presentation.js';
 
 /**
- * A typography with no absent property left. Every run of the document carries one, resolved from
- * the run then the block then the engine defaults -- never inherited from an enclosing dom node.
+ * A typography with no property left to resolve, carried by every run of the document.
+ *
+ * The face is a resolved identity rather than the declared name: no free string reaches the css, so
+ * the browser can neither prefer a local installation of the same typeface nor continue past it.
+ * Weight and slant live in the face, so a run cannot ask for a boldness its face does not carry.
  */
 export interface ResolvedTypography {
-  readonly family: string;
+  readonly face: ResolvedFontFace;
   readonly sizePt: number;
-  readonly bold: boolean;
-  readonly italic: boolean;
   readonly color: Color;
 }
 
-/** One inline run of text already produced by data binding. */
+/** One inline run of text produced by data binding. */
 export interface MaterialTextRun {
   readonly kind: 'text';
   readonly text: string;
   readonly typography: ResolvedTypography;
 }
 
-/**
- * A page counter that survived data binding unresolved.
- *
- * Its value is the rank of the page that ends up holding it, which is not known until the cuts are
- * chosen, so binding leaves the marker in place and page composition writes the digits.
- */
+/** A page counter run to be populated during page composition. */
 export interface MaterialPageCountRun {
   readonly kind: 'pageField';
   readonly field: 'number' | 'count';
+  /**
+   * Where this marker was declared, kept so a late refusal can name its site.
+   *
+   * The digits of a marker are written long after binding -- in the width probe and again when a
+   * page knows its own rank -- and both places may meet a character the face cannot draw. Location
+   * only: no value, no text, and it crosses no public contract.
+   */
+  readonly site: DocumentRenderErrorDetails;
   /** The writing this counter resolved, when its site declared one. */
   readonly writing?: MarkerWriting | undefined;
   readonly typography: ResolvedTypography;
 }
 
-/**
- * A page report that survived data binding unresolved, with the rounding it is written at.
- *
- * Which rows ended before the page holding it is decided by the cuts, so the sum is composed with
- * them; the rounding travels here because the model declared it and nothing measures it.
- */
+/** A page report run to be populated during page composition with cumulative values. */
 export interface MaterialPageReportRun {
   readonly kind: 'pageField';
   readonly field: 'report';
   readonly decimals: number;
   readonly mode: RoundMode;
-  /**
-   * The writing this report resolved, when its site declared one.
-   *
-   * Resolved rather than named: the reserve has to tell two currencies apart before any cut is
-   * chosen, and nothing past materialisation may reach the caller's selection again.
-   */
+  /** Where this marker was declared, kept so a late refusal can name its site. */
+  readonly site: DocumentRenderErrorDetails;
+  /** Resolved writing format for this report marker. */
   readonly writing?: MarkerWriting | undefined;
   readonly typography: ResolvedTypography;
 }
@@ -71,22 +69,9 @@ export type MaterialPageFieldRun = MaterialPageCountRun | MaterialPageReportRun;
 
 export type MaterialRun = MaterialTextRun | MaterialPageFieldRun;
 
-/**
- * One materialised occurrence: the address a result publishes, plus what only a render needs.
- *
- * Extending the public reference rather than restating it keeps one spelling of an address:
- * `declarationPath` addresses the stored declaration and `iterations` its repetition ancestry, so a
- * diagnostic path stays a path into the template and two occurrences of one declaration still
- * differ. Nothing in the paint reads either of them.
- */
+/** Base interface for materialized occurrences with render-internal keys and box styles. */
 interface MaterialBase extends OccurrenceReference {
-  /**
-   * An occurrence key: unique inside one render, opaque outside it.
-   *
-   * A declaration id repeats once a loop has run, so it cannot address one measured box. This key
-   * comes from a counter local to the render: it is never stored, never returned to the caller and
-   * never promised stable between two renders.
-   */
+  /** Unique occurrence key within a single render execution. */
   readonly key: string;
   readonly box: BoxStyle | undefined;
   readonly keepTogether: boolean;
@@ -109,37 +94,22 @@ export interface MaterialContainer extends MaterialBase {
   readonly children: readonly MaterialBlock[];
 }
 
-/** One cell per declared column, in column order. An unfilled column keeps an empty cell. */
+/** One cell per declared column in column order. */
 export interface MaterialCell {
-  /** Occurrence key, unique inside one render. */
   readonly key: string;
   readonly columnId: string;
   readonly children: readonly MaterialBlock[];
 }
 
-/**
- * What one materialised occurrence of a row is worth to the pages that follow it.
- *
- * `order` is the rank the row was materialised at, zero-based and reset per render. Summing in that
- * order rather than in the order boxes come back makes the total reproducible, which an IEEE-754
- * addition of the same terms in another order does not guarantee.
- */
+/** Page report contribution declared on a table row. */
 export interface MaterialPageReport {
-  /** Occurrence key, unique inside one render. */
   readonly key: string;
   readonly order: number;
   readonly value: number;
 }
 
-/**
- * One occurrence of a marked row group: the rows a single item produced, as one unit.
- *
- * Shared by the rows it spans, so recognising the start of a group is comparing keys rather than
- * re-deriving a boundary. `firstRow` indexes the table's body-then-footer sequence; groups live in
- * the body, so it is also the index in the body.
- */
+/** Group occurrence spanning rows produced by a single iterated table item. */
 export interface MaterialRowGroupOccurrence extends OccurrenceReference {
-  /** Occurrence key, unique inside one render. */
   readonly key: string;
   readonly firstRow: number;
   readonly rowCount: number;
@@ -148,7 +118,7 @@ export interface MaterialRowGroupOccurrence extends OccurrenceReference {
 export interface MaterialRow extends MaterialBase {
   readonly cells: readonly MaterialCell[];
   readonly pageReport: MaterialPageReport | undefined;
-  /** The marked group occurrence this row belongs to, when one asked to be kept whole. */
+  /** Group occurrence this row belongs to, when marked to stay whole. */
   readonly keptGroup: MaterialRowGroupOccurrence | undefined;
 }
 
@@ -160,7 +130,7 @@ export interface MaterialTable extends MaterialBase {
   readonly footer: readonly MaterialRow[];
 }
 
-/** One zone of a materialised grid, with its spans resolved to at least one track. */
+/** Grid zone with resolved track spans and bound container content. */
 export interface MaterialGridItem {
   readonly row: number;
   readonly column: number;
@@ -169,10 +139,7 @@ export interface MaterialGridItem {
   readonly content: MaterialContainer;
 }
 
-/**
- * A grid that survived data binding: declared tracks, a vertical step in millimetres, and one
- * bound container per zone. Atomic for pagination -- it is placed whole, deferred whole or refused.
- */
+/** Materialized grid block with track definitions and zone items. */
 export interface MaterialGrid extends MaterialBase {
   readonly kind: 'grid';
   readonly columns: number;
@@ -181,10 +148,7 @@ export interface MaterialGrid extends MaterialBase {
   readonly items: readonly MaterialGridItem[];
 }
 
-/**
- * A block that survived data binding. Loops and conditions have no counterpart here: a loop became
- * its ordered occurrences, and a false condition became nothing at all.
- */
+/** Block element in the materialized document hierarchy. */
 export type MaterialBlock =
   | MaterialText
   | MaterialImage
@@ -192,36 +156,20 @@ export type MaterialBlock =
   | MaterialTable
   | MaterialGrid;
 
-/**
- * One declared band, bound once, with the page domain that decides where it appears.
- *
- * The domain is kept beside the content rather than resolved at binding time: the same band is
- * painted on several pages, and which pages those are is only known once the cuts exist.
- */
+/** Page band with its occurrence domain and bound container content. */
 export interface MaterialPageBand {
   readonly on: PageBandOccurrence;
   readonly content: MaterialContainer;
 }
 
-/**
- * One declared page layer, bound once per render and painted identically on every page.
- *
- * The markers of its content stay unresolved until composition, so each page writes its own rank
- * into the same materialised layer without re-running any expression.
- */
+/** Page layer with its plane, opacity, and bound container content. */
 export interface MaterialPageLayer {
   readonly plane: PageLayerPlane;
   readonly opacity: number | undefined;
   readonly content: MaterialContainer;
 }
 
-/**
- * A whole document with no expression left to run: the sheet, its margins, its printable area, the
- * bands declared on each side, the page layers of each plane and the root flow.
- *
- * Internal to the engine on purpose. It never enters from outside, is never stored and is never
- * exported as an integration payload, so it carries no Zod schema and no schema version.
- */
+/** Fully bound document hierarchy ready for layout measurement and pagination. */
 export interface MaterialDocument {
   readonly sheet: Sheet;
   readonly margins: PageMargins;

@@ -5,12 +5,14 @@ import {
   parseTemplate,
   STANDARD_SHEETS_MM,
   type Template,
+  type Typography,
 } from '@openview/core';
 import { reachableOccurrences } from '../document/bands.js';
 import { materializeDocument } from '../document/materialize.js';
-import type { MaterialDocument } from '../document/types.js';
+import type { MaterialDocument, ResolvedTypography } from '../document/types.js';
+import { resolveRunTypography } from '../document/typography.js';
 import { DocumentRenderError } from '../errors.js';
-import { buildPagedTree, buildProbeTree } from '../html/build-page.js';
+import { buildPagedTree, buildProbeTree, documentFontCss } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
 import { paginate } from '../pagination/paginate.js';
 import { paginationResultOf } from '../pagination/result.js';
@@ -130,9 +132,21 @@ export function paginationOf(
   data: EvaluationScope = SAMPLE_DATA,
   grid: Partial<GridLayout> = {},
 ): PaginationResult {
-  const paginated = paginateOnGrid(materializedOf(overrides, data), grid);
-  return paginationResultOf(paginated, serializeHtml(buildPagedTree(paginated)));
+  const document = materializedOf(overrides, data);
+  const paginated = paginateOnGrid(document, grid);
+  return paginationResultOf(
+    paginated,
+    serializeHtml(buildPagedTree(paginated, documentFontCss(document))),
+  );
 }
+
+/**
+ * No `@font-face` rules at all.
+ *
+ * For the tests that assert where a cut fell: the bytes of a face change nothing about the squared
+ * paper they measure on, and the rules themselves are asserted where they matter.
+ */
+export const NO_FONTS = '';
 
 /** The printed html of a document cut on squared paper. */
 export function pagedHtmlOf(
@@ -140,7 +154,8 @@ export function pagedHtmlOf(
   data: EvaluationScope = SAMPLE_DATA,
   grid: Partial<GridLayout> = {},
 ): string {
-  return serializeHtml(buildPagedTree(paginateOnGrid(materializedOf(overrides, data), grid)));
+  const document = materializedOf(overrides, data);
+  return serializeHtml(buildPagedTree(paginateOnGrid(document, grid), documentFontCss(document)));
 }
 
 /** The html of the measuring probe, which is the tree every occurrence key is annotated on. */
@@ -148,8 +163,18 @@ export function probeHtmlOf(
   overrides: Record<string, unknown> = {},
   data: EvaluationScope = SAMPLE_DATA,
 ): string {
-  return serializeHtml(buildProbeTree(materializedOf(overrides, data), constantMarkers()).tree);
+  const document = materializedOf(overrides, data);
+  return serializeHtml(buildProbeTree(document, constantMarkers(), documentFontCss(document)).tree);
 }
+
+/**
+ * A resolved typography, the way materialisation would build one.
+ *
+ * Tests state the declaration -- a family name, a weight, a slant -- and get the face the catalogue
+ * resolves it to, so no test can invent an identity the engine would never produce.
+ */
+export const typographyOf = (declared: Typography = {}): ResolvedTypography =>
+  resolveRunTypography(declared, undefined);
 
 /** A sheet whose printable flow is exactly `lines` grid lines tall, with no margin to subtract. */
 export function gridPage(

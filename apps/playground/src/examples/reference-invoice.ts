@@ -224,8 +224,8 @@ export const APPARENCE_A: Apparence = {
   },
   bandeau: { background: '#eef2f9', padding: { top: 1.2, right: 1.2, bottom: 1.2, left: 1.2 } },
   tableau: { border: { bottom: { width: 0.28, color: '#1b3a6f' } } },
-  titre: { family: 'Georgia', sizePt: 17, bold: true, color: '#1b3a6f' },
-  corps: { family: 'Georgia', sizePt: 9.5, color: '#22262b' },
+  titre: { family: 'Noto Serif', sizePt: 17, bold: true, color: '#1b3a6f' },
+  corps: { family: 'Noto Serif', sizePt: 9.5, color: '#22262b' },
   accent: { bold: true, color: '#1b3a6f' },
   alignementMentions: 'start',
 };
@@ -239,8 +239,8 @@ export const APPARENCE_B: Apparence = {
     padding: { top: 0.6, right: 1, bottom: 2, left: 1 },
   },
   tableau: {},
-  titre: { family: 'Arial', sizePt: 13, italic: true, color: '#8C3A1B' },
-  corps: { family: 'Arial', sizePt: 8.5, color: '#3A3A3A' },
+  titre: { family: 'Noto Sans', sizePt: 13, italic: true, color: '#8C3A1B' },
+  corps: { family: 'Noto Sans', sizePt: 8.5, color: '#3A3A3A' },
   accent: { color: '#8C3A1B' },
   alignementMentions: 'justify',
 };

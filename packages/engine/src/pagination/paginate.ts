@@ -69,13 +69,10 @@ export function paginate(
     cursor = placed.cursor;
   }
   if (roots.length === 0) {
-    /* A flow with no block at all still prints: its bands are the page. */
     roots.push([]);
   }
 
   const count = roots.length;
-  /* Composed from the cuts that were just chosen, never patched from an earlier attempt: a settling
-     round that moves one row to the next page changes which rows finished before which page. */
   const pages: MaterialPage[] = withIncomingReports(roots).map((reported, index) => {
     const number = index + 1;
     const role = pageRole(number, count);
@@ -96,7 +93,6 @@ export function paginate(
     sheet: document.sheet,
     margins: document.margins,
     printable: document.printable,
-    /* Carried through untouched: layers reserve nothing, so the cuts above never read them. */
     backgroundLayers: document.backgroundLayers,
     foregroundLayers: document.foregroundLayers,
     headerReserve: reserves.header / metrics.pxPerMm,

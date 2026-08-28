@@ -42,10 +42,10 @@
   "dependencies": {
     "@openview/core": "workspace:*",
     "@openview/engine": "workspace:*",
+    "pdf-lib": "1.17.1",
     "puppeteer": "25.8.0"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
-    "pdf-lib": "1.17.1"
+    "@types/node": "^26.2.0"
   }
 }

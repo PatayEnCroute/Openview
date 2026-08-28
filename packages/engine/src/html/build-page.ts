@@ -1,3 +1,4 @@
+import { fontFaceCss, usedFaces } from '../document/fonts/index.js';
 import type { MaterialBlock, MaterialDocument, MaterialPageLayer } from '../document/types.js';
 import type { MarkerReserve, MaterialPage, PaginatedDocument } from '../pagination/types.js';
 import { wholeFragment } from '../pagination/whole.js';
@@ -73,26 +74,23 @@ function buildPage(
 }
 
 /**
- * The printed document: one closed box per page, all at the declared sheet, each composed as
- * background layers, then the three printable slots, then foreground layers -- DOM order is the
- * paint order, so no z-index of the model ever enters the css.
+ * Builds the complete HTML tree for the paginated document.
  */
-export function buildPagedTree(paginated: PaginatedDocument): HtmlTree {
+export function buildPagedTree(paginated: PaginatedDocument, fonts: string): HtmlTree {
   return {
-    css: documentCss(paginated),
+    css: fonts + documentCss(paginated),
     body: paginated.pages.map((page) =>
       buildPage(page, paginated.markers, paginated.backgroundLayers, paginated.foregroundLayers),
     ),
   };
 }
 
-/** A probe tree and the occurrence keys it annotated, which is the ask a reply is checked against. */
+/** Probe HTML tree paired with the set of annotated occurrence keys. */
 export interface ProbeTree {
   readonly tree: HtmlTree;
   readonly keys: ReadonlySet<string>;
 }
 
-/** Reads back what the tree really annotated, so the ask cannot drift from the markup. */
 function keysOf(tree: HtmlTree): ReadonlySet<string> {
   const found = new Set<string>();
   const walk = (nodes: readonly HtmlNode[]): void => {
@@ -112,12 +110,16 @@ function keysOf(tree: HtmlTree): ReadonlySet<string> {
 }
 
 /**
- * Builds the unconstrained HTML probe tree for natural layout measurement.
+ * Builds an unconstrained HTML probe tree for layout measurement.
  */
-export function buildProbeTree(document: MaterialDocument, markers: MarkerReserve): ProbeTree {
+export function buildProbeTree(
+  document: MaterialDocument,
+  markers: MarkerReserve,
+  fonts: string,
+): ProbeTree {
   const context: PaintContext = { markers, page: undefined, keyed: true };
   const tree: HtmlTree = {
-    css: probeCss(document),
+    css: fonts + probeCss(document),
     body: [
       element('div', { class: CSS_CLASSES.page }, [
         element('div', { class: CSS_CLASSES.printable }, [
@@ -143,20 +145,16 @@ export function buildProbeTree(document: MaterialDocument, markers: MarkerReserv
   return { tree, keys: keysOf(tree) };
 }
 
-/** The key one measured sample is filed under, by its rank among the samples of its shape. */
+/** Formats a unique measurement key for a marker sample. */
 export const sampleKey = (signature: string, at: number): string => `s${at}:${signature}`;
 
 /**
- * The width probe: one box per sample of every shape a marker of this document is painted in.
- *
- * A canonical shape offers the characters of its alphabet and its width is multiplied; a shape with
- * a declared writing offers the whole strings that writing can produce, so the separators, the
- * spaces and the currency symbol `Intl` really emits are measured rather than guessed. Kerning and
- * ligatures are off on the same class the printed marker uses.
+ * Builds an HTML probe tree to measure sample widths for marker signatures.
  */
 export function buildMarkerProbe(
   document: MaterialDocument,
   signatures: ReadonlyMap<string, { readonly css: string; readonly samples: readonly string[] }>,
+  fonts: string,
 ): ProbeTree {
   const rows: HtmlElement[] = [];
   for (const [signature, { css, samples }] of signatures) {
@@ -179,7 +177,7 @@ export function buildMarkerProbe(
     );
   }
   const tree: HtmlTree = {
-    css: probeCss(document),
+    css: fonts + probeCss(document),
     body: [
       element('div', { class: CSS_CLASSES.page }, [
         element('div', { class: CSS_CLASSES.printable }, [
@@ -191,4 +189,15 @@ export function buildMarkerProbe(
     ],
   };
   return { tree, keys: keysOf(tree) };
+}
+
+/**
+ * The `@font-face` rules for the faces this document paints, written once per render.
+ *
+ * The single source the three trees share. A probe measured against one set of faces and a page
+ * printed against another would put the cuts and the paint in two different typographies, so the
+ * marker probe, the natural probe and every settling round are handed this same string.
+ */
+export function documentFontCss(document: MaterialDocument): string {
+  return fontFaceCss(usedFaces(document));
 }

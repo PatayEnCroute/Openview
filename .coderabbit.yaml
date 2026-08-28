@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "fr-FR"
+early_access: false
+
+tone_instructions: "Ton direct, concis et constructif. Focalise-toi sur les bugs critiques, la sécurité, l'architecture et la logique métier. Ignore le style et les détails triviaux déjà couverts par Biome."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_instructions: |
+    Rédige un résumé haut niveau concis et structuré sous forme de liste à puces, axé sur les changements d'architecture et de logique métier.
+  sequence_diagrams: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  poem: false
+  in_progress_fortune: false
+  slop_detection:
+    enabled: true
+    label: "slop"
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+
+  path_filters:
+    - "!pnpm-lock.yaml"
+    - "!package-lock.json"
+    - "!yarn.lock"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/coverage/**"
+    - "!**/.turbo/**"
+    - "!**/.claude/**"
+    - "!**/.gemini/**"
+    - "!**/*.min.js"
+    - "!**/*.map"
+
+  path_instructions:
+    - path: "**/*.{ts,tsx}"
+      instructions: |
+        - Assure la stricte sûreté de typage : interdiction absolue de `any`, de double cast `as unknown as X`, d'assertion non-nulle `!` et de `@ts-ignore`.
+        - Respecte l'isolation architecturale (Clean Architecture / Hexagonale) : `@openview/core` ne dépend d'aucun paquet frère et n'accède à aucun environnement extérieur (constructeur Date sans argument, Date.now, Math.random, process.env).
+        - Valide systématiquement les structures de données avec Zod.
+        - Ne commente pas les détails stylistiques ou de formatage déjà couverts par Biome.
+
+  tools:
+    biome:
+      enabled: true
+    eslint:
+      enabled: false
+    ast-grep:
+      enabled: true
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    markdownlint:
+      enabled: true
+
+chat:
+  art: false
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/AGENTS.md"
+      - "**/ARCHITECTURE.md"
+      - "**/CONTRIBUTING.md"

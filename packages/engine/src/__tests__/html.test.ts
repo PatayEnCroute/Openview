@@ -7,10 +7,10 @@ import {
 } from '@openview/core';
 import { describe, expect, it } from 'vitest';
 import { columnWidths, documentCss } from '../html/css.js';
-import { cssFontFamily, cssString, escapeAttribute, escapeText } from '../html/escape.js';
+import { escapeAttribute, escapeText } from '../html/escape.js';
 import { CONTENT_SECURITY_POLICY } from '../html/serialize.js';
 import { resolveRowRules } from '../html/table-rules.js';
-import { materializedOf, pagedHtmlOf, SAMPLE_DATA, TINY_PNG } from './fixtures.js';
+import { materializedOf, pagedHtmlOf, refusalOfCut, SAMPLE_DATA, TINY_PNG } from './fixtures.js';
 
 function htmlOf(overrides: Record<string, unknown>, data: EvaluationScope = SAMPLE_DATA): string {
   return pagedHtmlOf(overrides, data);
@@ -42,21 +42,6 @@ describe('escaping', () => {
 
   it('leaves ordinary characters untouched', () => {
     expect(escapeText('Total HT — 1 200')).toBe('Total HT — 1 200');
-  });
-
-  it('hex-escapes everything a css string could use to escape its own value', () => {
-    expect(cssString('a;b')).toBe('"a\\3b b"');
-    expect(cssString('a"b')).toBe('"a\\22 b"');
-    expect(cssString('a\\b')).toBe('"a\\5c b"');
-    expect(cssString('</style>')).toBe('"\\3c \\2f style\\3e "');
-  });
-
-  it('keeps a generic family as a keyword and quotes every other name', () => {
-    expect(cssFontFamily('sans-serif')).toBe('sans-serif');
-    expect(cssFontFamily('serif')).toBe('serif');
-    expect(cssFontFamily('Georgia')).toBe('"Georgia"');
-    /* Quoted, so it names a family nothing matches instead of the keyword that reads the host. */
-    expect(cssFontFamily('system-ui')).toBe('"system-ui"');
   });
 });
 
@@ -90,23 +75,32 @@ describe('injection', () => {
   });
 
   it('never puts template text into a style block', () => {
-    const html = htmlOf(
-      flow([
-        {
-          type: 'text',
-          id: 'font',
-          typography: { family: `X;position:absolute;background:url(http://evil)` },
-          content: [{ kind: 'literal', text: 'x' }],
-        },
-      ]),
+    /* Stronger than escaping it: a family outside the catalogue never reaches the css at all, so
+       there is no hostile string left for a css parser to read. */
+    const refused = refusalOfCut(() =>
+      htmlOf(
+        flow([
+          {
+            type: 'text',
+            id: 'font',
+            typography: { family: `X;position:absolute;background:url(http://evil)` },
+            content: [{ kind: 'literal', text: 'x' }],
+          },
+        ]),
+      ),
     );
-    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
-    expect(style).not.toContain('evil');
-    /* The separator that would open a second declaration is hex-escaped, so the whole hostile
-       string stays one family name inside one quoted value. */
-    expect(html).toContain('\\3b position\\3a absolute');
-    expect(html).not.toMatch(/;position:absolute/);
-    expect(html).not.toContain('url(http');
+    expect(refused.code).toBe('unsupported-font-family');
+    expect(refused.message).not.toContain('evil');
+    expect(JSON.stringify(refused.details)).not.toContain('evil');
+  });
+
+  it('writes one internal family per run and no stack behind it', () => {
+    const html = htmlOf(flow([literal('t', 'plain')]));
+    expect(html).toContain('font-family:"__openview_noto_sans_2_015"');
+    expect(html).toContain('font-synthesis:none');
+    /* No comma anywhere in a font-family value: a stack would let the browser continue past the
+       embedded face and paint the rest from the machine. */
+    expect(html).not.toMatch(/font-family:[^;"]*,/);
   });
 
   it('emits no event handler, frame, or network reference', () => {

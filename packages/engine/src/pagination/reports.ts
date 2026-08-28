@@ -13,12 +13,7 @@ const NOT_FINITE =
   'The contributions a page carries forward add up to something that is not a finite number, so no page report can be written from them. Read `details.pageNumber` for the page involved; the values themselves are deliberately not repeated.';
 
 /**
- * The contributing rows that FINISHED on this page, in the order the fragments carry them.
- *
- * A row that spans several pages is counted once, on the page carrying its last fragment: an amount
- * counted where the row started would be carried forward before the row it belongs to was printed.
- * A repeated header is never a source, and a set of keys makes a second visit of one occurrence
- * impossible.
+ * Collects contributing table rows that completed on this page.
  */
 export function completedOn(fragments: readonly MaterialFragment[]): readonly MaterialRow[] {
   const found: MaterialRow[] = [];
@@ -31,8 +26,6 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
   };
 
   const table = (fragment: TableFragment): void => {
-    /* `header` is the declared header, cloned onto every fragment that continues the table: reading
-       it as a source would raise the report on each page with no new row of the body. */
     for (const row of fragment.rows) {
       const contribution = row.source.pageReport;
       if (
@@ -43,8 +36,6 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
         seen.add(contribution.key);
         found.push(row.source);
       }
-      /* Descended whatever the edge, not only on the finishing ones: a table nested in a cell has
-         rows of its own, and one of them may finish here while the row holding it does not. */
       cells(row.cells);
     }
   };
@@ -56,8 +47,6 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
         image: () => undefined,
         container: (container) => walk(container.children),
         table,
-        /* A grid is atomic, so every zone -- and every contributing row inside one -- finishes on
-           the page that holds the grid. */
         grid: (grid) => walk(grid.source.items.map((item) => wholeFragment(item.content))),
       });
     }
@@ -69,11 +58,9 @@ export function completedOn(fragments: readonly MaterialFragment[]): readonly Ma
 
 const rankOf = (row: MaterialRow): number => row.pageReport?.order ?? 0;
 
-/** The same rows, ranked the way they were materialised rather than the way a page walks them. */
 const byContribution = (rows: readonly MaterialRow[]): readonly MaterialRow[] =>
   [...rows].sort((left, right) => rankOf(left) - rankOf(right));
 
-/** The contributions the rows carry, in the rank they were materialised at. */
 function contributionsOf(rows: readonly MaterialRow[]): readonly MaterialPageReport[] {
   const carried: MaterialPageReport[] = [];
   for (const row of byContribution(rows)) {
@@ -84,7 +71,6 @@ function contributionsOf(rows: readonly MaterialRow[]): readonly MaterialPageRep
   return carried;
 }
 
-/** Adds the terms in the rank they were materialised at, and refuses a total that is not finite. */
 function totalOf(carried: readonly MaterialRow[], pageNumber: number): number {
   let total = 0;
   for (const contribution of contributionsOf(carried)) {
@@ -97,15 +83,7 @@ function totalOf(carried: readonly MaterialRow[], pageNumber: number): number {
 }
 
 /**
- * The largest absolute value any incoming page report of this document can reach.
- *
- * The saturated sum of the ABSOLUTE contributions. Every page carries forward some subset of the
- * contributions that finished before it, and the absolute value of any such subset sum is bounded
- * by this one whatever cancels out inside it -- which is what lets a marker reserve its width once,
- * before the cuts that decide the subsets exist.
- *
- * Saturating at `Number.MAX_VALUE` stays safe: the bound only grows, so a document whose amounts
- * overflow asks for an absurd reserve and is refused, never quietly cropped.
+ * Computes the maximum possible cumulative report total magnitude across the document.
  */
 export function reportMagnitudeBound(document: MaterialDocument): number {
   let total = 0;
@@ -139,22 +117,15 @@ export function reportMagnitudeBound(document: MaterialDocument): number {
     }
   }
 
-  /* The flow alone: a contribution declared inside a band or a layer is refused at binding, since
-     the occurrence it would be counted on does not exist. */
   blocks(document.root);
   return Number.isFinite(total) ? total : Number.MAX_VALUE;
 }
 
-/**
- * One page's fragments, the raw total the pages before it carry in, and what closed the boundary.
- *
- * Both facts come from the same walk on purpose: the sum a marker writes and the rows a caller is
- * told about it can never name two different sets of contributions.
- */
+/** Page fragments paired with incoming report value and completed rows. */
 export interface ReportedPage {
   readonly root: readonly MaterialFragment[];
   readonly incomingReport: number;
-  /** The contributing rows whose occurrence FINISHED on this page, in contribution order. */
+  /** Contributing rows that finished on this page, ordered by report contribution rank. */
   readonly completedBy: readonly MaterialRow[];
 }
 
@@ -172,8 +143,6 @@ export function withIncomingReports(
     reported.push({
       root,
       incomingReport: index === 0 ? 0 : totalOf(carried, index + 1),
-      /* Ranked, not left in walk order: a table nested in a cell finishes rows out of the order the
-         enclosing flow visits them, and what a caller reads must be the order the sum used. */
       completedBy: byContribution(completed),
     });
     carried.push(...completed);

@@ -337,19 +337,40 @@ describe('typography and alignment', () => {
   it('fills every absent property with the engine defaults', () => {
     expect(resolveRunTypography(undefined, undefined)).toStrictEqual(DEFAULT_TYPOGRAPHY);
     expect(DEFAULT_TYPOGRAPHY).toStrictEqual({
-      family: 'sans-serif',
+      /* An embedded family, never a css generic: `sans-serif` would select whatever the machine
+         has installed, which is the machine speaking rather than the template. */
+      face: {
+        family: 'noto-sans-2.015',
+        cssFamily: '__openview_noto_sans_2_015',
+        weight: 400,
+        style: 'normal',
+      },
       sizePt: 10,
-      bold: false,
-      italic: false,
       color: '#000000',
     });
   });
 
   it('gives a run precedence over its block, and the block over the default', () => {
-    const resolved = resolveRunTypography({ bold: true }, { family: 'Georgia', bold: false });
-    expect(resolved.bold).toBe(true);
-    expect(resolved.family).toBe('Georgia');
+    const resolved = resolveRunTypography({ bold: true }, { family: 'Noto Serif', bold: false });
+    expect(resolved.face).toStrictEqual({
+      family: 'noto-serif-2.015',
+      cssFamily: '__openview_noto_serif_2_015',
+      weight: 700,
+      style: 'normal',
+    });
     expect(resolved.sizePt).toBe(DEFAULT_TYPOGRAPHY.sizePt);
+  });
+
+  it('refuses a family the build does not embed, naming the site and not the name', () => {
+    let refused: DocumentRenderError | undefined;
+    try {
+      resolveRunTypography(undefined, { family: 'Georgia' }, { nodeId: 'title', region: 'root' });
+    } catch (error: unknown) {
+      refused = error instanceof DocumentRenderError ? error : undefined;
+    }
+    expect(refused?.code).toBe('unsupported-font-family');
+    expect(refused?.details).toStrictEqual({ nodeId: 'title', region: 'root' });
+    expect(refused?.message).not.toContain('Georgia');
   });
 
   it('resolves each run of a block separately', () => {
@@ -358,7 +379,7 @@ describe('typography and alignment', () => {
         {
           type: 'text',
           id: 'runs',
-          typography: { family: 'Georgia', sizePt: 9 },
+          typography: { family: 'Noto Serif', sizePt: 9 },
           content: [
             { kind: 'literal', text: 'plain' },
             { kind: 'literal', text: 'loud', typography: { bold: true, color: '#8c3a1b' } },
@@ -368,15 +389,18 @@ describe('typography and alignment', () => {
     );
     const block = textAt(blocks, 0);
     expect(block.runs[0]?.typography).toStrictEqual({
-      family: 'Georgia',
+      face: {
+        family: 'noto-serif-2.015',
+        cssFamily: '__openview_noto_serif_2_015',
+        weight: 400,
+        style: 'normal',
+      },
       sizePt: 9,
-      bold: false,
-      italic: false,
       color: '#000000',
     });
-    expect(block.runs[1]?.typography.bold).toBe(true);
+    expect(block.runs[1]?.typography.face.weight).toBe(700);
     expect(block.runs[1]?.typography.color).toBe('#8c3a1b');
-    expect(block.runs[1]?.typography.family).toBe('Georgia');
+    expect(block.runs[1]?.typography.face.family).toBe('noto-serif-2.015');
   });
 
   it('defaults alignment to start, and lets a block override its column', () => {

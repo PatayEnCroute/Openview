@@ -10,6 +10,7 @@ import {
   gridPage,
   materializedOf,
   multiPageOf,
+  NO_FONTS,
   paginateOnGrid,
   refusalOfCut,
 } from './fixtures.js';
@@ -422,6 +423,7 @@ describe('the digits a report marker paints', () => {
           printableHeight: document.printable.height * metrics.pxPerMm,
           slack: new Map(),
         }),
+        NO_FONTS,
       ),
     );
     return [...html.matchAll(/<span class="ov-marker"[^>]*>([^<]*)<\/span>/g)].map(

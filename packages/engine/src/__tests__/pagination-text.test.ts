@@ -9,6 +9,7 @@ import {
   paginateOnGrid,
   refusalOfCut,
   textPerPage,
+  typographyOf,
 } from './fixtures.js';
 import { GRID, gridLines, gridMetrics } from './metrics.js';
 
@@ -44,12 +45,12 @@ const written = (fragment: TextFragment): string =>
 describe('slicing runs between two cursors', () => {
   const runs: readonly MaterialRun[] = [
     { kind: 'text', text: 'alpha', typography: GRID_TYPOGRAPHY() },
-    { kind: 'pageField', field: 'number', typography: GRID_TYPOGRAPHY() },
+    { kind: 'pageField', field: 'number', site: {}, typography: GRID_TYPOGRAPHY() },
     { kind: 'text', text: 'omega', typography: GRID_TYPOGRAPHY() },
   ];
 
   function GRID_TYPOGRAPHY() {
-    return { family: 'sans-serif', sizePt: 10, bold: false, italic: false, color: '#000000' };
+    return typographyOf();
   }
 
   it('keeps every character of a slice that spans several runs', () => {
@@ -74,15 +75,15 @@ describe('slicing runs between two cursors', () => {
   });
 
   it('keeps the typography of each run rather than merging them', () => {
-    const bold = { ...GRID_TYPOGRAPHY(), bold: true };
+    const bold = typographyOf({ bold: true });
     const mixed: readonly MaterialRun[] = [
       { kind: 'text', text: 'plain', typography: GRID_TYPOGRAPHY() },
       { kind: 'text', text: 'heavy', typography: bold },
     ];
     const sliced = sliceRuns(mixed, { run: 0, offset: 3 }, { run: 1, offset: 2 });
     expect(
-      sliced.map((run) => (run.kind === 'text' ? run.typography.bold : undefined)),
-    ).toStrictEqual([false, true]);
+      sliced.map((run) => (run.kind === 'text' ? run.typography.face.weight : undefined)),
+    ).toStrictEqual([400, 700]);
   });
 
   it('yields nothing for a slice that starts past the runs it was given', () => {
@@ -96,7 +97,7 @@ describe('the visual lines the grid reports', () => {
       {
         kind: 'text',
         text: 'ab\ncd',
-        typography: { family: 'x', sizePt: 10, bold: false, italic: false, color: '#000000' },
+        typography: typographyOf(),
       },
     ];
     expect(gridLines(runs, GRID)).toStrictEqual([
@@ -217,7 +218,9 @@ describe('a text cut across pages', () => {
   });
 
   it('keeps a surrogate pair and a combining sequence whole across the seam', () => {
-    const whole = `${'a'.repeat(19)}\u{1F469}‍\u{1F4BB}é${'b'.repeat(19)}`;
+    /* A latin extended-g letter rather than an emoji: it is a real surrogate pair and the
+       embedded faces draw it, whereas an emoji is refused before any cut is chosen. */
+    const whole = `${'a'.repeat(19)}\u{1DF00}e\u0301${'b'.repeat(19)}`;
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(1), ...flow([literalText('t', whole)]) }, {}),
     );
@@ -272,7 +275,9 @@ describe('a text cut across pages', () => {
       const [container] = page.root;
       const fragment = container?.kind === 'container' ? container.children[0] : undefined;
       const run = fragment?.kind === 'text' ? fragment.runs[0] : undefined;
-      return run === undefined ? undefined : [run.typography.bold, run.typography.italic];
+      return run === undefined
+        ? undefined
+        : [run.typography.face.weight === 700, run.typography.face.style === 'italic'];
     });
     expect(styles).toStrictEqual([
       [true, false],

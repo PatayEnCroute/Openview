@@ -6,9 +6,11 @@ import {
   type PdfSourceDocument,
 } from '@openview/engine';
 import puppeteer, { type Browser, type BrowserContext, type Page } from 'puppeteer';
+import { canonicalizePdf } from './canonicalize-pdf.js';
 import { assertHonouredSheet } from './capability.js';
+import { deriveMeasurement } from './derive.js';
 import { assertPrintableImages } from './image-source.js';
-import { measureInPage } from './measure.js';
+import { collectInPage } from './measure.js';
 
 /**
  * Explicit Puppeteer PDF generation options ensuring CSS page dimensions and backgrounds are preserved.
@@ -29,6 +31,9 @@ export interface PuppeteerLaunchOptions {
   /** Extra launch arguments, for a sandbox a container needs configured differently. */
   readonly args?: readonly string[] | undefined;
 }
+
+const FONT_NOT_LOADED =
+  'A face the document embeds did not load in the browser, so the layout would have been measured in whatever font the machine offers instead. Read `details.limit` for how many faces the document declared.';
 
 const AFTER_CLOSE =
   'This layout session is closed. A session belongs to one render, and reopening a browser mid-render would measure a document in one environment and print it in another.';
@@ -103,22 +108,42 @@ export async function openPuppeteerSession(
       return;
     }
     await page.setContent(source.html, { waitUntil: 'load' });
-    await page.evaluate(async () => {
+    const faces = await page.evaluate(async () => {
+      /* Forced, not awaited: a declared face the current page does not happen to paint stays
+         `unloaded` for ever, so `fonts.ready` alone proves nothing about its bytes. Loading each
+         one turns a corrupt face or a refused uri into an observable failure here. */
+      const declared = [...document.fonts];
+      const settled = await Promise.allSettled(declared.map(async (face) => await face.load()));
       await document.fonts.ready;
+      /* Only counts travel back: the family names belong to the document, not to this adapter. */
+      return {
+        declared: declared.length,
+        broken:
+          settled.filter((one) => one.status === 'rejected').length +
+          declared.filter((face) => face.status !== 'loaded').length,
+      };
     });
+    if (faces.broken > 0) {
+      throw new DocumentRenderError(FONT_NOT_LOADED, 'layout-measurement-failed', {
+        limit: faces.declared,
+      });
+    }
     loaded = source.html;
   };
 
   return {
     async measure(source: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
       await load(source);
-      return await page.evaluate(measureInPage);
+      return deriveMeasurement(await page.evaluate(collectInPage));
     },
     async print(source: PdfSourceDocument): Promise<Uint8Array> {
       /* The same html the last measurement ran on stays loaded, so the bytes are the layout that
          was proved rather than a second one that happens to look like it. */
       await load(source);
-      return await page.pdf(PDF_OPTIONS);
+      /* Canonicalised before it leaves: the raw file carries the instant of printing and the
+         browser's own name, so two identical renders a second apart would differ. No caller can
+         reach the unnormalised bytes through this port. */
+      return await canonicalizePdf(await page.pdf(PDF_OPTIONS));
     },
     async close(): Promise<void> {
       closed = true;

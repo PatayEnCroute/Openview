@@ -41,6 +41,7 @@ import {
   refusal,
   refusalOf,
 } from '../errors.js';
+import { assertCoveredText } from './fonts/index.js';
 import {
   createPresentationSession,
   type PresentationSelection,
@@ -61,6 +62,7 @@ import type {
   MaterialRowGroupOccurrence,
   MaterialRun,
   MaterialText,
+  MaterialTextRun,
   ResolvedTypography,
 } from './types.js';
 import { resolveRunTypography } from './typography.js';
@@ -77,23 +79,13 @@ const CONTRIBUTION_IN_A_BAND =
 const CONTRIBUTION_IN_A_LAYER =
   'A row inside a page layer declares a contribution to the page report. A layer is repeated identically on every page, so the occurrence it would be counted on does not exist. Read `details.nodeId` for the row.';
 
-/** Alignment used when neither the block nor its column declares one. */
+/** Default text alignment. */
 const DEFAULT_ALIGN = 'start';
 
-/**
- * Hands out one key per measurable occurrence of a single render.
- *
- * A counter, not a clock and not a random source: the same template and the same data produce the
- * same keys twice, which is what lets a measurement be replayed and compared.
- */
+/** Key generator for distinct measurable occurrences within a single render pass. */
 export interface KeySource {
   next(): string;
-  /**
-   * The materialisation rank of one page-report contribution, zero-based.
-   *
-   * Kept beside the keys because it has the same lifetime and the same guarantee: a counter, so
-   * the same template and the same data rank the same contributions the same way twice.
-   */
+  /** Returns the next sequential order rank for a page-report contribution. */
   nextReportOrder(): number;
 }
 
@@ -113,30 +105,24 @@ export function createKeySource(): KeySource {
   };
 }
 
-/** Everything a traversal step needs beyond the node itself. Internal to this package. */
+/** Contextual state carried through the materialization traversal. */
 export interface MaterializeContext {
   readonly scope: EvaluationScope;
   readonly budget: EvaluationBudget;
   readonly keys: KeySource;
-  /** The writings of this render, resolved on first use and shared by every site that asks. */
+  /** Resolved presentation session for this render. */
   readonly presentations: PresentationSession;
   readonly region: DocumentArea;
-  /** Alignment of the enclosing table column, which a block alignment overrides. */
+  /** Alignment of the enclosing table column, overridden by block alignment. */
   readonly column: TableColumnAlignment | undefined;
-  /** Position of the node being materialised in the stored template, with no rank interleaved. */
+  /** Path in the template declaration tree to the current node. */
   readonly declarationPath: readonly (string | number)[];
-  /** The repetitions above it, outermost first. Empty outside every loop and row group. */
+  /** Ancestor iteration ranks, outermost first. */
   readonly iterations: readonly IterationAddress[];
 }
 
 type Context = MaterializeContext;
 
-/**
- * The address of the occurrence being built, attached to a refusal only when one repeats.
- *
- * Outside every repetition the declaration path already says everything, and a second empty
- * ancestry beside it would be noise on every refusal the engine raises.
- */
 function iterationDetail(context: Context): Pick<DocumentRenderErrorDetails, 'occurrence'> {
   if (context.iterations.length === 0) {
     return {};
@@ -149,7 +135,6 @@ function iterationDetail(context: Context): Pick<DocumentRenderErrorDetails, 'oc
   };
 }
 
-/** The four fields naming one occurrence, projected from the context and the declaration. */
 function addressOf(
   nodeId: string,
   nodeType: DocumentNodeType,
@@ -179,12 +164,7 @@ function rejectAsRow(node: DocumentNode): never {
   );
 }
 
-/**
- * Runs one evaluation and attributes a refusal to the exact site it happened at.
- *
- * `at` is the site inside the declaration -- a segment, a contribution -- and stays distinct from
- * the declaration path of the occurrence, which travels beside it when a repetition is open.
- */
+/** Evaluates an expression while catching and attributing errors to the template node site. */
 function within<TResult>(
   nodeId: string,
   at: readonly (string | number)[],
@@ -209,8 +189,6 @@ function runOf(
   index: number,
   context: Context,
 ): MaterialRun {
-  const complete = (run: Typography | undefined): ResolvedTypography =>
-    resolveRunTypography(run, block.typography);
   const at = [...context.declarationPath, 'content', index];
   const details = {
     nodeId: block.id,
@@ -218,32 +196,32 @@ function runOf(
     region: context.region,
     ...iterationDetail(context),
   };
+  const complete = (run: Typography | undefined): ResolvedTypography =>
+    resolveRunTypography(run, block.typography, details);
+  /* Checked here rather than at paint time: the face is known, the site is known, and a character
+     the face cannot draw would otherwise be handed to a browser that would borrow a glyph. */
+  const printed = (text: string, typography: ResolvedTypography): MaterialTextRun => {
+    assertCoveredText(text, typography.face, details);
+    return { kind: 'text', text, typography };
+  };
   return visitSegment<MaterialRun>(segment, {
-    literal: (literal) => ({
-      kind: 'text',
-      text: literal.text,
-      typography: complete(literal.typography),
-    }),
-    /* Evaluated, then guarded, then written: the writing a site declares decides which formatter
-       runs, and a site declaring none keeps the canonical form to the character. */
+    literal: (literal) => printed(literal.text, complete(literal.typography)),
     binding: (binding) => {
       const value = within(block.id, at, context, () =>
         evaluateExpression(binding.value, context.scope, { budget: context.budget }),
       );
       const format = binding.format;
-      return {
-        kind: 'text',
-        text:
-          format === undefined
-            ? printableText(value, details)
-            : writeValue(
-                format,
-                context.presentations.resolve(format, details).presentation,
-                value,
-                details,
-              ),
-        typography: complete(binding.typography),
-      };
+      return printed(
+        format === undefined
+          ? printableText(value, details)
+          : writeValue(
+              format,
+              context.presentations.resolve(format, details).presentation,
+              value,
+              details,
+            ),
+        complete(binding.typography),
+      );
     },
     /* No digits here: which page holds this run, and which rows ended before it, are decided by
        the cuts. The marker travels as itself, carrying the writing it resolved, and page
@@ -253,6 +231,7 @@ function runOf(
         ? {
             kind: 'pageField',
             field: 'report',
+            site: details,
             decimals: field.decimals,
             mode: field.mode,
             ...(field.format === undefined
@@ -269,6 +248,7 @@ function runOf(
         : {
             kind: 'pageField',
             field: field.field,
+            site: details,
             ...(field.format === undefined
               ? {}
               : { writing: context.presentations.resolveCounter(field.format, details) }),
@@ -313,13 +293,7 @@ function materializeChildren(
   );
 }
 
-/**
- * Wraps one occurrence of a marked loop or condition so the paginator has something to keep whole.
- *
- * The wrapper carries no box and no style, and Chromium gives the flow inside it exactly the widths
- * and heights the flattened flow had. It exists only when the mark asks for it: an unmarked node
- * still flattens, so no document pays for a boundary nothing reads.
- */
+/** Wraps children into a keep-together container for marked loops and conditions. */
 function transparentGroup(
   node: LoopNode | ConditionNode,
   children: readonly MaterialBlock[],
@@ -328,8 +302,6 @@ function transparentGroup(
   return {
     kind: 'container',
     key: context.keys.next(),
-    /* Addressed as the declaration it wraps, not as a container the template never held: a marked
-       loop is reported as a `loop` occurrence, one per item. */
     ...addressOf(node.id, node.type, context),
     box: undefined,
     keepTogether: true,
@@ -341,8 +313,6 @@ function materializeLoop(node: LoopNode, context: Context): readonly MaterialBlo
   const items = within(node.id, context.declarationPath, context, () =>
     evaluateSequence(node.each, context.scope, { budget: context.budget, caller: 'loop' }),
   );
-  /* One group per item, never one around all of them: a marked loop asks for each iteration to
-     stay whole, and a single group of sixty would be a block no page could hold. */
   return items.flatMap((item, index) => {
     const inner: Context = {
       ...context,
@@ -359,21 +329,12 @@ function materializeCondition(node: ConditionNode, context: Context): readonly M
     evaluatePredicate(node.when, context.scope, { budget: context.budget, caller: 'condition' }),
   );
   if (!holds) {
-    /* A branch that does not hold produces no occurrence, so there is nothing for a mark to keep. */
     return [];
   }
   const children = materializeChildren(node.children, context);
-  /* A condition repeats nothing, so it adds no rank: the ancestry it passes down is the one it
-     received. */
   return node.keepTogether === true ? [transparentGroup(node, children, context)] : children;
 }
 
-/**
- * One cell per declared column, addressed by where the cell really sits in the stored row.
- *
- * The rank of the column is not the rank of the cell: a row may omit a column or declare its cells
- * in another order, and a path built from the column would then point at somebody else's cell.
- */
 function materializeCell(row: TableRowNode, column: TableColumn, context: Context): MaterialCell {
   const at = row.cells.findIndex((candidate) => candidate.columnId === column.id);
   const declared = row.cells[at];
@@ -391,13 +352,7 @@ function materializeCell(row: TableRowNode, column: TableColumn, context: Contex
   };
 }
 
-/**
- * Evaluates what one occurrence of a row contributes, in that occurrence's own scope.
- *
- * Once per occurrence and on the shared budget: sixty repetitions cost sixty evaluations, never one
- * per page and never one per settling round. A value that is not a finite number is refused with
- * the category of what arrived and nothing of the value itself.
- */
+/** Evaluates the page report contribution formula declared on a row. */
 function contributionOf(
   row: TableRowNode,
   key: string,
@@ -454,18 +409,6 @@ function materializeRow(
   };
 }
 
-/**
- * Second exhaustive traversal site: what a table body may hold.
- *
- * Takes any node rather than the body union so that the six refusing handlers are reachable and
- * provable, instead of being defensive branches no call can enter.
- */
-/**
- * The rows one item of a marked group produced, each pointing at the occurrence they form.
- *
- * The boundary is a reference on the rows and nothing in the markup: `tbody` keeps holding `tr` and
- * only `tr`, so the columns, the rules and the height of the table are the ones it already had.
- */
 function groupOccurrenceOf(
   group: TableRowGroupNode,
   index: number,
@@ -486,6 +429,7 @@ function groupOccurrenceOf(
   };
 }
 
+/** Materializes a table body entry (row or iterated row group) into rows. */
 export function materializeBodyEntry(
   entry: DocumentNode,
   columns: readonly TableColumn[],
@@ -501,8 +445,6 @@ export function materializeBodyEntry(
           caller: 'tableRowGroup',
         }),
       );
-      /* Per item, exactly as a marked loop: several rows declared in one group are kept together
-         for each item, never for the whole sequence. */
       return items.flatMap((item, index) => {
         const at = firstRow + index * group.rows.length;
         const occurrence = groupOccurrenceOf(group, index, at, context);
@@ -535,12 +477,6 @@ export function materializeBodyEntry(
   });
 }
 
-/**
- * The body of a table, flattened while keeping each group occurrence's position in the sequence.
- *
- * Accumulated rather than mapped, because a group occurrence has to know where its first row lands
- * in the whole body: that index is what lets the paginator recognise the start of the occurrence.
- */
 function bodyRows(
   node: TableNode,
   section: (name: 'header' | 'body' | 'footer', index: number) => Context,
@@ -576,12 +512,6 @@ function materializeTable(node: TableNode, context: Context): MaterialBlock {
   };
 }
 
-/**
- * One zone of a grid: its resolved spans and its bound container, in the grid's own scope.
- *
- * The container comes back from the block traversal, so loops and conditions inside a zone behave
- * exactly as they do anywhere else in the flow.
- */
 function materializeGrid(node: GridNode, context: Context): MaterialGrid {
   return {
     kind: 'grid',
@@ -618,13 +548,7 @@ function materializeGrid(node: GridNode, context: Context): MaterialGrid {
   };
 }
 
-/**
- * First exhaustive traversal site: what a block flow may hold. A ninth node kind breaks the
- * compilation here and in {@link materializeBodyEntry}, and nowhere else.
- *
- * A loop yields one occurrence per item, a false condition yields nothing, and every other kind
- * yields exactly one block.
- */
+/** Materializes an AST document node into one or more material blocks. */
 export function materializeNode(node: DocumentNode, context: Context): readonly MaterialBlock[] {
   return visitNode<readonly MaterialBlock[]>(node, {
     text: (text) => [materializeText(text, context)],
@@ -669,12 +593,7 @@ function bandContainer(
   return content;
 }
 
-/**
- * Binds the bands of one side whose domain can still be reached, and only those.
- *
- * A band the run of pages never reaches is not evaluated: an `exceptFirst` footer of a document that
- * turns out to hold one page is painted nowhere, and a formula it carries must not run at all.
- */
+/** Materializes reachable page bands for a region. */
 export function materializeBands(
   bands: readonly PageBand[],
   reachable: ReadonlySet<PageBandOccurrence>,
@@ -686,12 +605,6 @@ export function materializeBands(
     .map((band) => ({ on: band.on, content: bandContainer(band, region, context) }));
 }
 
-/**
- * Binds the layers of one plane, once per render, in the stored back-to-front order.
- *
- * One evaluation whatever the page count: the same materialised content is painted on every page,
- * and its markers receive each page's values at composition without re-running the model.
- */
 function materializeLayers(
   layers: readonly PageLayer[] | undefined,
   plane: PageLayerPlane,
@@ -719,27 +632,19 @@ function materializeLayers(
     });
 }
 
-/** What one materialisation carries beyond the document, so a later pass can widen it. */
+/** Result of a document materialization pass. */
 export interface MaterializedDocument {
   readonly document: MaterialDocument;
   readonly budget: EvaluationBudget;
   readonly keys: KeySource;
-  /**
-   * The writings this render resolved, carried so a later pass reuses them.
-   *
-   * Its lifetime is the render's: a profile met in the flow and again in a band bound later is
-   * resolved once, and no resolution survives the call that created it.
-   */
+  /** Resolved presentations session for this render. */
   readonly presentations: PresentationSession;
-  /** The domains whose bands are already bound, so a second pass binds only the new ones. */
+  /** Set of band occurrences already materialized. */
   readonly bound: ReadonlySet<PageBandOccurrence>;
 }
 
 /**
- * Evaluates template bindings with host data into a materialized document without pending expressions.
- *
- * @param reachable The band domains that can appear across pages.
- * @param selection Which declared writing each profile the template names stands for.
+ * Materializes a template into a bound document hierarchy.
  */
 export function materializeDocument(
   template: Template,
@@ -760,8 +665,6 @@ export function materializeDocument(
     declarationPath: [],
     iterations: [],
   };
-  /* Evaluation follows paint order and never varies per page: background layers, top bands, flow,
-     bottom bands, foreground layers. The order stays observable when a budget stops it. */
   const backgroundLayers = materializeLayers(template.page.layers, 'background', {
     ...shared,
     region: 'background',
@@ -802,10 +705,7 @@ export function materializeDocument(
 }
 
 /**
- * Binds the bands a widened domain set adds, on the same budget and the same key counter.
- *
- * The flow is never rebound: an occurrence is evaluated once per render whatever the page count, so
- * only the domains that were unreachable a moment ago are visited here.
+ * Materializes newly reachable page bands when page count increases during pagination.
  */
 export function extendBands(
   template: Template,
@@ -818,8 +718,6 @@ export function extendBands(
     scope: data,
     budget: previous.budget,
     keys: previous.keys,
-    /* The SAME session, never a fresh one: a writing already resolved for the flow is reused by a
-       band bound here, so one render resolves one writing key exactly once. */
     presentations: previous.presentations,
     column: undefined,
     declarationPath: [],

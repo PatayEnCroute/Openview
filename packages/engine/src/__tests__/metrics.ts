@@ -1,4 +1,4 @@
-import { kindOf } from '@openview/core';
+import { documentAreas, rowsOf, visitBlock, walkBlocks } from '../document/traverse.js';
 import type {
   MaterialBlock,
   MaterialDocument,
@@ -84,44 +84,31 @@ function rowHeight(row: MaterialRow, grid: GridLayout, into: Map<string, number>
 
 function blockHeight(block: MaterialBlock, grid: GridLayout, into: Map<string, number>): number {
   const padding = boxPaddingPx(block.box, grid.pxPerMm);
-  let height: number;
-  switch (block.kind) {
-    case 'text':
-      height = padding + gridLines(block.runs, grid).length * grid.lineHeight;
-      break;
-    case 'image':
-      height = padding + grid.imageHeight;
-      break;
-    case 'container': {
-      let stacked = 0;
-      for (const child of block.children) {
-        stacked += blockHeight(child, grid, into);
-      }
-      height = padding + stacked;
-      break;
+  const stack = (blocks: readonly MaterialBlock[]): number => {
+    let stacked = 0;
+    for (const child of blocks) {
+      stacked += blockHeight(child, grid, into);
     }
-    case 'table': {
+    return stacked;
+  };
+  const height = visitBlock<number>(block, {
+    text: (text) => padding + gridLines(text.runs, grid).length * grid.lineHeight,
+    image: () => padding + grid.imageHeight,
+    container: (container) => padding + stack(container.children),
+    table: (table) => {
       let stacked = 0;
-      for (const row of [...block.header, ...block.body, ...block.footer]) {
+      for (const row of rowsOf(table)) {
         stacked += rowHeight(row, grid, into);
       }
-      height = padding + stacked;
-      break;
-    }
-    case 'grid': {
-      /* Fully declared: rows times step, whatever the zone contents measure. The contents are
-         still walked so their own boxes have heights when a test reads them. */
-      for (const item of block.items) {
-        blockHeight(item.content, grid, into);
-      }
-      height = padding + block.rows * block.step * grid.pxPerMm;
-      break;
-    }
-    default: {
-      const exhaustive: never = block;
-      throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
-    }
-  }
+      return padding + stacked;
+    },
+    /* Fully declared: rows times step, whatever the zone contents measure. The contents are still
+       walked so their own boxes have heights when a test reads them. */
+    grid: (zone) => {
+      stack(zone.items.map((item) => item.content));
+      return padding + zone.rows * zone.step * grid.pxPerMm;
+    },
+  });
   into.set(block.key, height);
   return height;
 }
@@ -139,21 +126,15 @@ export function gridMetrics(
   const grid = { ...GRID, ...overrides };
   const heights = new Map<string, number>();
   const lines = new Map<string, readonly LineMetric[]>();
-  const walk = (blocks: readonly MaterialBlock[]): void => {
+  for (const { blocks } of documentAreas(document)) {
     for (const block of blocks) {
       blockHeight(block, grid, heights);
-      collectLines(block, grid, lines);
     }
-  };
-  for (const layer of [...document.backgroundLayers, ...document.foregroundLayers]) {
-    walk([layer.content]);
-  }
-  for (const band of document.headerBands) {
-    walk([band.content]);
-  }
-  walk(document.root);
-  for (const band of document.footerBands) {
-    walk([band.content]);
+    for (const block of walkBlocks(blocks)) {
+      if (block.kind === 'text') {
+        lines.set(block.key, gridLines(block.runs, grid));
+      }
+    }
   }
   return {
     pxPerMm: grid.pxPerMm,
@@ -166,41 +147,4 @@ export function gridMetrics(
     },
     lines: (key: string) => lines.get(key) ?? [],
   };
-}
-
-function collectLines(
-  block: MaterialBlock,
-  grid: GridLayout,
-  into: Map<string, readonly LineMetric[]>,
-): void {
-  switch (block.kind) {
-    case 'text':
-      into.set(block.key, gridLines(block.runs, grid));
-      break;
-    case 'image':
-      break;
-    case 'container':
-      for (const child of block.children) {
-        collectLines(child, grid, into);
-      }
-      break;
-    case 'table':
-      for (const row of [...block.header, ...block.body, ...block.footer]) {
-        for (const cell of row.cells) {
-          for (const child of cell.children) {
-            collectLines(child, grid, into);
-          }
-        }
-      }
-      break;
-    case 'grid':
-      for (const item of block.items) {
-        collectLines(item.content, grid, into);
-      }
-      break;
-    default: {
-      const exhaustive: never = block;
-      throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
-    }
-  }
 }

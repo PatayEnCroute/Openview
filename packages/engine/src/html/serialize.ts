@@ -2,21 +2,14 @@ import { kindOf } from '@openview/core';
 import { escapeAttribute, escapeText } from './escape.js';
 import { type HtmlElement, type HtmlNode, type HtmlTree, VOID_ELEMENTS } from './types.js';
 
-/**
- * The document's own policy, carried in the markup so it applies wherever the document is opened
- * and not only where an adapter happens to configure a browser.
- *
- * `style-src 'unsafe-inline'` is the single exception, and it is not a concession: the engine builds
- * every declaration from validated fields, and there is no nonce a static document could keep
- * secret. `img-src data:` admits embedded bitmaps and nothing that travels.
- */
+/** Content Security Policy applied to rendered HTML documents. */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   'img-src data:',
   "style-src 'unsafe-inline'",
   "script-src 'none'",
   "connect-src 'none'",
-  "font-src 'none'",
+  'font-src data:',
   "media-src 'none'",
   "object-src 'none'",
   "frame-src 'none'",
@@ -24,10 +17,7 @@ export const CONTENT_SECURITY_POLICY = [
   "form-action 'none'",
 ].join('; ');
 
-/**
- * Order in which attributes are written. Fixed rather than taken from insertion order, so the same
- * tree always serialises to the same bytes.
- */
+/** Deterministic attribute serialization order. */
 const ATTRIBUTE_ORDER = [
   'class',
   'style',
@@ -70,8 +60,7 @@ function serializeNode(node: HtmlNode): string {
 }
 
 /**
- * Serialises the tree into one self-contained document: no script, no remote reference and no
- * template text outside character data and attribute values.
+ * Serializes an HTML tree into a standalone HTML5 document string.
  */
 export function serializeHtml(tree: HtmlTree): string {
   return (

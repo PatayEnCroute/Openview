@@ -6,7 +6,13 @@ import {
   roundDecimal,
 } from '@openview/core';
 import { describe, expect, it } from 'vitest';
-import { gridPage, materializedOf, multiPageOf, paginateOnGrid } from '../../__tests__/fixtures.js';
+import {
+  gridPage,
+  materializedOf,
+  multiPageOf,
+  paginateOnGrid,
+  typographyOf,
+} from '../../__tests__/fixtures.js';
 import { createPresentationSession, type MarkerWriting } from '../../document/presentation.js';
 import type {
   MaterialDocument,
@@ -69,13 +75,7 @@ const WRITINGS: PresentationTable = {
   },
 };
 
-const TYPOGRAPHY: ResolvedTypography = {
-  family: 'sans-serif',
-  sizePt: 10,
-  bold: false,
-  italic: false,
-  color: '#000000',
-};
+const TYPOGRAPHY: ResolvedTypography = typographyOf();
 
 /** One resolved writing, taken through the real session so nothing here assembles one. */
 function markerAt(key: string, kind: 'money' | 'decimal', id = 'w1'): MarkerWriting {
@@ -87,6 +87,7 @@ function markerAt(key: string, kind: 'money' | 'decimal', id = 'w1'): MarkerWrit
 const counterRun = (writing?: MarkerWriting): MaterialPageFieldRun => ({
   kind: 'pageField',
   field: 'number',
+  site: {},
   typography: TYPOGRAPHY,
   ...(writing === undefined ? {} : { writing }),
 });
@@ -98,6 +99,7 @@ const reportRun = (
 ): MaterialPageFieldRun => ({
   kind: 'pageField',
   field: 'report',
+  site: {},
   decimals,
   mode,
   typography: TYPOGRAPHY,

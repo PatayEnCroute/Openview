@@ -8,13 +8,7 @@ import {
   type PresentationRefusal,
 } from '@openview/core';
 
-/**
- * Every refusal the render pipeline can name.
- *
- * A render either produces bytes or throws one of these: no step returns a partial document, and
- * no message carries a bound value, an image source, a serialised template, generated html or a
- * flattened cause.
- */
+/** Error codes emitted by the document rendering engine. */
 export const DOCUMENT_RENDER_ERROR_CODES = [
   'template-refused',
   'expression-refused',
@@ -22,6 +16,8 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
   'non-printable-binding-value',
   'presentation-refused',
   'unformattable-binding-value',
+  'unsupported-font-family',
+  'unsupported-font-character',
   'unsupported-image-source',
   'image-load-failed',
   'oversized-atomic-resource',
@@ -36,63 +32,42 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
 
 export type DocumentRenderErrorCode = (typeof DOCUMENT_RENDER_ERROR_CODES)[number];
 
-/** The three vertical regions of a page, in the order the engine builds them. */
+/** The three vertical regions of a page, in layout order. */
 export const DOCUMENT_REGIONS = ['header', 'root', 'footer'] as const;
 
 export type DocumentRegion = (typeof DOCUMENT_REGIONS)[number];
 
-/**
- * The five areas a declaration can be materialised in, in paint order.
- *
- * Wider than {@link DOCUMENT_REGIONS} on purpose: layers are painted behind or in front of the
- * page, out of the flow, and the measurement port keeps reporting the three vertical regions only.
- */
+/** The five paint areas of a page, in paint order. */
 export const DOCUMENT_AREAS = ['background', 'header', 'root', 'footer', 'foreground'] as const;
 
 export type DocumentArea = (typeof DOCUMENT_AREAS)[number];
 
-/**
- * Location and shape facts attached to a refusal. Every field is safe to log: none of them can
- * hold a bound value, an image source, a serialised template or the render data.
- */
+/** Structured contextual details attached to a rendering error. */
 export interface DocumentRenderErrorDetails {
   /** Id of the declaration being materialised, when the site is known. */
   readonly nodeId?: string | undefined;
   /** Segments from the template root to the offending declaration. */
   readonly path?: readonly (string | number)[] | undefined;
-  /**
-   * The repetition ancestry of the occurrence being built, when the refusal happened inside one.
-   *
-   * Declaration paths and zero-based ranks only: it names which iteration failed without carrying a
-   * bound value, so it stays as safe to log as every other field here.
-   */
+  /** Repetition ancestry of the occurrence being built. */
   readonly occurrence?: OccurrenceAddress | undefined;
-  /** Closed category of an unusable value, from the core value-type vocabulary. */
+  /** Closed category of an unusable value. */
   readonly actualType?: ExpressionValueType | undefined;
-  /**
-   * Which writing function the offending site asked for.
-   *
-   * A closed literal, so it names the intention without naming the profile the model chose, the
-   * writing the caller selected or the value that failed to be written.
-   */
+  /** Writing format kind requested at the error site. */
   readonly formatKind?: PresentationFormatKind | undefined;
-  /** The cause the presentation resolver named, when the refusal came from it rather than here. */
+  /** Underlying refusal from presentation resolution. */
   readonly presentationRefusal?: PresentationRefusal | undefined;
-  /** Which area of the page was being built. */
+  /** Page area being constructed. */
   readonly region?: DocumentArea | undefined;
-  /** A declared bound the render exceeded, in the unit of that bound. */
+  /** Declared limit that was exceeded. */
   readonly limit?: number | undefined;
-  /** One-based rank of the page being composed, when the refusal happened on a known one. */
+  /** One-based page number where the refusal occurred. */
   readonly pageNumber?: number | undefined;
-  /** Structured diagnostics, when the underlying refusal came from `@openview/core`. */
+  /** Diagnostic list when forwarded from `@openview/core`. */
   readonly diagnostics?: readonly OpenviewDiagnostic[] | undefined;
 }
 
 /**
- * A render refusal, with a message constant per site and structured details beside it.
- *
- * `cause` exists for a caller debugging locally and is never read to build the message: a cause
- * raised inside a strategy or a browser is not known to be free of render values.
+ * Error raised during document materialization, pagination, or PDF rendering.
  */
 export class DocumentRenderError extends OpenviewError {
   readonly code: DocumentRenderErrorCode;
@@ -111,7 +86,7 @@ export class DocumentRenderError extends OpenviewError {
   }
 }
 
-/** Builds a refusal the engine names on its own, with no underlying error to attribute. */
+/** Builds an engine-originated render error. */
 export function refusal(
   message: string,
   code: DocumentRenderErrorCode,
@@ -121,10 +96,7 @@ export function refusal(
 }
 
 /**
- * Wraps an error raised by `@openview/core` at a site where the node and its path are known.
- *
- * A refusal core can name becomes structured diagnostics; anything else -- an unknown error or a
- * programming fault -- keeps the constant message and travels as `cause` only.
+ * Wraps an error from `@openview/core` with structured diagnostics and location details.
  */
 export function refusalOf(
   error: unknown,

@@ -1,7 +1,4 @@
-/**
- * The only element names the engine may emit. A name is never taken from the template, so no
- * document can introduce a tag this list does not hold.
- */
+/** Allowed HTML element names emitted by the engine. */
 export const HTML_ELEMENTS = [
   'div',
   'span',
@@ -21,26 +18,23 @@ export type HtmlElementName = (typeof HTML_ELEMENTS)[number];
 /** Elements written without a closing tag. */
 export const VOID_ELEMENTS: ReadonlySet<HtmlElementName> = new Set(['img', 'col']);
 
-/**
- * The only attributes the engine may set, so an attribute name can never come from the template.
- * Every value is escaped as an attribute at serialisation time.
- */
+/** HTML element attributes managed and serialized by the engine. */
 export interface HtmlAttributes {
   readonly class?: string | undefined;
   readonly style?: string | undefined;
   readonly src?: string | undefined;
   readonly alt?: string | undefined;
-  /** Declaration id, for measurement selectors and for pointing a refusal at a node. */
+  /** Template node ID attribute. */
   readonly 'data-openview-node'?: string | undefined;
-  /** Occurrence key, which is what a measurement answer is filed under. */
+  /** Occurrence key attribute. */
   readonly 'data-openview-key'?: string | undefined;
-  /** Rank of a run inside its text block, so a line end can be read back as a cursor. */
+  /** Run index attribute within a text block. */
   readonly 'data-openview-run'?: string | undefined;
-  /** Which of the three vertical regions a box belongs to. */
+  /** Vertical document region identifier. */
   readonly 'data-openview-region'?: string | undefined;
-  /** Id of a grid zone's container, which the overflow observation is filed under. */
+  /** Grid zone container ID attribute. */
   readonly 'data-openview-grid-item'?: string | undefined;
-  /** One-based rank of a page, chosen by the engine and never read from the data. */
+  /** Page number attribute. */
   readonly 'data-openview-page'?: string | undefined;
 }
 
@@ -51,7 +45,7 @@ export interface HtmlElement {
   readonly children: readonly HtmlNode[];
 }
 
-/** A run of characters. Escaped as text at serialisation time, never as markup. */
+/** Plain text HTML DOM node. */
 export interface HtmlText {
   readonly kind: 'text';
   readonly text: string;
@@ -59,7 +53,7 @@ export interface HtmlText {
 
 export type HtmlNode = HtmlElement | HtmlText;
 
-/** The tree and the stylesheet that go together, before serialisation. */
+/** Structured HTML representation pairing CSS stylesheet and body elements. */
 export interface HtmlTree {
   readonly css: string;
   readonly body: readonly HtmlNode[];

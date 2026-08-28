@@ -15,9 +15,11 @@ import { PDF_OPTIONS } from '../session.js';
 import {
   CORRUPT_PNG,
   HOST_LAUNCH_OPTIONS,
+  hasTrailerId,
   hostStrategy,
   inspectPdf,
   LOGO_PNG,
+  metadataOf,
   pageOf,
   renderCapturing,
   TINY_PNG,
@@ -218,7 +220,7 @@ describe('printing a real document', () => {
   });
 
   it(
-    'writes no header or footer of the browser, and records the metadata debt it does write',
+    'writes no header, no footer and no trace of the browser that printed it',
     async () => {
       const { bytes } = await renderCapturing(
         templateOf({ root: { type: 'container', id: 'root', children: [text('t', 'body')] } }),
@@ -226,11 +228,44 @@ describe('printing a real document', () => {
       const raw = Buffer.from(bytes).toString('latin1');
       expect(raw).not.toContain('/Contents (about:blank)');
       expect(raw).not.toContain('file://');
-      /* Chromium stamps the document title, the user agent and two timestamps into the pdf info
-         dictionary. None of it is printed, and none of it is scrubbed yet: byte-for-byte identity
-         between two renders is not a promise this release makes. */
-      expect(raw).toContain('/Title (about:blank)');
-      expect(raw).toMatch(/\/CreationDate \(D:\d{14}/);
+      /* Chromium stamps the loaded document's title, its own name and two timestamps into the info
+         dictionary. The canonical form replaces all of it: nothing here can differ between two
+         renders, and nothing names the machine that produced the file. */
+      expect(raw).not.toContain('about:blank');
+      expect(raw).not.toContain('Chrom');
+      expect(raw).not.toContain('Skia');
+      expect(await metadataOf(bytes)).toStrictEqual({
+        title: 'Openview',
+        author: '',
+        subject: '',
+        keywords: '',
+        creator: 'Openview',
+        producer: 'Openview',
+        creationDate: '1970-01-01T00:00:00.000Z',
+        modificationDate: '1970-01-01T00:00:00.000Z',
+      });
+      expect(await hasTrailerId(bytes)).toBe(false);
+      /* No second place for a timestamp to hide. This build of Chromium writes no XMP packet and
+         no `/Metadata` stream, so the info dictionary is the whole of what has to be fixed. If an
+         upgrade starts emitting one, this reddens and that upgrade decides how to canonicalise it
+         -- the assertion is not the thing to loosen. */
+      expect(raw).not.toContain('/Metadata');
+      expect(raw).not.toContain('xpacket');
+      expect(raw.toLowerCase()).not.toContain('xmp');
+    },
+    CHROMIUM_TIMEOUT_MS,
+  );
+
+  it(
+    'prints the same bytes twice, whatever second each print happened in',
+    async () => {
+      const template = templateOf({
+        root: { type: 'container', id: 'root', children: [text('t', 'body')] },
+      });
+      const first = await renderCapturing(template);
+      const second = await renderCapturing(template);
+      expect(Buffer.from(first.bytes).equals(Buffer.from(second.bytes))).toBe(true);
+      expect(first.bytes.length).toBe(second.bytes.length);
     },
     CHROMIUM_TIMEOUT_MS,
   );

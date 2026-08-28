@@ -16,7 +16,7 @@ import { wholeRow } from './whole.js';
 const HEADER_TOO_TALL =
   'The repeated header of a table leaves no room for a single row of its body on a page of its own, so continuing the table would print header after header. Read `details.nodeId` for the table.';
 
-/** One table fragment and what it consumed. */
+/** Header and body row placement result for a table fragment. */
 export interface TablePlacement {
   readonly fragment: TableFragment;
   readonly height: number;
@@ -31,12 +31,6 @@ function headerHeight(header: readonly MaterialRow[], metrics: Metrics): number 
   return total;
 }
 
-/**
- * The rows of a marked group occurrence starting exactly at `index`, or nothing.
- *
- * The occurrence has to START here: resuming inside a group that already fell back would offer it
- * a fresh page on every page it spans, and the sequence would never advance.
- */
 function groupStartingAt(
   sequence: readonly MaterialRow[],
   index: number,
@@ -45,7 +39,6 @@ function groupStartingAt(
   return group?.firstRow === index ? group : undefined;
 }
 
-/** The natural height of the rows one group occurrence spans, header excluded. */
 function groupHeight(
   sequence: readonly MaterialRow[],
   group: MaterialRowGroupOccurrence,
@@ -61,7 +54,6 @@ function groupHeight(
   return total;
 }
 
-/** A table with no row is a legitimate document: it is painted once, header and all. */
 function placeHeaderOnly(
   table: MaterialTable,
   start: number,
@@ -86,7 +78,6 @@ function placeHeaderOnly(
   };
 }
 
-/** The rows taken for the page being filled, and where the sequence stands as the scan advances. */
 interface RowScan {
   readonly rows: RowFragment[];
   used: number;
@@ -95,7 +86,6 @@ interface RowScan {
   inner: RowBlockCursor | undefined;
 }
 
-/** Takes every row of a marked group occurrence at once, and steps the scan past it. */
 function takeWholeGroup(
   sequence: readonly MaterialRow[],
   group: MaterialRowGroupOccurrence,
@@ -115,15 +105,8 @@ function takeWholeGroup(
   scan.index = group.firstRow + group.rowCount;
 }
 
-/** What the keep-together mark of a group occurrence settles where the scan stands. */
 type GroupOutcome = 'taken' | 'defer' | 'row-by-row';
 
-/**
- * Reads the mark of a group occurrence starting where the scan stands.
- *
- * `row-by-row` covers both "no group starts here" and a group that fell back: its rows then take
- * the ordinary policy one by one, and a row of its own that asks to stay whole is still honoured.
- */
 function settleGroup(
   sequence: readonly MaterialRow[],
   freshRoom: number,
@@ -145,7 +128,6 @@ function settleGroup(
   return 'row-by-row';
 }
 
-/** Takes one row, whole or cut, and answers whether the scan may go on past it. */
 function takeRow(
   row: MaterialRow,
   freshRoom: number,
@@ -162,7 +144,6 @@ function takeRow(
     return true;
   }
   if (scan.inner === undefined && height <= freshRoom) {
-    /* It fits on a page of its own, so it is moved there entire rather than cut. */
     return false;
   }
   const placed = placeRow(row, scan.inner, scan.room, freshRoom, metrics, fill);
@@ -181,7 +162,6 @@ function takeRow(
   return true;
 }
 
-/** Fills the page with the longest run of rows it takes, from where the cursor stands. */
 function scanRows(
   sequence: readonly MaterialRow[],
   freshRoom: number,
@@ -257,8 +237,6 @@ export function placeTable(
 
   const done = scan.index >= sequence.length && scan.inner === undefined;
   const first = start === 0 && cursor?.inner === undefined;
-  /* A row of `sequence` belongs to the footer once it is past the body, so where the footer starts
-     inside this fragment is where the body ran out. */
   const footerFrom = Math.min(scan.rows.length, Math.max(0, table.body.length - start));
   return {
     height: overhead + scan.used,

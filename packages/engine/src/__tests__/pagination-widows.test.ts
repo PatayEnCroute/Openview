@@ -137,8 +137,8 @@ describe('the characters a preferred cut moves', () => {
     expect(written(first.fragment.runs) + written(second?.fragment.runs ?? [])).toBe(
       'a'.repeat(40) + 'b'.repeat(40),
     );
-    expect(first.fragment.runs[0]?.typography.bold).toBe(true);
-    expect(second?.fragment.runs.at(-1)?.typography.italic).toBe(true);
+    expect(first.fragment.runs[0]?.typography.face.weight).toBe(700);
+    expect(second?.fragment.runs.at(-1)?.typography.face.style).toBe('italic');
   });
 
   it('counts a blank line and a marker as lines like any other', () => {

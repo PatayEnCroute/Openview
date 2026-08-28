@@ -58,12 +58,7 @@ function scaleOf(firstPage: PageMeasurement, sheet: Sheet): number {
   return pxPerMm;
 }
 
-/**
- * Refuses a line cursor that goes backwards from the one before it.
- *
- * A cursor that went backwards would let a fragment repeat characters the page before it already
- * printed, which no later check could see.
- */
+/** Asserts that a line offset advances monotonically compared to the preceding line. */
 function assertLineFollows(line: TextLineMeasurement, previous: LineMetric | undefined): void {
   if (previous === undefined) {
     return;
@@ -77,7 +72,7 @@ function assertLineFollows(line: TextLineMeasurement, previous: LineMetric | und
   }
 }
 
-/** One height per measured box, refusing a box unasked for, doubled, or impossibly sized. */
+/** Collects valid positive box heights for all expected occurrence keys. */
 function collectHeights(
   measurement: PdfLayoutMeasurement,
   expected: ReadonlySet<string>,
@@ -97,7 +92,7 @@ function collectHeights(
   return heights;
 }
 
-/** The visual lines of every measured text box, in the order the session emitted them. */
+/** Groups line measurement metrics by occurrence key. */
 function collectLines(
   measurement: PdfLayoutMeasurement,
   expected: ReadonlySet<string>,
@@ -123,13 +118,9 @@ function collectLines(
 }
 
 /**
- * Checks a session reply before a single height of it reaches the algorithm.
+ * Validates layout measurement payload and produces a queryable Metrics adapter.
  *
- * A box that is missing, doubled, unasked for, negative or infinite is a defect of the port, not a
- * short document: turning one into a cut would produce a silently wrong pdf, so it is refused here
- * with nothing of the render in the message.
- *
- * @param expected every occurrence key the probe annotated, so a reply can be compared to the ask
+ * @param expected Set of occurrence keys that were requested in the probe.
  */
 export function validateMeasurement(
   measurement: PdfLayoutMeasurement,

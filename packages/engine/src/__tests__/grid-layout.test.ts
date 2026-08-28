@@ -277,7 +277,7 @@ describe('the collections a grid participates in', () => {
               {
                 type: 'text',
                 id: 'folio',
-                typography: { family: 'Marianne', sizePt: 9 },
+                typography: { family: 'Noto Serif', sizePt: 9 },
                 content: [{ kind: 'pageField', field: 'number' }],
               },
               { type: 'image', id: 'zone-logo-img', src: 'logo.png' },
@@ -296,7 +296,9 @@ describe('the collections a grid participates in', () => {
 
   it('registers the marker typography of a zone for the glyph probe', () => {
     const signatures = [...markerSignatures(mixedDocument(), { pages: 10, report: 0 }).keys()];
-    expect(signatures.some((signature) => signature.includes('Marianne'))).toBe(true);
+    expect(signatures.some((signature) => signature.includes('__openview_noto_serif_2_015'))).toBe(
+      true,
+    );
   });
 
   it('counts the contents of the zones in the progression bound', () => {

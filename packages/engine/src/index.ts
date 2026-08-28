@@ -1,10 +1,6 @@
 /**
  * @openview/engine
- * Backend document data binding, pagination and PDF rendering pipeline.
- *
- * Exports the port an integrator calls and the contract a print adapter implements. The
- * materialised document, the fragments, the html vocabulary and the css helpers stay internal: they
- * are how a render is produced, not something a caller may depend on.
+ * Backend document data binding, pagination, and PDF rendering engine.
  */
 
 export type { DocumentImage } from './document/images.js';

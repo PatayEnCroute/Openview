@@ -7,7 +7,13 @@ import {
   materializeDocument,
 } from '../document/materialize.js';
 import { DocumentRenderError, type DocumentRenderErrorCode } from '../errors.js';
-import { buildMarkerProbe, buildPagedTree, buildProbeTree, sampleKey } from '../html/build-page.js';
+import {
+  buildMarkerProbe,
+  buildPagedTree,
+  buildProbeTree,
+  documentFontCss,
+  sampleKey,
+} from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
 import {
   type MarkerBounds,
@@ -58,15 +64,12 @@ async function measured<TResult>(run: () => Promise<TResult>): Promise<TResult> 
 }
 
 /**
- * Measures every shape a page marker of this document is painted in, and reserves its width.
- *
- * Both bounds come from the materialised document, so the reserve is decided BEFORE any cut and
- * does not move when the pages are recomposed: the highest rank the flow can reach, and the
- * saturated magnitude of the contributions the rows declared.
+ * Measures each distinct marker shape and reserves the required width.
  */
 async function reserveMarkers(
   session: PdfRenderSession,
   bound: MaterializedDocument,
+  fonts: string,
 ): Promise<MarkerReserve> {
   const bounds: MarkerBounds = {
     pages: progressionBound(bound.document),
@@ -76,7 +79,7 @@ async function reserveMarkers(
   if (signatures.size === 0) {
     return NO_MARKERS;
   }
-  const probe = buildMarkerProbe(bound.document, signatures);
+  const probe = buildMarkerProbe(bound.document, signatures, fonts);
   const measurement = await measured(async () =>
     session.measure({
       html: serializeHtml(probe.tree),
@@ -97,13 +100,14 @@ async function reserveMarkers(
   return markerReserve(signatures, widest);
 }
 
-/** Lays the whole document out at its real width with no height constraint, and reads its boxes. */
+/** Measures natural element dimensions without vertical constraints. */
 async function measureNaturally(
   session: PdfRenderSession,
   bound: MaterializedDocument,
   markers: MarkerReserve,
+  fonts: string,
 ): Promise<Metrics> {
-  const probe = buildProbeTree(bound.document, markers);
+  const probe = buildProbeTree(bound.document, markers, fonts);
   const measurement = await measured(async () =>
     session.measure({
       html: serializeHtml(probe.tree),
@@ -114,13 +118,7 @@ async function measureNaturally(
   return validateMeasurement(measurement, probe.keys, bound.document.sheet);
 }
 
-/**
- * The one composition of a render: the verified page sequence and the html it serialised to.
- *
- * The single source both façades read. The pdf port prints `source`; the pagination port projects
- * `paginated`. Nothing downstream recomposes, so an html a caller receives is byte for byte the
- * html the printer would have been handed.
- */
+/** Composed render output containing materialized document, paginated structure, and HTML source. */
 export interface ComposedDocument {
   readonly bound: MaterializedDocument;
   readonly paginated: PaginatedDocument;
@@ -142,6 +140,7 @@ async function settle(
   markers: MarkerReserve,
   metrics: Metrics,
   printableHeight: number,
+  fonts: string,
 ): Promise<Attempt> {
   const slack = new Map<number, number>();
   let last = 0;
@@ -152,7 +151,7 @@ async function settle(
       printableHeight,
       slack,
     });
-    const html = serializeHtml(buildPagedTree(paginated));
+    const html = serializeHtml(buildPagedTree(paginated, fonts));
     const measurement = await measured(async () =>
       session.measure({
         html,
@@ -170,7 +169,7 @@ async function settle(
   throw new DocumentRenderError(NOT_SETTLED, 'pagination-impossible', { pageNumber: last });
 }
 
-/** How many pages the cuts produce, without composing the final html. */
+/** Returns the page count of the paginated document. */
 function pageCountOf(
   bound: MaterializedDocument,
   markers: MarkerReserve,
@@ -182,10 +181,7 @@ function pageCountOf(
 }
 
 /**
- * Reserves the markers, measures, widens the bands a run of pages adds, and settles the cuts.
- *
- * The whole of a render up to but excluding the export: both façades call this one operation, so a
- * preview and a pdf cannot be composed from two different sequences.
+ * Composes the document within a render session by measuring, extending bands, and settling pagination.
  */
 export async function composeInSession(
   session: PdfRenderSession,
@@ -197,17 +193,21 @@ export async function composeInSession(
     of.document.printable.height * metrics.pxPerMm;
 
   let bound = first;
-  let markers = await reserveMarkers(session, bound);
-  let metrics = await measureNaturally(session, bound, markers);
+  /* Recomputed after the bands widen: a band only a second page reaches may paint a family the
+     first pass never met, and the probes must carry the faces the printed page will use. */
+  let fonts = documentFontCss(bound.document);
+  let markers = await reserveMarkers(session, bound, fonts);
+  let metrics = await measureNaturally(session, bound, markers, fonts);
 
   if (pageCountOf(bound, markers, metrics, pxOf(bound, metrics)) > 1) {
     const widened: ReadonlySet<PageBandOccurrence> = reachableOccurrences(2);
     bound = extendBands(template, data, bound, widened);
-    markers = await reserveMarkers(session, bound);
-    metrics = await measureNaturally(session, bound, markers);
+    fonts = documentFontCss(bound.document);
+    markers = await reserveMarkers(session, bound, fonts);
+    metrics = await measureNaturally(session, bound, markers, fonts);
   }
 
-  const attempt = await settle(session, bound, markers, metrics, pxOf(bound, metrics));
+  const attempt = await settle(session, bound, markers, metrics, pxOf(bound, metrics), fonts);
   return {
     bound,
     paginated: attempt.paginated,
@@ -239,10 +239,7 @@ export function prepare(
 }
 
 /**
- * Opens the session a render measures in, under the failure code its façade owns.
- *
- * Opening is common to laying out and to printing, so the code is a parameter: a pagination that
- * never prints must not be refused with an export failure it could not have reached.
+ * Opens a PDF render session with the given error attribution parameters.
  */
 export async function openSession(
   strategy: PdfRenderStrategy,

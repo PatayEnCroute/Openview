@@ -1,4 +1,4 @@
-﻿import { kindOf } from '@openview/core';
+import { visitBlock } from '../document/traverse.js';
 import type { MaterialBlock, MaterialContainer, MaterialText } from '../document/types.js';
 import { refusal } from '../errors.js';
 import { decideKeepTogether } from './keep-together.js';
@@ -60,7 +60,7 @@ function tableCursorOf(inner: BlockCursor | undefined): TableBlockCursor | undef
   throw refusal(MISMATCHED_CURSOR, 'pagination-impossible');
 }
 
-/** One block placed on a page, with the height it took and where it stands afterwards. */
+/** Result of placing a single block on a page. */
 interface BlockPlacement {
   readonly fragment: MaterialFragment;
   readonly height: number;
@@ -70,24 +70,12 @@ interface BlockPlacement {
 const spent = (cursor: FlowCursor, blocks: number): boolean =>
   cursor.index >= blocks && cursor.inner === undefined;
 
-/**
- * What the keep-together mark settles on its own, before the kind of the block is even read.
- *
- * `settled: false` means the mark did not apply or the block fell back to the ordinary policy;
- * `settled: true` carries the answer, `undefined` placement included, which means "defer".
- */
+/** Verdict of a keep-together evaluation. */
 type KeepTogetherVerdict =
   | { readonly settled: true; readonly placement: BlockPlacement | undefined }
   | { readonly settled: false };
 
-/**
- * Reads the keep-together mark of a block at the first cursor of its occurrence.
- *
- * Only at that first cursor: once a fragment of it exists, the mark has already fallen back and
- * re-deciding on every page would defer the same block for ever. The recursion below still reads
- * the mark of every descendant, so a parent that fell back does not silence the children that can
- * still be honoured.
- */
+/** Evaluates keep-together constraint on a block before attempting splitting. */
 function settleKeepTogether(
   block: MaterialBlock,
   inner: BlockCursor | undefined,
@@ -112,7 +100,6 @@ function settleKeepTogether(
   return { settled: false };
 }
 
-/** The longest prefix of a text block that fits, cut between visual lines. */
 function placeText(
   block: MaterialText,
   line: number,
@@ -131,11 +118,6 @@ function placeText(
   };
 }
 
-/**
- * A block that is never cut: whole in what is left of the page, whole on a fresh one, or refused.
- *
- * Serves images and grids, and an empty container, which has nothing to cut between either.
- */
 function placeAtomic(
   block: MaterialBlock,
   available: number,
@@ -154,7 +136,6 @@ function placeAtomic(
   return { fragment: wholeFragment(block), height, remaining: undefined };
 }
 
-/** The longest prefix of a container that fits, its own padding repeated on every page it spans. */
 function placeContainer(
   block: MaterialContainer,
   inner: BlockCursor | undefined,
@@ -191,13 +172,6 @@ function placeContainer(
   };
 }
 
-/**
- * The longest legal prefix of one block that fits in `available`, or nothing.
- *
- * `fresh` is what the same position would offer on a page holding nothing else. It is what separates
- * "move this to the next page" from "no page can ever hold this": the first closes the page, the
- * second is a refusal, and neither is a silent truncation.
- */
 function placeBlock(
   block: MaterialBlock,
   inner: BlockCursor | undefined,
@@ -209,50 +183,24 @@ function placeBlock(
   if (kept.settled) {
     return kept.placement;
   }
-  switch (block.kind) {
-    case 'text':
-      return placeText(block, textLineOf(inner), available, fresh, metrics);
-    case 'image':
-      return placeAtomic(
-        block,
-        available,
-        fresh,
-        metrics,
-        IMAGE_TOO_TALL,
-        'oversized-atomic-resource',
-      );
-    case 'container':
-      return placeContainer(block, inner, available, fresh, metrics);
-    case 'table': {
-      const placed = placeTable(block, tableCursorOf(inner), available, fresh, metrics, fillFlow);
+  return visitBlock<BlockPlacement | undefined>(block, {
+    text: (text) => placeText(text, textLineOf(inner), available, fresh, metrics),
+    image: (image) =>
+      placeAtomic(image, available, fresh, metrics, IMAGE_TOO_TALL, 'oversized-atomic-resource'),
+    container: (container) => placeContainer(container, inner, available, fresh, metrics),
+    table: (table) => {
+      const placed = placeTable(table, tableCursorOf(inner), available, fresh, metrics, fillFlow);
       return placed === undefined
         ? undefined
         : { fragment: placed.fragment, height: placed.height, remaining: placed.remaining };
-    }
-    case 'grid':
-      /* Atomic like an image: whole in the rest of the page, whole on a fresh one, or refused.
-         No cursor variant exists for it, so no page can ever hold half of it. */
-      return placeAtomic(
-        block,
-        available,
-        fresh,
-        metrics,
-        GRID_TOO_TALL,
-        'oversized-atomic-resource',
-      );
-    default: {
-      const exhaustive: never = block;
-      throw new TypeError(`Unhandled materialised block: ${kindOf(exhaustive, 'kind')}`);
-    }
-  }
+    },
+    grid: (grid) =>
+      placeAtomic(grid, available, fresh, metrics, GRID_TOO_TALL, 'oversized-atomic-resource'),
+  });
 }
 
 /**
- * Fills a vertical sequence greedily: every block that still fits, then the longest legal prefix of
- * the one that does not.
- *
- * No two layouts are ever compared on taste and nothing is random. The sequence stops at the first
- * block that yields nothing, so the page closes and the same block is offered a page of its own.
+ * Fills available vertical height with a sequence of blocks starting at a flow cursor.
  */
 export function fillFlow(
   blocks: readonly MaterialBlock[],

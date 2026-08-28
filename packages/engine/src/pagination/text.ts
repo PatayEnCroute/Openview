@@ -23,12 +23,7 @@ function cursorBefore(lines: readonly LineMetric[], index: number): TextCursor {
   return previous === undefined ? START : { run: previous.run, offset: previous.offset };
 }
 
-/**
- * The exact runs between two cursors, with the typography of each kept as it was.
- *
- * Concatenating the slices of every fragment of a block restores the block: the same characters, in
- * the same order, under the same run. A marker is atomic and belongs to whichever slice spans it.
- */
+/** Extracts text runs spanning between two text cursors. */
 export function sliceRuns(
   runs: readonly MaterialRun[],
   from: TextCursor,
@@ -61,7 +56,7 @@ const edgeOf = (first: boolean, last: boolean): FragmentEdge => {
   return last ? 'last' : 'middle';
 };
 
-/** The smallest run of visual lines a fragment of a cut text may keep on either side of the cut. */
+/** Minimum line count for orphan and widow management. */
 const MIN_LINES_PER_SIDE = 2;
 
 /**
@@ -92,14 +87,13 @@ function keptLines(
   if (satisfied(end)) {
     return bounded(end);
   }
-  /* Already on a page holding nothing else: deferring would offer the same room again. */
   if (available >= fresh) {
     return end;
   }
   return satisfied(greedy(fresh)) ? undefined : end;
 }
 
-/** One text fragment and what it consumed. */
+/** Result of placing a slice of visual text lines. */
 export interface TextPlacement {
   readonly fragment: TextFragment;
   readonly height: number;
@@ -108,11 +102,7 @@ export interface TextPlacement {
 }
 
 /**
- * The longest run of visual lines of a text block that fits, starting at `line`.
- *
- * Cuts land only on a line end the browser reported. Nothing is measured from a character count, no
- * hyphen is invented, and the padding of the block is charged again to every fragment because every
- * fragment paints its own closed box.
+ * Slices a text block to fit available vertical room along visual line boundaries.
  */
 export function sliceText(
   block: MaterialText,
