@@ -76,6 +76,11 @@ function witness() {
 function publishablePackages() {
   const found = [];
   for (const root of ROOTS) {
+    /* A root a checkout does not carry is simply not swept: reading it would throw before the
+       count below could say what it really found. */
+    if (!existsSync(root)) {
+      continue;
+    }
     for (const entry of readdirSync(root, { withFileTypes: true })) {
       const directory = join(root, entry.name);
       const manifestPath = join(directory, 'package.json');

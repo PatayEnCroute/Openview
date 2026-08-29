@@ -49,7 +49,12 @@ export const createTransportBudget = (limits: TransportLimits): TransportBudget 
 });
 
 /**
- * Copies a request into plain json data, under a budget, without running any of the caller's code.
+ * Copies one value into plain json data, under the budget of its request, without running any of
+ * the caller's code.
+ *
+ * The budget is the parameter, never a bare set of limits: a signature that accepted both would
+ * have to tell them apart by their shape, and an object that merely carried a `limits` key would
+ * then be spent against counters it does not have.
  *
  * Property descriptors are read rather than the properties themselves: a getter would run caller
  * code before validation and could answer one value to the guard and another to the engine. The
@@ -58,8 +63,7 @@ export const createTransportBudget = (limits: TransportLimits): TransportBudget 
  * This is a transport contract and not a schema of the data set: no key is reserved, no shape is
  * expected, and every name the caller chose survives unchanged.
  */
-export function snapshotValue(value: unknown, budget: TransportLimits | TransportBudget): unknown {
-  const spent = 'limits' in budget ? budget : createTransportBudget(budget);
+export function snapshotValue(value: unknown, spent: TransportBudget): unknown {
   const limits = spent.limits;
   const seen = new Set<object>();
 
