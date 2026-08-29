@@ -1,0 +1,449 @@
+{
+  "formatVersion": 1,
+  "generatorVersion": 1,
+  "pageExtractorVersion": 1,
+  "profile": {
+    "platform": "linux",
+    "architecture": "x64",
+    "node": "24.11.1",
+    "v8": "13.6.233.10-node.28",
+    "icu": "77.1",
+    "unicode": "16.0",
+    "engine": "0.1.0",
+    "adapter": "0.1.0",
+    "puppeteer": "25.8.0",
+    "chromium": "Chrome/152.0.7977.42",
+    "fonts": [
+      {
+        "id": "inter-4.1 400 normal",
+        "sha256": "40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      },
+      {
+        "id": "inter-4.1 700 normal",
+        "sha256": "288316099b1e0a47a4716d159098005eef7c0066921f34e3200393dbdb01947f"
+      },
+      {
+        "id": "inter-4.1 400 italic",
+        "sha256": "bbc051dd204b5019a1aa0bc0ae2aa8a05ab13e7a3f979fa357631dc7feb6833a"
+      },
+      {
+        "id": "inter-4.1 700 italic",
+        "sha256": "948405a16cdc62701da5f4005ed068ca5f4d27061d98f7974ccfc37831d9581d"
+      },
+      {
+        "id": "noto-sans-2.015 400 normal",
+        "sha256": "f3961a9cde016d41a4879aecda1474d3a36d6bf54fa0e4643de029cc2248b0e8"
+      },
+      {
+        "id": "noto-sans-2.015 700 normal",
+        "sha256": "87cb2d84472a7d66da659ee47b6cdb9552326e8c128245231f191b6ac72529d9"
+      },
+      {
+        "id": "noto-sans-2.015 400 italic",
+        "sha256": "678288f868807d4d64a6f3b51466871d117d915780381ce9d0ed4b3bcbd06d37"
+      },
+      {
+        "id": "noto-sans-2.015 700 italic",
+        "sha256": "3d367743f371f28671d2764e911a53d7c20ec9b6aa8791d059e7090389fc52a5"
+      },
+      {
+        "id": "noto-serif-2.015 400 normal",
+        "sha256": "a15cfbbc1539d707115111d672d590a3d70d4f74b4c0a315956da20ae19a14e1"
+      },
+      {
+        "id": "noto-serif-2.015 700 normal",
+        "sha256": "24ad531e6b05ddad8c3d89572d2c93eb86a6b74e652ce7ee3c3e171de68e84c3"
+      },
+      {
+        "id": "noto-serif-2.015 400 italic",
+        "sha256": "c4b3c971741ecdb40f5a443bce754e8fe91efe761b6ea10c92be7c3597cdadc4"
+      },
+      {
+        "id": "noto-serif-2.015 700 italic",
+        "sha256": "1bc4f86502eaa368718f6192bee022ea9a703d5af1c18b7d291212657b63074a"
+      }
+    ],
+    "pdfCanonicalizer": 1,
+    "launchArguments": [
+      "--no-sandbox"
+    ]
+  },
+  "documents": [
+    {
+      "id": "invoice-one-page",
+      "recipeVersion": 1,
+      "filename": "invoice-one-page.pdf",
+      "inputSha256": "733cdcbba4c3a11cf1479f99bc22a677a6b3c38332f6aeaa493e4fc5ff14126b",
+      "pdf": {
+        "bytes": 29890,
+        "sha256": "d1e4734cf8c44756a78f3fc6ce937b6c148e38e567d01def49c30702dcc2fe9c"
+      },
+      "html": {
+        "bytes": 2451226,
+        "sha256": "ff14159ec92ca646f6e4a39c12a6c7ba59e0bef6f729c2cf28ab12b1e8861743"
+      },
+      "sheet": {
+        "bytes": 26,
+        "sha256": "f9d13021a7fd112b93bb8c41a30bbc413fc48e87aa84982c151ad6784a4beee7"
+      },
+      "notices": {
+        "bytes": 2,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "pages": [
+        {
+          "number": 1,
+          "pdf": {
+            "bytes": 19719,
+            "sha256": "d082382c6b68acd9a424c53fdf771a0cb7f0531c85252f95fe16ba5328d44081"
+          },
+          "pagination": {
+            "bytes": 6619,
+            "sha256": "eeffc128206df3b89ec5ffcf22865af307ebe5122a8d25891901242ff4944d6f"
+          }
+        }
+      ]
+    },
+    {
+      "id": "invoice-sixty-bare",
+      "recipeVersion": 1,
+      "filename": "invoice-sixty-bare.pdf",
+      "inputSha256": "e385af4fc321fa7f5c0122f85c5ea154d579e5d5bdff15b2e3b4964ed560e828",
+      "pdf": {
+        "bytes": 180073,
+        "sha256": "5c5c2a87e6b128bd3dddcafbeb33e653d204103f14062638a477d59ac329899e"
+      },
+      "html": {
+        "bytes": 1290174,
+        "sha256": "58d5bf2fa1b8b2c6194885c20767a19750fd12e92e1aeda0f3d980a67ad7122b"
+      },
+      "sheet": {
+        "bytes": 26,
+        "sha256": "f9d13021a7fd112b93bb8c41a30bbc413fc48e87aa84982c151ad6784a4beee7"
+      },
+      "notices": {
+        "bytes": 150,
+        "sha256": "3d9e84d00ee8a219c6eb70bb0fe0e03c4819a93515bd1f3811dba5a7be5896f1"
+      },
+      "pages": [
+        {
+          "number": 1,
+          "pdf": {
+            "bytes": 17081,
+            "sha256": "92b93b60f04793253e574478768ecb04584d80fe956d8515fc23232c6ca00246"
+          },
+          "pagination": {
+            "bytes": 30684,
+            "sha256": "b0c620d49d102c51768c0b6646cbb9b1b43372d7e27fc03350bf1a8f9f12425c"
+          }
+        },
+        {
+          "number": 2,
+          "pdf": {
+            "bytes": 13495,
+            "sha256": "92ece4548123793fcc8c538445e41763930870b0b97b844acf02655cdd8db97b"
+          },
+          "pagination": {
+            "bytes": 32272,
+            "sha256": "cdf6a9077b7154950a0860c12ee80c77bc880b16ce9f4711020e969516f961cd"
+          }
+        },
+        {
+          "number": 3,
+          "pdf": {
+            "bytes": 13479,
+            "sha256": "b4f6b142a448711f6b6a700739962c54e3ffb48e519427ea0668aadb1e75a9b0"
+          },
+          "pagination": {
+            "bytes": 32273,
+            "sha256": "8db6dc508b96fbd42f421ff65a8f1f471b9f141dcbae0cf03841014723074987"
+          }
+        },
+        {
+          "number": 4,
+          "pdf": {
+            "bytes": 11681,
+            "sha256": "f2dc634b41602ab897506879d9e74dfd40f4235a4a6c10dc0d175a1e4d3f3674"
+          },
+          "pagination": {
+            "bytes": 11213,
+            "sha256": "c0107195914e2b1b4c7911a638912bf101b53074b9c5f8c6e94d512cffaf43e2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "invoice-sixty-fr-eur",
+      "recipeVersion": 1,
+      "filename": "invoice-sixty-fr-eur.pdf",
+      "inputSha256": "5a8754f10434e05dc8914b2b7c62eba2336aa11676dea4508d9aeb84886f0414",
+      "pdf": {
+        "bytes": 196133,
+        "sha256": "6f7fa4e5d1b1415f04393b4659c2eef96328d7d7eb14706671fd0c3b25f89fec"
+      },
+      "html": {
+        "bytes": 2563056,
+        "sha256": "c66fab1ce630a4acb79859d5f0b31c22d3430eca11fbae0f5356cd47accf06ee"
+      },
+      "sheet": {
+        "bytes": 26,
+        "sha256": "f9d13021a7fd112b93bb8c41a30bbc413fc48e87aa84982c151ad6784a4beee7"
+      },
+      "notices": {
+        "bytes": 152,
+        "sha256": "2e6df4327a6b66933263a32f2f508fe404279978da455554db4599f418670db2"
+      },
+      "pages": [
+        {
+          "number": 1,
+          "pdf": {
+            "bytes": 23172,
+            "sha256": "7b0d01f6ab364527511f831690d9678ecde1d09a07e48e1b825ee722c6840f28"
+          },
+          "pagination": {
+            "bytes": 26027,
+            "sha256": "aea5fc67dd39b48b3e03368e47cbb91176437acdb9f5e1aa247370097be07dc2"
+          }
+        },
+        {
+          "number": 2,
+          "pdf": {
+            "bytes": 23341,
+            "sha256": "6e74ad75639c76b25f413a3ba03b761ba8b0eb087a2f94fe04e3e166edfe8633"
+          },
+          "pagination": {
+            "bytes": 27894,
+            "sha256": "11183854a017d0d1c0b0773160ad3895d5bd35598c144877d51df056e3f2ae1d"
+          }
+        },
+        {
+          "number": 3,
+          "pdf": {
+            "bytes": 23280,
+            "sha256": "1fcd4c59c15ef617da6a829776430721a3dcf1d5d61319cb3dc0cd125484b472"
+          },
+          "pagination": {
+            "bytes": 27615,
+            "sha256": "aadd394ab92a08bc0492a749cd9a5668e8a646134c85377422b0b2ed0131a7d3"
+          }
+        },
+        {
+          "number": 4,
+          "pdf": {
+            "bytes": 26595,
+            "sha256": "3c7049639c213e0c7726ccd25a4b35ce1459d7f3a86a1afdbd30a4b2b0fa825a"
+          },
+          "pagination": {
+            "bytes": 24513,
+            "sha256": "30ee74cf06570d61445ab852251e2af5ca1f13d7ca785c56695c2c3e5ddb602f"
+          }
+        },
+        {
+          "number": 5,
+          "pdf": {
+            "bytes": 19122,
+            "sha256": "1f894a65a0ad61035fc78122c5ad1863ffb9d0c9142a044c555011756689f222"
+          },
+          "pagination": {
+            "bytes": 2637,
+            "sha256": "104e680837cd0a2f0b4f7caad63ee07baa8d7c5a00bc17d9531c251cb3c221b7"
+          }
+        }
+      ]
+    },
+    {
+      "id": "invoice-sixty-en-usd",
+      "recipeVersion": 1,
+      "filename": "invoice-sixty-en-usd.pdf",
+      "inputSha256": "40f726f46815c357659ee8ba17cfa4c80167c942ea36377293211cd2d9695285",
+      "pdf": {
+        "bytes": 195960,
+        "sha256": "18bd1ae48f230bc10f385ad03b4363e92ea8d5c8e29d7a216a5315cdf7462da8"
+      },
+      "html": {
+        "bytes": 2562415,
+        "sha256": "d209f5af4335e6b5e27c3e83fed59f8d03a542a80815eaa293c4a997ce3a6ab4"
+      },
+      "sheet": {
+        "bytes": 26,
+        "sha256": "f9d13021a7fd112b93bb8c41a30bbc413fc48e87aa84982c151ad6784a4beee7"
+      },
+      "notices": {
+        "bytes": 152,
+        "sha256": "2e6df4327a6b66933263a32f2f508fe404279978da455554db4599f418670db2"
+      },
+      "pages": [
+        {
+          "number": 1,
+          "pdf": {
+            "bytes": 23078,
+            "sha256": "8bf42a4c7b06cabc9c2e41e708d55e46de960ce7e1e49572c8cc6f98dc068c86"
+          },
+          "pagination": {
+            "bytes": 26027,
+            "sha256": "aea5fc67dd39b48b3e03368e47cbb91176437acdb9f5e1aa247370097be07dc2"
+          }
+        },
+        {
+          "number": 2,
+          "pdf": {
+            "bytes": 23291,
+            "sha256": "e91f1d481f14046280281d633fac429c02495ed863bfd988ba7e55522206226e"
+          },
+          "pagination": {
+            "bytes": 27894,
+            "sha256": "11183854a017d0d1c0b0773160ad3895d5bd35598c144877d51df056e3f2ae1d"
+          }
+        },
+        {
+          "number": 3,
+          "pdf": {
+            "bytes": 23227,
+            "sha256": "722d7fa73ea2193a1ef3f90330c202fb989408849de70a8b0f7a8d27c7c2ea75"
+          },
+          "pagination": {
+            "bytes": 27615,
+            "sha256": "aadd394ab92a08bc0492a749cd9a5668e8a646134c85377422b0b2ed0131a7d3"
+          }
+        },
+        {
+          "number": 4,
+          "pdf": {
+            "bytes": 26420,
+            "sha256": "8f92a3cf36143e20b13e3cc5cb1db605c00af76bb372c28287b7622a00001f05"
+          },
+          "pagination": {
+            "bytes": 24513,
+            "sha256": "30ee74cf06570d61445ab852251e2af5ca1f13d7ca785c56695c2c3e5ddb602f"
+          }
+        },
+        {
+          "number": 5,
+          "pdf": {
+            "bytes": 19069,
+            "sha256": "0ea283d4e1f6e85eaf2b470e85d0fe3df66e1e6845ee5b1cc8ff44f8392f1941"
+          },
+          "pagination": {
+            "bytes": 2637,
+            "sha256": "104e680837cd0a2f0b4f7caad63ee07baa8d7c5a00bc17d9531c251cb3c221b7"
+          }
+        }
+      ]
+    },
+    {
+      "id": "invoice-sixty-layered",
+      "recipeVersion": 1,
+      "filename": "invoice-sixty-layered.pdf",
+      "inputSha256": "e0d26ef08c7c29f85c949f998adc9d47e1b976ff8486a85079f92d4d9606eb58",
+      "pdf": {
+        "bytes": 206552,
+        "sha256": "4461a0770aa3e766b2ad877ded4f5509e5ee028e14030c185fc250c77864f074"
+      },
+      "html": {
+        "bytes": 2571336,
+        "sha256": "015f2c904c1e931c8d97ca8f9a5608153f452db047a8ad8e869d7353e31e4575"
+      },
+      "sheet": {
+        "bytes": 26,
+        "sha256": "f9d13021a7fd112b93bb8c41a30bbc413fc48e87aa84982c151ad6784a4beee7"
+      },
+      "notices": {
+        "bytes": 152,
+        "sha256": "2e6df4327a6b66933263a32f2f508fe404279978da455554db4599f418670db2"
+      },
+      "pages": [
+        {
+          "number": 1,
+          "pdf": {
+            "bytes": 23900,
+            "sha256": "e5043f710074f3a73e7ab92cb6c6eaf9167f03053b6a8059b7b76ba467fef8c8"
+          },
+          "pagination": {
+            "bytes": 27571,
+            "sha256": "153a439f8ac6baab0867ae130f1d9d426533a262bd8a42230a638288e741b884"
+          }
+        },
+        {
+          "number": 2,
+          "pdf": {
+            "bytes": 24203,
+            "sha256": "8fba565fdbf3dc02d852b0bd98a7e6086e2d8d1a494202a0976f576c04e579e3"
+          },
+          "pagination": {
+            "bytes": 29464,
+            "sha256": "0f27f57980afff4261d9c00e71b28125a3a79f035e76136e5ab61f4abd3ce3fb"
+          }
+        },
+        {
+          "number": 3,
+          "pdf": {
+            "bytes": 24183,
+            "sha256": "130cefa46b9c1a31770c2a3b4b396e07132f0b752f88154a61704d20f4830399"
+          },
+          "pagination": {
+            "bytes": 29743,
+            "sha256": "a9f5edfc585919f1dc899334303e719522c4167298f970d9f1e3b48c37bb5985"
+          }
+        },
+        {
+          "number": 4,
+          "pdf": {
+            "bytes": 26991,
+            "sha256": "b27eafe301b02a7e03ce99af03e0088a1c28ff790542cdbe136424778af7059a"
+          },
+          "pagination": {
+            "bytes": 27665,
+            "sha256": "323ddf3941611f04dfffd641bed266c5f552780aebf0a0b99e2d494ff890b40d"
+          }
+        },
+        {
+          "number": 5,
+          "pdf": {
+            "bytes": 20427,
+            "sha256": "898cc9a0c0f9b6a167ce6a083a0ffc8961d106ab12257393340fd17f2c97be7e"
+          },
+          "pagination": {
+            "bytes": 4487,
+            "sha256": "9bb7e49a76efa9c3941d8cc71b2f0838d93f5e988e8e2163342e056429496b7b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "historical-v1",
+      "recipeVersion": 1,
+      "filename": "historical-v1.pdf",
+      "inputSha256": "d8d11e827c1b56cf1253801e1b674a925cfa603602f32a46f7a00ad8dcac3249",
+      "storedTemplateSha256": "0b3cbd143e43eb0db584e80f253caf5625c4457296c3210bdd96a696c3091a81",
+      "pdf": {
+        "bytes": 5830,
+        "sha256": "65dc6359e7157b54810c9da2d9b863b9e3a84ab1919813d9d8438f5e9f3eddce"
+      },
+      "html": {
+        "bytes": 578023,
+        "sha256": "518257e4f7a81a4886a31a94589fd3633ff8581b5dc16c3f0616ab43a19d32cf"
+      },
+      "sheet": {
+        "bytes": 26,
+        "sha256": "f9d13021a7fd112b93bb8c41a30bbc413fc48e87aa84982c151ad6784a4beee7"
+      },
+      "notices": {
+        "bytes": 2,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "pages": [
+        {
+          "number": 1,
+          "pdf": {
+            "bytes": 4494,
+            "sha256": "9106320f0ff1ca505f0a3664b4b776ad1a54f850883e373452d7ef76ce9eb60f"
+          },
+          "pagination": {
+            "bytes": 637,
+            "sha256": "a21d2687951b5af6c727b2e9a8aa21fa840e984a1bfdce8190d53596ed17a138"
+          }
+        }
+      ]
+    }
+  ]
+}
