@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DocumentRenderError } from '../../errors.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../../limits/types.js';
 import { createHtmlWriter, utf8Length } from '../writer.js';
 
 const refusalOf = (run: () => unknown): DocumentRenderError => {
@@ -83,5 +84,47 @@ describe('the writer a document is serialised through', () => {
 
   it('publishes the ceiling it was created with', () => {
     expect(createHtmlWriter(9).limit).toBe(9);
+  });
+});
+
+describe('a value written through its escaping', () => {
+  it('produces exactly what escaping the whole of it would', () => {
+    /* The pieces are an allocation strategy, never a change of output: escaping is per character
+       and no entity crosses a boundary. */
+    const escaping = (piece: string): string => piece.replaceAll('&', '&amp;');
+    const value = `${'a&b'.repeat(9_000)}🧾${'&'.repeat(9_000)}`;
+    const out = createHtmlWriter(DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes);
+    out.writeEscaped(value, escaping);
+    expect(out.toString()).toBe(escaping(value));
+  });
+
+  it('never splits the two halves of one character', () => {
+    /* A split inside a surrogate pair would count two replacement characters where the document
+       holds one, and the ceiling would read three bytes too many. */
+    const value = '🧾'.repeat(20_000);
+    const out = createHtmlWriter(DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes);
+    out.writeEscaped(value, (piece) => piece);
+    expect(out.bytes).toBe(utf8Length(value));
+    expect(out.toString()).toBe(value);
+  });
+
+  it('refuses before the whole expanded value exists', () => {
+    /* An entity costs five characters for one, so a run of ampersands allocates several times the
+       ceiling if it is escaped whole first. */
+    const out = createHtmlWriter(64);
+    const refused = refusalOf(() => {
+      out.writeEscaped('&'.repeat(100_000), (piece) => piece.replaceAll('&', '&amp;'));
+    });
+    expect(refused.code).toBe('html-limit-exceeded');
+    /* Only the pieces that fit were ever built: the observed count is a piece past the ceiling,
+       not five hundred kilobytes of it. */
+    expect(refused.details.observed).toBeLessThan(64 * 1_000);
+  });
+
+  it('writes an empty value without writing anything at all', () => {
+    const out = createHtmlWriter(8);
+    out.writeEscaped('', (piece) => piece);
+    expect(out.toString()).toBe('');
+    expect(out.bytes).toBe(0);
   });
 });

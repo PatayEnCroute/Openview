@@ -97,15 +97,30 @@ export function createNodeTransport(): RemoteTransport {
 }
 
 /**
+ * The part of a dns resolver this policy uses, which Node's `Resolver` satisfies.
+ *
+ * Named so a test can answer without a name server: a suite whose result depends on the machine's
+ * resolver is a suite that goes red on a train.
+ */
+export interface NameLookup {
+  resolve4(hostname: string): Promise<readonly string[]>;
+  resolve6(hostname: string): Promise<readonly string[]>;
+  cancel(): void;
+}
+
+/**
  * Name resolution over the system resolver, cancelled with the render.
  *
  * A `Resolver` instance rather than the module functions: it is the only shape that can be
  * cancelled, and a lookup left running would outlive the render that asked for it.
  */
-export function createNodeResolver(): AddressResolver {
+export function createNodeResolver(open: () => NameLookup = () => new Resolver()): AddressResolver {
   return {
     async resolve(hostname: string, signal: AbortSignal): Promise<readonly ResolvedAddress[]> {
-      const resolver = new Resolver();
+      /* Read before anything is dialled: a listener added to a signal that has already fired never
+         runs, and both queries would then outlive the render that wanted them. */
+      signal.throwIfAborted();
+      const resolver = open();
       const stop = (): void => {
         resolver.cancel();
       };

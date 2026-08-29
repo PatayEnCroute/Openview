@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createNodeResolver,
   createNodeTransport,
+  type NameLookup,
   pinnedRequestOptions,
   readAnswer,
 } from '../node-transport.js';
@@ -46,23 +47,85 @@ describe('the request one authorised source is opened with', () => {
 });
 
 describe('the resolver a real runtime uses', () => {
-  it('answers nothing for a name that does not resolve, rather than failing', async () => {
-    /* Both families are asked; a name that answers neither is simply a name with no address, and
-       the policy above refuses it without opening a socket. */
-    const resolver = createNodeResolver();
+  /** A name server that answers from what a test names, so no suite depends on the machine's. */
+  const lookup = (
+    answers: Partial<Record<'v4' | 'v6', readonly string[] | { readonly code: string }>>,
+  ): { readonly open: () => NameLookup; cancelled: () => number } => {
+    let cancelled = 0;
+    const answer = async (
+      of: readonly string[] | { readonly code: string } | undefined,
+    ): Promise<readonly string[]> => {
+      if (of === undefined || Array.isArray(of)) {
+        return (of ?? []) as readonly string[];
+      }
+      throw Object.assign(new Error('the resolver refused'), of);
+    };
+    return {
+      cancelled: () => cancelled,
+      open: () => ({
+        resolve4: async () => await answer(answers.v4),
+        resolve6: async () => await answer(answers.v6),
+        cancel: () => {
+          cancelled += 1;
+        },
+      }),
+    };
+  };
+
+  const signal = (): AbortSignal => new AbortController().signal;
+
+  it('joins the two families, in the order the policy sorts them', async () => {
+    const names = lookup({ v4: ['93.184.216.34'], v6: ['2606:4700::1111'] });
     await expect(
-      resolver.resolve('invalid.invalid', new AbortController().signal),
+      createNodeResolver(names.open).resolve('assets.example.com', signal()),
+    ).resolves.toStrictEqual([
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:4700::1111', family: 6 },
+    ]);
+  });
+
+  it('reads "no record of that family" as no address, and nothing worse', async () => {
+    const names = lookup({ v4: ['93.184.216.34'], v6: { code: 'ENODATA' } });
+    await expect(
+      createNodeResolver(names.open).resolve('assets.example.com', signal()),
+    ).resolves.toStrictEqual([{ address: '93.184.216.34', family: 4 }]);
+  });
+
+  it('answers nothing at all for a name that holds neither family', async () => {
+    const names = lookup({ v4: { code: 'ENOTFOUND' }, v6: { code: 'ENOTFOUND' } });
+    await expect(
+      createNodeResolver(names.open).resolve('nowhere.invalid', signal()),
     ).resolves.toStrictEqual([]);
   });
 
-  it('stops resolving when the render is cancelled, and says so', async () => {
-    /* A cancellation is not an empty answer: the policy above must not read it as "this name has
-       no address" and go on to some other conclusion. */
+  it('re-throws a failure that is not "no record", rather than reading it as one', async () => {
+    /* A resolution an attacker can make fail would otherwise leave the surviving family deciding
+       alone, and the policy refuses a name only once it has seen every address it has. */
+    const names = lookup({ v4: ['93.184.216.34'], v6: { code: 'EAI_AGAIN' } });
+    await expect(
+      createNodeResolver(names.open).resolve('assets.example.com', signal()),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it('cancels the resolution when the render is cancelled', async () => {
+    const names = lookup({ v4: ['93.184.216.34'] });
     const controller = new AbortController();
-    const resolver = createNodeResolver();
-    const running = resolver.resolve('invalid.invalid', controller.signal);
+    const running = createNodeResolver(names.open).resolve('assets.example.com', controller.signal);
     controller.abort();
-    await expect(running).rejects.toBeInstanceOf(Error);
+    await running.catch(() => undefined);
+    expect(names.cancelled()).toBe(1);
+  });
+
+  it('dials nothing at all when the render was already cancelled', async () => {
+    /* A listener added to a signal that has already fired never runs, so both queries would leave
+       and outlive the render that wanted them. */
+    const names = lookup({ v4: ['93.184.216.34'] });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      createNodeResolver(names.open).resolve('assets.example.com', controller.signal),
+    ).rejects.toBeInstanceOf(Error);
+    expect(names.cancelled()).toBe(0);
   });
 });
 

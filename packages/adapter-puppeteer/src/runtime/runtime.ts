@@ -33,7 +33,7 @@ import { createNodeWorkerFactory } from './node-worker.js';
 import { createRenderPool, type RenderPool } from './pool.js';
 import type { WorkerEngineOptions } from './protocol.js';
 import type { BrowserFactory, SlotBrowser, WorkerFactory } from './slot.js';
-import { snapshotValue, type TransportLimits } from './snapshot.js';
+import { createTransportBudget, snapshotValue, type TransportLimits } from './snapshot.js';
 
 const NOT_A_DATA_SET =
   "The data set of this request is not a set of named values. Its names are the caller's own and none of them is reserved here, but a request has to carry an object for the model to read anything from it at all.";
@@ -177,8 +177,11 @@ export function admitRequest(
   data: unknown,
   transport: TransportLimits,
 ): AdmittedRequest {
-  const copiedTemplate = snapshotValue(template, transport);
-  const copied = snapshotValue(data, transport);
+  /* One budget for the two copies: a request is a template and a data set together, and a counter
+     opened twice would let it carry twice what its ceilings name. */
+  const budget = createTransportBudget(transport);
+  const copiedTemplate = snapshotValue(template, budget);
+  const copied = snapshotValue(data, budget);
   if (copied === null || typeof copied !== 'object' || Array.isArray(copied)) {
     throw new DocumentRenderError(NOT_A_DATA_SET, 'template-refused', { phase: 'transport' });
   }

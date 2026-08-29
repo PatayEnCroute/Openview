@@ -345,6 +345,9 @@ describe('a name that never resolves', () => {
       ),
     );
     expect(refused.code).toBe('resource-policy-refused');
+    /* Named as the deadline it was, not as a name the policy refuses: the two read the same to a
+       caller unless the limit is there. */
+    expect(refused.details.limit).toBe(20);
     expect(requested).toHaveLength(0);
   });
 });

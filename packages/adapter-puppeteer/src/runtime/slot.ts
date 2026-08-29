@@ -348,6 +348,12 @@ export async function createRenderSlot(
             );
             return;
           }
+          if (done) {
+            /* The round is over: performing this would open a context after the cleanup that was
+               meant to close it, and leave it in a browser this process keeps. A worker that
+               answers late is terminated, not obeyed. */
+            return;
+          }
           const reply = (payload: ParentMessage): void => {
             if (!done) {
               current.post(payload);

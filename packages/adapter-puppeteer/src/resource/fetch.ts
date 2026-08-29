@@ -26,6 +26,14 @@ const CANCELLED =
 const LOAD_FAILED =
   'This remote source could not be obtained. The failure of the transport is deliberately not summarised here: its message is written by the host that was dialled.';
 
+/**
+ * The statuses that really name another target.
+ *
+ * Spelt out rather than taken as a range: `304` and `306` sit inside `301..308` and redirect
+ * nothing, so a host answering one of them with a `Location` would spend a hop for nothing.
+ */
+const REDIRECTS: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+
 /** One address a name resolved to, kept with the family the socket must open. */
 export interface ResolvedAddress {
   readonly address: string;
@@ -114,7 +122,12 @@ async function pinnedAddress(
   let answers: readonly ResolvedAddress[];
   try {
     answers = await resolver.resolve(hostname, signal);
-  } catch {
+  } catch (error) {
+    if (signal.aborted) {
+      /* Not a name this policy refuses: the attempt was stopped, and only the caller knows whether
+         by its deadline or by its cancellation. */
+      throw error;
+    }
     /* Re-thrown as the one refusal this policy has, rather than forwarded: a resolver's own
        message quotes the name it failed on, and that name came from the document. */
     refuse(REFUSED_ADDRESS);
@@ -274,7 +287,7 @@ export async function loadRemoteImage(
              still meets the same ceiling. */
           return await readBounded(response.body, limits.maxImageBytes, controller);
         }
-        if (response.status >= 301 && response.status <= 308 && response.location !== undefined) {
+        if (REDIRECTS.has(response.status) && response.location !== undefined) {
           controller.abort();
           current = targetOf(response.location, url);
           continue;

@@ -30,6 +30,25 @@ const isPlainObject = (value: object): boolean => {
 };
 
 /**
+ * What one request has already spent of its transport budget.
+ *
+ * Shared between the copies a single request makes -- its template and its data set -- because a
+ * counter restarted per value would let one request carry twice what its ceilings name.
+ */
+export interface TransportBudget {
+  readonly limits: TransportLimits;
+  values: number;
+  characters: number;
+}
+
+/** Opens the budget of one request. */
+export const createTransportBudget = (limits: TransportLimits): TransportBudget => ({
+  limits,
+  values: 0,
+  characters: 0,
+});
+
+/**
  * Copies a request into plain json data, under a budget, without running any of the caller's code.
  *
  * Property descriptors are read rather than the properties themselves: a getter would run caller
@@ -39,14 +58,14 @@ const isPlainObject = (value: object): boolean => {
  * This is a transport contract and not a schema of the data set: no key is reserved, no shape is
  * expected, and every name the caller chose survives unchanged.
  */
-export function snapshotValue(value: unknown, limits: TransportLimits): unknown {
-  let values = 0;
-  let characters = 0;
+export function snapshotValue(value: unknown, budget: TransportLimits | TransportBudget): unknown {
+  const spent = 'limits' in budget ? budget : createTransportBudget(budget);
+  const limits = spent.limits;
   const seen = new Set<object>();
 
   const copy = (current: unknown): unknown => {
-    values += 1;
-    if (values > limits.maxValues) {
+    spent.values += 1;
+    if (spent.values > limits.maxValues) {
       refuse(TOO_MANY_VALUES, limits.maxValues);
     }
     if (current === null) {
@@ -54,8 +73,8 @@ export function snapshotValue(value: unknown, limits: TransportLimits): unknown 
     }
     switch (typeof current) {
       case 'string':
-        characters += current.length;
-        if (characters > limits.maxStringLength) {
+        spent.characters += current.length;
+        if (spent.characters > limits.maxStringLength) {
           refuse(TOO_MANY_CHARACTERS, limits.maxStringLength);
         }
         return current;
@@ -95,7 +114,16 @@ export function snapshotValue(value: unknown, limits: TransportLimits): unknown 
         refuse(NOT_PLAIN_DATA);
       }
       if (descriptor.enumerable) {
-        built[key] = copy(descriptor.value);
+        /* Defined rather than assigned: `built[key] = …` on the key `__proto__` reaches the setter
+           `Object.prototype` carries, which replaces the prototype of the copy or drops the value
+           without a word. `JSON.parse` produces that key as an ordinary own property, so a data set
+           read from a request really can hold it. */
+        Object.defineProperty(built, key, {
+          value: copy(descriptor.value),
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
       }
     }
     seen.delete(object);

@@ -30,8 +30,10 @@ export async function readBoundedPdf(
       total += value.byteLength;
       if (total > limit) {
         /* Cancelled rather than drained: a browser that keeps writing would otherwise be read to
-           its end only for the result to be thrown away. */
-        await reader.cancel();
+           its end only for the result to be thrown away. Deliberately not awaited: a source is free
+           to answer its cancellation slowly or not at all, and this refusal must not wait on it nor
+           be replaced by whatever the cancellation itself rejects with. */
+        void reader.cancel().then(undefined, () => undefined);
         throw new DocumentRenderError(TOO_LARGE, 'pdf-limit-exceeded', {
           phase: 'export',
           limit,

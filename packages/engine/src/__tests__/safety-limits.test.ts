@@ -308,3 +308,25 @@ describe('the table a backend answers with', () => {
     ).toBe('resource-policy-refused');
   });
 });
+
+describe('an answer that is not a resolution at all', () => {
+  const asked = [{ key: 'o1', nodeId: 'a', path: [], src: 'one' }];
+
+  it('is refused as this engine, not as a failure of the loop reading it', () => {
+    /* The type of `resolveImages` exists only at compile time, and the backend behind it is
+       somebody else's code. */
+    for (const answer of [
+      null,
+      undefined,
+      'nothing',
+      [{ key: 'o1' }],
+      [{ key: 1, src: 'x' }],
+      [null],
+      [{ key: 'o1', src: 'x', extra: true }],
+    ]) {
+      const refused = refusalOf(() => resolvedImageTable(asked, answer));
+      expect(refused.code).toBe('resource-policy-refused');
+      expect(refused.details.phase).toBe('resource');
+    }
+  });
+});

@@ -1,3 +1,4 @@
+import { z } from 'zod/v4';
 import { refusal } from '../errors.js';
 import { walkDocument } from './traverse.js';
 import type { MaterialDocument } from './types.js';
@@ -17,6 +18,20 @@ export interface ResolvedDocumentImage {
   readonly key: string;
   readonly src: string;
 }
+
+/**
+ * What a backend is allowed to answer an image resolution with.
+ *
+ * The type of `resolveImages` exists only at compile time, and the adapter behind it is somebody
+ * else's code: a malformed answer has to become a refusal of this engine, not a `TypeError` from
+ * the middle of a loop.
+ */
+const AnsweredImagesSchema: z.ZodType<readonly ResolvedDocumentImage[]> = z
+  .array(z.strictObject({ key: z.string(), src: z.string() }).readonly())
+  .readonly();
+
+const MALFORMED =
+  'The print backend answered the image resolution with something other than a list of resolved occurrences. The answer is refused whole rather than read in part.';
 
 const MISSING =
   'The print backend answered the image resolution without an entry for an occurrence the document reaches. Read `details.nodeId` for the declaration left unresolved.';
@@ -52,14 +67,22 @@ export function documentImages(document: MaterialDocument): readonly DocumentIma
  * Checked whole before a single source is used: a missing, duplicated or foreign key would
  * otherwise become an image silently painted from the stored source, which is the one thing
  * resolving them was meant to prevent.
+ *
+ * `answered` is `unknown` because the type of `resolveImages` exists only at compile time and the
+ * backend behind it is somebody else's code: this is the frontier where that answer becomes data
+ * this engine has parsed.
  */
 export function resolvedImageTable(
   asked: readonly DocumentImage[],
-  answered: readonly ResolvedDocumentImage[],
+  answered: unknown,
 ): ReadonlyMap<string, string> {
+  const parsed = AnsweredImagesSchema.safeParse(answered);
+  if (!parsed.success) {
+    throw refusal(MALFORMED, 'resource-policy-refused', { phase: 'resource' });
+  }
   const table = new Map<string, string>();
   const wanted = new Map(asked.map((image) => [image.key, image]));
-  for (const resolved of answered) {
+  for (const resolved of parsed.data) {
     if (!wanted.has(resolved.key) || table.has(resolved.key)) {
       throw refusal(UNKNOWN, 'resource-policy-refused', { phase: 'resource' });
     }

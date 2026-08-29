@@ -1,6 +1,6 @@
 import { DocumentRenderError } from '@openview/engine';
 import { describe, expect, it } from 'vitest';
-import { snapshotValue, type TransportLimits } from '../snapshot.js';
+import { createTransportBudget, snapshotValue, type TransportLimits } from '../snapshot.js';
 
 const LIMITS: TransportLimits = { maxValues: 10_000, maxStringLength: 100_000 };
 
@@ -29,6 +29,19 @@ describe('the copy one request is admitted under', () => {
     /* The whole point: a data set belongs to the integrator, and none of its names is ours. */
     const data = { template: 1, data: 2, schemaVersion: 3, __proto__value: 4 };
     expect(snapshotValue(data, LIMITS)).toStrictEqual(data);
+  });
+
+  it('keeps a property really named `__proto__`, and changes no prototype doing it', () => {
+    /* `JSON.parse` produces that key as an ordinary own property, so a request read from a wire
+       really can hold it. An assignment would reach the setter `Object.prototype` carries: the
+       value would vanish, or become the prototype of the copy. */
+    const data: unknown = JSON.parse('{"kept": 1, "__proto__": {"polluted": true}}');
+    const copied = snapshotValue(data, LIMITS);
+    expect(Object.getPrototypeOf(copied)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyNames(copied).sort()).toStrictEqual(['__proto__', 'kept']);
+    expect(Object.getOwnPropertyDescriptor(copied, '__proto__')?.value).toStrictEqual({
+      polluted: true,
+    });
   });
 
   it('shares no reference with the caller, so a later mutation changes nothing', () => {
@@ -97,6 +110,15 @@ describe('the copy one request is admitted under', () => {
     const refused = refusalOf(() => snapshotValue(rows, { ...LIMITS, maxValues: 80 }));
     expect(refused.details.limit).toBe(80);
     expect(refused.details.phase).toBe('transport');
+  });
+
+  it('counts one request once, however many values it is copied from', () => {
+    /* A template and a data set are one request: a counter opened per value would let it carry
+       twice what its ceilings name. */
+    const budget = createTransportBudget({ maxValues: 5, maxStringLength: 100 });
+    snapshotValue({ a: 1, b: 2 }, budget);
+    expect(budget.values).toBe(3);
+    expect(() => snapshotValue({ c: 3, d: 4 }, budget)).toThrow(DocumentRenderError);
   });
 
   it('counts the strings together, and names no key when it refuses', () => {

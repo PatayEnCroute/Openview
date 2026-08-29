@@ -249,3 +249,58 @@ describe('a slot whose worker cannot be rebuilt', () => {
     await slot.close();
   });
 });
+
+describe('a worker that calls out after its round has ended', () => {
+  it('opens no context, because a late call is not obeyed', async () => {
+    const browsers = fakeBrowsers();
+    let listeners: Parameters<WorkerHandle['listen']>[0] | undefined;
+    /** The handler of the round itself, kept because the rebuild installs another over it. */
+    let ofTheRound: Parameters<WorkerHandle['listen']>[0] | undefined;
+    /* Answers nothing until the deadline has fired, then asks for a context. Performing it would
+       open one after the cleanup meant to close it, in a browser this process keeps. */
+    const late = {
+      create: (): Promise<WorkerHandle> =>
+        Promise.resolve({
+          post: (message) => {
+            if (message.kind === 'start') {
+              ofTheRound = listeners;
+            }
+          },
+          listen: (next) => {
+            listeners = next;
+            queueMicrotask(() => {
+              next.onMessage({
+                formatVersion: WORKER_PROTOCOL_VERSION,
+                generation: 0,
+                kind: 'ready',
+              });
+            });
+          },
+          terminate: () => Promise.resolve(),
+        }),
+    };
+    const slot = await createRenderSlot(late, browsers.factory, {
+      renderTimeoutMs: 20,
+      maxRendersPerWorker: 100,
+    });
+    try {
+      const refused = await refusalOf(slot.run(job()));
+      expect(refused.code).toBe('render-timeout');
+      expect(ofTheRound).toBeDefined();
+      ofTheRound?.onMessage({
+        formatVersion: WORKER_PROTOCOL_VERSION,
+        generation: 0,
+        kind: 'call',
+        renderId: 'r1',
+        sequence: 1,
+        call: { op: 'open', sheet: { width: 210, height: 297 }, images: [] },
+      });
+      await new Promise<void>((resolve) => {
+        queueMicrotask(resolve);
+      });
+      expect(browsers.log.contexts).toBe(0);
+    } finally {
+      await slot.close();
+    }
+  });
+});
