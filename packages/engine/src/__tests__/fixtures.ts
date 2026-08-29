@@ -8,12 +8,14 @@ import {
   type Typography,
 } from '@openview/core';
 import { reachableOccurrences } from '../document/bands.js';
+import { documentImages } from '../document/images.js';
 import { materializeDocument } from '../document/materialize.js';
 import type { MaterialDocument, ResolvedTypography } from '../document/types.js';
 import { resolveRunTypography } from '../document/typography.js';
 import { DocumentRenderError } from '../errors.js';
 import { buildPagedTree, buildProbeTree, documentFontCss } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS, type RenderSafetyLimits } from '../limits/types.js';
 import { paginate } from '../pagination/paginate.js';
 import { paginationResultOf } from '../pagination/result.js';
 import type { MarkerReserve, MaterialFragment, PaginatedDocument } from '../pagination/types.js';
@@ -88,8 +90,16 @@ export const SAMPLE_DATA: EvaluationScope = {
 export function materializedOf(
   overrides: Record<string, unknown> = {},
   data: EvaluationScope = SAMPLE_DATA,
+  safetyLimits: RenderSafetyLimits = DEFAULT_RENDER_SAFETY_LIMITS,
 ): MaterialDocument {
-  return materializeDocument(templateOf(overrides), data, reachableOccurrences(1)).document;
+  return materializeDocument(
+    templateOf(overrides),
+    data,
+    reachableOccurrences(1),
+    undefined,
+    undefined,
+    safetyLimits,
+  ).document;
 }
 
 /** The same, with every band domain a run of pages can reach already bound. */
@@ -111,6 +121,7 @@ export function paginateOnGrid(
   document: MaterialDocument,
   grid: Partial<GridLayout> = {},
   markers: MarkerReserve = constantMarkers(),
+  maxPages: number = DEFAULT_RENDER_SAFETY_LIMITS.maxPages,
 ): PaginatedDocument {
   const metrics = gridMetrics(document, grid);
   return paginate(document, {
@@ -118,6 +129,7 @@ export function paginateOnGrid(
     markers,
     printableHeight: document.printable.height * metrics.pxPerMm,
     slack: new Map(),
+    maxPages,
   });
 }
 
@@ -136,8 +148,24 @@ export function paginationOf(
   const paginated = paginateOnGrid(document, grid);
   return paginationResultOf(
     paginated,
-    serializeHtml(buildPagedTree(paginated, documentFontCss(document))),
+    serializeHtml(
+      buildPagedTree(paginated, documentFontCss(document), sameImages(document)),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    ),
   );
+}
+
+/** No image occurrence at all, for a document that declares none. */
+export const NO_IMAGES: ReadonlyMap<string, string> = new Map();
+
+/**
+ * A resolution that prints every occurrence from the source the template stored.
+ *
+ * What a backend able to print inline `data:` bytes answers, and nothing more: a test that wants a
+ * source refused states it, rather than getting a pass because no session was involved.
+ */
+export function sameImages(document: MaterialDocument): ReadonlyMap<string, string> {
+  return new Map(documentImages(document).map((image) => [image.key, image.src]));
 }
 
 /**
@@ -155,7 +183,10 @@ export function pagedHtmlOf(
   grid: Partial<GridLayout> = {},
 ): string {
   const document = materializedOf(overrides, data);
-  return serializeHtml(buildPagedTree(paginateOnGrid(document, grid), documentFontCss(document)));
+  return serializeHtml(
+    buildPagedTree(paginateOnGrid(document, grid), documentFontCss(document), sameImages(document)),
+    DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+  );
 }
 
 /** The html of the measuring probe, which is the tree every occurrence key is annotated on. */
@@ -164,7 +195,11 @@ export function probeHtmlOf(
   data: EvaluationScope = SAMPLE_DATA,
 ): string {
   const document = materializedOf(overrides, data);
-  return serializeHtml(buildProbeTree(document, constantMarkers(), documentFontCss(document)).tree);
+  return serializeHtml(
+    buildProbeTree(document, constantMarkers(), documentFontCss(document), sameImages(document))
+      .tree,
+    DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+  );
 }
 
 /**

@@ -2,6 +2,7 @@ import type { EvaluationScope } from '@openview/core';
 import { describe, expect, it } from 'vitest';
 import { buildPagedTree } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../limits/types.js';
 import { paginate } from '../pagination/paginate.js';
 import { completedOn } from '../pagination/reports.js';
 import type { PaginatedDocument } from '../pagination/types.js';
@@ -11,6 +12,7 @@ import {
   materializedOf,
   multiPageOf,
   NO_FONTS,
+  NO_IMAGES,
   paginateOnGrid,
   refusalOfCut,
 } from './fixtures.js';
@@ -357,6 +359,7 @@ describe('what a report marker writes', () => {
       markers: constantMarkers(),
       printableHeight: document.printable.height * metrics.pxPerMm,
       slack: new Map(),
+      maxPages: DEFAULT_RENDER_SAFETY_LIMITS.maxPages,
     });
     return paginated.pages.map((page) => String(completedOn(page.root).length)).join('|');
   }
@@ -422,9 +425,12 @@ describe('the digits a report marker paints', () => {
           markers: constantMarkers(),
           printableHeight: document.printable.height * metrics.pxPerMm,
           slack: new Map(),
+          maxPages: DEFAULT_RENDER_SAFETY_LIMITS.maxPages,
         }),
         NO_FONTS,
+        NO_IMAGES,
       ),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
     );
     return [...html.matchAll(/<span class="ov-marker"[^>]*>([^<]*)<\/span>/g)].map(
       (match) => match[1] ?? '',

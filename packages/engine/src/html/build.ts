@@ -2,7 +2,7 @@ import { type BoxBorder, kindOf, roundDecimal } from '@openview/core';
 import { assertCoveredText } from '../document/fonts/index.js';
 import { type MarkerWriting, writeMarker } from '../document/presentation.js';
 import type { MaterialPageFieldRun, MaterialRun, ResolvedTypography } from '../document/types.js';
-import type { DocumentRenderErrorDetails } from '../errors.js';
+import { type DocumentRenderErrorDetails, refusal } from '../errors.js';
 import type {
   CellFragment,
   GridFragment,
@@ -28,6 +28,9 @@ import type { HtmlAttributes, HtmlElement, HtmlElementName, HtmlNode } from './t
 
 const NO_RULES: RowRules = { top: undefined, right: undefined, bottom: undefined, left: undefined };
 
+const UNRESOLVED =
+  'An image occurrence reached the html without a source the session resolved for it. Read `details.nodeId` for the declaration involved.';
+
 /** Page layout values supplied to dynamic markers during page construction. */
 export interface PageValues {
   readonly number: number;
@@ -39,6 +42,8 @@ export interface PageValues {
 /** Rendering context for HTML tree construction passes. */
 export interface PaintContext {
   readonly markers: MarkerReserve;
+  /** What each image occurrence really loads, decided by the session before anything was painted. */
+  readonly images: ReadonlyMap<string, string>;
   /** Page values when rendering a paged tree, or `undefined` for measurement probes. */
   readonly page: PageValues | undefined;
   readonly keyed: boolean;
@@ -100,6 +105,21 @@ function countText(
   details: DocumentRenderErrorDetails,
 ): string {
   return writing === undefined ? String(value) : writeMarker(writing, value, details);
+}
+
+/**
+ * The source this occurrence prints, from the table the session answered.
+ *
+ * The stored source is never written into the markup: substituting a url in serialised text would
+ * make the network policy an operation on strings, and a branch the table does not cover has to
+ * stop the render instead of reaching a browser.
+ */
+function resolvedSource(key: string, nodeId: string, context: PaintContext): string {
+  const src = context.images.get(key);
+  if (src === undefined) {
+    throw refusal(UNRESOLVED, 'resource-policy-refused', { phase: 'resource', nodeId });
+  }
+  return src;
 }
 
 function buildRun(run: MaterialRun, index: number, context: PaintContext): HtmlElement {
@@ -245,7 +265,7 @@ export function buildFragment(fragment: MaterialFragment, context: PaintContext)
         [
           element('img', {
             class: CSS_CLASSES.image,
-            src: image.source.src,
+            src: resolvedSource(image.source.key, image.source.nodeId, context),
             alt: image.source.alt,
           }),
         ],

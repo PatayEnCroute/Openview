@@ -78,6 +78,9 @@ importers:
       puppeteer:
         specifier: 25.8.0
         version: 25.8.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^26.2.0
@@ -106,6 +109,9 @@ importers:
       '@openview/core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^26.2.0

@@ -28,9 +28,48 @@ export const DOCUMENT_RENDER_ERROR_CODES = [
   'layout-measurement-failed',
   'pdf-export-failed',
   'adapter-capability-mismatch',
+  'materialization-limit-exceeded',
+  'page-limit-exceeded',
+  'html-limit-exceeded',
+  'pdf-limit-exceeded',
+  'resource-policy-refused',
+  'resource-load-failed',
+  'resource-integrity-failed',
+  'render-capacity-exceeded',
+  'render-timeout',
+  'render-cancelled',
+  'render-memory-limit-exceeded',
+  'render-worker-failed',
+  'runtime-closed',
 ] as const;
 
 export type DocumentRenderErrorCode = (typeof DOCUMENT_RENDER_ERROR_CODES)[number];
+
+/**
+ * The stages a render passes through, named so a refusal says where it stopped.
+ *
+ * A closed vocabulary rather than free text: the phase travels in audit records and across a
+ * worker boundary, where an interpolated string would be a way for document content to escape.
+ */
+export const DOCUMENT_RENDER_PHASES = [
+  'admission',
+  'transport',
+  'validation',
+  'materialization',
+  'resource',
+  'measurement',
+  'pagination',
+  'serialization',
+  'export',
+  'cleanup',
+] as const;
+
+export type DocumentRenderPhase = (typeof DOCUMENT_RENDER_PHASES)[number];
+
+/** Where a refused resource came from, without naming it. */
+export const DOCUMENT_RESOURCE_KINDS = ['embedded-image', 'remote-image'] as const;
+
+export type DocumentResourceKind = (typeof DOCUMENT_RESOURCE_KINDS)[number];
 
 /** The three vertical regions of a page, in layout order. */
 export const DOCUMENT_REGIONS = ['header', 'root', 'footer'] as const;
@@ -60,6 +99,17 @@ export interface DocumentRenderErrorDetails {
   readonly region?: DocumentArea | undefined;
   /** Declared limit that was exceeded. */
   readonly limit?: number | undefined;
+  /**
+   * Technical magnitude actually reached: bytes, pixels, pages or units.
+   *
+   * Never a count read straight from the caller's data set, which would publish a cardinality the
+   * document owner did not choose to disclose.
+   */
+  readonly observed?: number | undefined;
+  /** Stage that refused. */
+  readonly phase?: DocumentRenderPhase | undefined;
+  /** Provenance of a refused resource, never its source. */
+  readonly resourceKind?: DocumentResourceKind | undefined;
   /** One-based page number where the refusal occurred. */
   readonly pageNumber?: number | undefined;
   /** Diagnostic list when forwarded from `@openview/core`. */
@@ -83,6 +133,14 @@ export class DocumentRenderError extends OpenviewError {
     this.name = 'DocumentRenderError';
     this.code = code;
     this.details = details;
+  }
+}
+
+/** Error raised when the logical safety ceilings of a render are configured unusably. */
+export class InvalidRenderSafetyLimitsError extends OpenviewError {
+  constructor(message: string, options?: ErrorOptions | undefined) {
+    super(message, options);
+    this.name = 'InvalidRenderSafetyLimitsError';
   }
 }
 

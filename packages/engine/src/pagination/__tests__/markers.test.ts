@@ -22,6 +22,7 @@ import type {
 } from '../../document/types.js';
 import { buildFragment, type PageValues } from '../../html/build.js';
 import { serializeHtml } from '../../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../../limits/types.js';
 import {
   CANONICAL_NUMBER_MAX_CHARS,
   type MarkerBounds,
@@ -153,10 +154,20 @@ function printed(
 ): string {
   const document = documentOf([run]);
   const { reserve } = reserveOf(document, bounds);
-  const html = serializeHtml({
-    css: '',
-    body: [buildFragment(wholeFragment(textOf([run])), { markers: reserve, page, keyed: false })],
-  });
+  const html = serializeHtml(
+    {
+      css: '',
+      body: [
+        buildFragment(wholeFragment(textOf([run])), {
+          markers: reserve,
+          images: new Map(),
+          page,
+          keyed: false,
+        }),
+      ],
+    },
+    DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+  );
   const found = /class="ov-marker"[^>]*>([^<]*)</.exec(html);
   if (found?.[1] === undefined) {
     throw new Error('the fragment should paint one marker');

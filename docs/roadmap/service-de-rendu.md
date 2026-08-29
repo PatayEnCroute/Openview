@@ -51,6 +51,13 @@ le moteur.
 > **E8 reste obligatoire avant toute exposition hostile.** Le corpus E7 est synthétique : il ne
 > prouve ni sécurité, ni timeout, ni plafond mémoire, ni concurrence. Ouvrir le service sans E8,
 > c'est publier une porte d'entrée.
+>
+> 🔒 **La façade que S1 doit employer est `createPuppeteerRenderRuntime()`**
+> ([ADR 0021](../adr/0021-le-moteur-survit-a-un-document-hostile.md)), jamais
+> `createPuppeteerPdfStrategy()` : seule la première borne le temps, la mémoire, la concurrence et
+> les ressources qu'un document peut faire charger. Elle est asynchrone, l'appelant la possède, et
+> il doit la fermer. Le refus d'un document arrive typé, et un événement terminal est publié sur
+> `openview.render.audit` — c'est là que S3 branchera son journal et son identifiant de requête.
 
 ### S2. Le service se protège
 
@@ -67,6 +74,12 @@ sans que le service devienne indisponible pour les autres.
 
 > Non négociable. Publier ce service sans ce lot, c'est distribuer une porte ouverte
 > sous licence Apache.
+>
+> ⚠️ **E8 ne dispense de rien ici, et l'ADR 0021 le dit dans son propre message d'erreur** :
+> `resourceLimits` borne le vieux tas d'un isolat V8, et **ni les `ArrayBuffer`, ni les allocations
+> externes, ni Chromium**. La seule borne dure de tout l'arbre de processus est une limite de
+> conteneur ou de cgroup, et elle appartient à ce lot. E8 borne un **document** ; S2 borne
+> l'**usage** : taille du corps avant parsing, fréquence, identité, quota, coût cumulé.
 
 ### S3. Démarrer et surveiller
 

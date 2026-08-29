@@ -362,6 +362,45 @@ journalisé.
 
 **Poids :** L — **Dépend de :** E1 — **Condition de : J5**
 
+> 🟡 **Livré en partie — [ADR 0021](../adr/0021-le-moteur-survit-a-un-document-hostile.md).**
+>
+> `@openview/engine` borne désormais ce dont il connaît la sémantique : **250 000 objets
+> matérialisés**, **100 pages**, **32 Mio d'HTML** — comptés en octets UTF-8, réservés *avant*
+> allocation, et partagés entre la première passe et l'extension des bandes.
+> `@openview/adapter-puppeteer` borne le reste : **64 Mio de PDF** en entrée et en sortie,
+> **8 Mio et 25 M de pixels par image**, **32 Mio et 100 M de pixels cumulés**, **64 images
+> distinctes**, **1 slot**, **4 requêtes en file**, **5 s d'attente**, **30 s de rendu**,
+> **256 Mio de vieux tas par worker**, **5 s pour qu'un worker s'annonce**, **100 rendus avant
+> recyclage**. Un champ absent prend son
+> défaut ; un champ présent mais invalide est refusé, et chaque plafond a lui-même un plafond de
+> configuration pour que `1_000_000_000` ne devienne pas une manière documentée de tout désactiver.
+>
+> **La façade durcie est `createPuppeteerRenderRuntime()`**, et c'est la seule qu'un service peut
+> pointer vers un document qu'il ne contrôle pas. Le chemin direct
+> (`createPuppeteerPdfStrategy()`) reste disponible pour un intégrateur qui contrôle ses entrées :
+> il prend les bornes logiques, mais **n'impose aucun délai mural** — rien dans `engine` ne peut
+> interrompre une évaluation synchrone.
+>
+> **Une image distante n'est jamais donnée à Chromium.** Elle doit figurer au manifeste du runtime
+> sous sa source exacte avec son SHA-256 ; Node la télécharge sous plafond, vérifie l'empreinte, la
+> signature binaire et ses dimensions, puis l'incorpore en `data:`. La résolution DNS est épinglée
+> jusqu'à la socket, chaque redirection repasse toute la politique, et un nom qui répond une seule
+> adresse non publique est refusé en entier.
+>
+> **Réserve mémoire, écrite parce qu'elle compte :** `resourceLimits` borne le vieux tas d'un isolat
+> V8 et **ni les `ArrayBuffer`, ni les allocations externes, ni Chromium**. Un hôte qui expose ce
+> runtime a encore besoin d'une limite de processus ou de conteneur — c'est le travail de
+> [S2](service-de-rendu.md), pas celui de ce lot.
+>
+> **Ce qui manque pour dire « livré » :** le corpus hostile outillé et son job CI bloquant, la
+> mesure 60 pages / 60 000 lignes (le KPI de 2,0 s reste **non mesuré**), la parité octet pour octet
+> du lot figé E7 par le chemin durci, et **un succès HTTPS de bout en bout** : la politique distante
+> est prouvée contre un transport injecté, aucune socket TLS n'est ouverte nulle part dans ce dépôt.
+>
+> **Un changement pour l'intégrateur existant :** le chemin direct lit désormais son PDF en flux
+> borné, donc un document au-dessus de 64 Mio est refusé là où il sortait auparavant. Le plafond est
+> configurable et vaut douze fois le plus gros document du corpus.
+
 ### E9. La documentation du moteur
 
 **Pourquoi.** Publication groupée : chaque brique doit être installable et

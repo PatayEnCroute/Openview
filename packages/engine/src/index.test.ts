@@ -9,14 +9,20 @@ describe('@openview/engine public surface', () => {
 
   it('exposes one factory per port, and no second export beyond them', () => {
     expect(Object.keys(engine).sort()).toStrictEqual([
+      'DEFAULT_RENDER_SAFETY_LIMITS',
       'DOCUMENT_AREAS',
       'DOCUMENT_REGIONS',
       'DOCUMENT_RENDER_ERROR_CODES',
+      'DOCUMENT_RENDER_PHASES',
+      'DOCUMENT_RESOURCE_KINDS',
       'DocumentRenderError',
       'ENGINE_VERSION',
+      'InvalidRenderSafetyLimitsError',
       'PDF_CONTENT_TYPE',
+      'RENDER_SAFETY_HARD_CEILINGS',
       'createPaginationPort',
       'createPdfRenderPort',
+      'resolveRenderSafetyLimits',
     ]);
   });
 

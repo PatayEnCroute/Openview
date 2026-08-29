@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPagedTree } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../limits/types.js';
 import type { MaterialFragment, PaginatedDocument, TableFragment } from '../pagination/types.js';
 import {
   gridPage,
@@ -8,6 +9,7 @@ import {
   literalText,
   materializedOf,
   NO_FONTS,
+  NO_IMAGES,
   paginateOnGrid,
   refusalOfCut,
   SAMPLE_DATA,
@@ -124,7 +126,10 @@ describe('a table that fits', () => {
     for (const page of headerIdsPerPage(paginated)) {
       expect(page).toStrictEqual([]);
     }
-    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     expect(html).toContain('<thead></thead>');
   });
 });
@@ -320,7 +325,10 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(3), ...flow([ruled(5)]) }, {}),
     );
-    const sheets = serializeHtml(buildPagedTree(paginated, NO_FONTS))
+    const sheets = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    )
       .split('class="ov-page"')
       .slice(1);
     expect(sheets.length).toBeGreaterThan(2);
@@ -338,7 +346,10 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(3), ...flow([ruled(5)]) }, {}),
     );
-    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     const sheets = html.split('class="ov-page"').slice(1);
     for (const sheet of sheets) {
       expect(sheet).toContain('inset 0 -1mm 0 0 #000000');
@@ -352,7 +363,10 @@ describe('the rules of a fragment are resolved after the cut', () => {
     const paginated = paginateOnGrid(
       materializedOf({ page: gridPage(3), ...flow([ruled(6)]) }, {}),
     );
-    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     const widths = [...html.matchAll(/<col style="width:([\d.%]+)">/g)].map((match) => match[1]);
     expect(new Set(widths)).toStrictEqual(new Set(['50%']));
     expect(widths).toHaveLength(paginated.pages.length * 2);

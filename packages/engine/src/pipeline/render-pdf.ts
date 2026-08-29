@@ -36,11 +36,11 @@ export function createPdfRenderPort(
   return {
     format: 'pdf',
     async render(request: RenderRequest): Promise<RenderResult> {
-      const { template, bound } = prepare(request.template, request.data, options);
+      const { template, bound, limits } = prepare(request.template, request.data, options);
       const session = await openSession(strategy, bound, 'pdf-export-failed', EXPORT_FAILED);
       let bytes: Uint8Array;
       try {
-        const composed = await composeInSession(session, template, request.data, bound);
+        const composed = await composeInSession(session, template, request.data, bound, limits);
         bytes = await printComposed(session, composed);
       } finally {
         await session.close();

@@ -17,11 +17,11 @@ export function createPaginationPort(
 ): PaginationPort {
   return {
     async paginate(request: RenderRequest): Promise<PaginationResult> {
-      const { template, bound } = prepare(request.template, request.data, options);
+      const { template, bound, limits } = prepare(request.template, request.data, options);
       const session = await openSession(strategy, bound, 'layout-measurement-failed', OPEN_FAILED);
       let composed: ComposedDocument;
       try {
-        composed = await composeInSession(session, template, request.data, bound);
+        composed = await composeInSession(session, template, request.data, bound, limits);
       } finally {
         await session.close();
       }

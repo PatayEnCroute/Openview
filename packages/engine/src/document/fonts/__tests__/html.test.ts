@@ -3,6 +3,7 @@ import {
   constantMarkers,
   literalText,
   materializedOf,
+  NO_IMAGES,
   paginateOnGrid,
   SAMPLE_DATA,
 } from '../../../__tests__/fixtures.js';
@@ -13,6 +14,7 @@ import {
   documentFontCss,
 } from '../../../html/build-page.js';
 import { CONTENT_SECURITY_POLICY, serializeHtml } from '../../../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../../../limits/types.js';
 import { markerSignatures } from '../../../pagination/markers.js';
 import { BUNDLED_FACES } from '../catalogue.js';
 import { usedFaces } from '../collect.js';
@@ -169,8 +171,8 @@ describe('the three trees one render builds', () => {
     const document = TWO_FAMILIES();
     const fonts = documentFontCss(document);
     const markers = constantMarkers();
-    const paged = buildPagedTree(paginateOnGrid(document), fonts);
-    const probe = buildProbeTree(document, markers, fonts);
+    const paged = buildPagedTree(paginateOnGrid(document), fonts, NO_IMAGES);
+    const probe = buildProbeTree(document, markers, fonts, NO_IMAGES);
     const glyphs = buildMarkerProbe(
       document,
       markerSignatures(document, { pages: 1, report: 0 }),
@@ -190,7 +192,10 @@ describe('the three trees one render builds', () => {
 
   it('write one internal family per run, with no stack behind it', () => {
     const document = TWO_FAMILIES();
-    const html = serializeHtml(buildPagedTree(paginateOnGrid(document), documentFontCss(document)));
+    const html = serializeHtml(
+      buildPagedTree(paginateOnGrid(document), documentFontCss(document), NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     expect(html).toContain('font-family:"__openview_noto_sans_2_015"');
     expect(html).toContain('font-family:"__openview_noto_serif_2_015"');
     /* No stack behind any family, in either spelling the document uses: the stylesheet writes
@@ -206,7 +211,10 @@ describe('the three trees one render builds', () => {
 
   it('forbid a synthesised weight or slant on every run', () => {
     const document = TWO_FAMILIES();
-    const html = serializeHtml(buildPagedTree(paginateOnGrid(document), documentFontCss(document)));
+    const html = serializeHtml(
+      buildPagedTree(paginateOnGrid(document), documentFontCss(document), NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     /* Read in the escaped form the serialiser really writes: an inline style is an attribute
        value, so the quotes around the family come out as entities. */
     const runs = [...html.matchAll(/font-family:&quot;__openview[^&]+&quot;.*?color:/g)];
@@ -220,7 +228,8 @@ describe('the three trees one render builds', () => {
     expect(CONTENT_SECURITY_POLICY).toContain('font-src data:');
     expect(CONTENT_SECURITY_POLICY).not.toContain("font-src 'none'");
     const html = serializeHtml(
-      buildPagedTree(paginateOnGrid(ONE_FACE()), documentFontCss(ONE_FACE())),
+      buildPagedTree(paginateOnGrid(ONE_FACE()), documentFontCss(ONE_FACE()), NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
     );
     expect(html).toContain('font-src data:');
   });
@@ -232,7 +241,10 @@ describe('the three trees one render builds', () => {
       { root: container('root', [styled('t', 'body', { family: 'Inter', bold: true })]) },
       SAMPLE_DATA,
     );
-    const html = serializeHtml(buildPagedTree(paginateOnGrid(document), documentFontCss(document)));
+    const html = serializeHtml(
+      buildPagedTree(paginateOnGrid(document), documentFontCss(document), NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     const embedded = BUNDLED_FACES.find(
       (face) => face.family === 'inter-4.1' && face.weight === 700 && face.style === 'normal',
     );

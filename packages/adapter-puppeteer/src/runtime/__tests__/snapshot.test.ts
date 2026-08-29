@@ -1,0 +1,156 @@
+import { DocumentRenderError } from '@openview/engine';
+import { describe, expect, it } from 'vitest';
+import {
+  createTransportBudget,
+  snapshotValue,
+  type TransportBudget,
+  type TransportLimits,
+} from '../snapshot.js';
+
+const LIMITS: TransportLimits = { maxValues: 10_000, maxStringLength: 100_000 };
+
+/** One fresh budget per call, which is what a request opens. */
+const open = (limits: TransportLimits = LIMITS): TransportBudget => createTransportBudget(limits);
+
+const refusalOf = (run: () => unknown): DocumentRenderError => {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof DocumentRenderError) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error('the request was admitted');
+};
+
+describe('the copy one request is admitted under', () => {
+  it('keeps plain data exactly as the caller wrote it', () => {
+    const data = {
+      whateverTheHostCallsIt: { lines: [{ ref: 'A-1', qty: 2 }], total: 42.5, flagged: true },
+      nothing: null,
+    };
+    expect(snapshotValue(data, open())).toStrictEqual(data);
+  });
+
+  it('reserves no key and interprets no name of the caller', () => {
+    /* The whole point: a data set belongs to the integrator, and none of its names is ours. */
+    const data = { template: 1, data: 2, schemaVersion: 3, __proto__value: 4 };
+    expect(snapshotValue(data, open())).toStrictEqual(data);
+  });
+
+  it('keeps a property really named `__proto__`, and changes no prototype doing it', () => {
+    /* `JSON.parse` produces that key as an ordinary own property, so a request read from a wire
+       really can hold it. An assignment would reach the setter `Object.prototype` carries: the
+       value would vanish, or become the prototype of the copy. */
+    const data: unknown = JSON.parse('{"kept": 1, "__proto__": {"polluted": true}}');
+    const copied = snapshotValue(data, open());
+    expect(Object.getPrototypeOf(copied)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyNames(copied).sort()).toStrictEqual(['__proto__', 'kept']);
+    expect(Object.getOwnPropertyDescriptor(copied, '__proto__')?.value).toStrictEqual({
+      polluted: true,
+    });
+  });
+
+  it('shares no reference with the caller, so a later mutation changes nothing', () => {
+    const lines = [{ ref: 'A-1' }];
+    const copied = snapshotValue({ lines }, open());
+    lines[0] = { ref: 'changed' };
+    expect(copied).toStrictEqual({ lines: [{ ref: 'A-1' }] });
+  });
+
+  it('never runs an accessor of the caller', () => {
+    let read = 0;
+    const data = {
+      get trap(): string {
+        read += 1;
+        return 'ran';
+      },
+    };
+    expect(refusalOf(() => snapshotValue(data, open())).code).toBe('template-refused');
+    expect(read).toBe(0);
+  });
+
+  it('drops a property the caller made non-enumerable', () => {
+    const data: Record<string, unknown> = { kept: 1 };
+    Object.defineProperty(data, 'hidden', { value: 2, enumerable: false });
+    expect(snapshotValue(data, open())).toStrictEqual({ kept: 1 });
+  });
+
+  it('refuses a function, a symbol and a symbol-keyed property', () => {
+    expect(refusalOf(() => snapshotValue({ run: () => 1 }, open())).code).toBe('template-refused');
+    expect(refusalOf(() => snapshotValue({ tag: Symbol('x') }, open())).code).toBe(
+      'template-refused',
+    );
+    expect(refusalOf(() => snapshotValue({ [Symbol('x')]: 1 }, open())).code).toBe(
+      'template-refused',
+    );
+  });
+
+  it('refuses an instance of a class, which carries behaviour a copy would drop', () => {
+    expect(refusalOf(() => snapshotValue({ when: new Map() }, open())).code).toBe(
+      'template-refused',
+    );
+  });
+
+  it('refuses a cycle rather than following it for ever', () => {
+    const data: Record<string, unknown> = {};
+    data.itself = data;
+    expect(refusalOf(() => snapshotValue(data, open())).code).toBe('template-refused');
+  });
+
+  it('copies a subtree shared twice as two subtrees, and charges for both', () => {
+    /* Sharing is ordinary in json-shaped data; only a cycle is refused. Each occurrence is copied
+       and counted, so the budget stays an upper bound on what really crosses the boundary. */
+    const shared = { ref: 'A-1' };
+    expect(snapshotValue({ a: shared, b: shared }, open())).toStrictEqual({
+      a: { ref: 'A-1' },
+      b: { ref: 'A-1' },
+    });
+    expect(
+      refusalOf(() => snapshotValue({ a: shared, b: shared }, open({ ...LIMITS, maxValues: 4 })))
+        .code,
+    ).toBe('template-refused');
+  });
+
+  it('counts every value, and refuses one past the ceiling', () => {
+    const rows = Array.from({ length: 40 }, (_, at) => ({ at }));
+    expect(() => snapshotValue(rows, open({ ...LIMITS, maxValues: 81 }))).not.toThrow();
+    const refused = refusalOf(() => snapshotValue(rows, open({ ...LIMITS, maxValues: 80 })));
+    expect(refused.details.limit).toBe(80);
+    expect(refused.details.phase).toBe('transport');
+  });
+
+  it('counts one request once, however many values it is copied from', () => {
+    /* A template and a data set are one request: a counter opened per value would let it carry
+       twice what its ceilings name. */
+    const budget = createTransportBudget({ maxValues: 5, maxStringLength: 100 });
+    snapshotValue({ a: 1, b: 2 }, budget);
+    expect(budget.values).toBe(3);
+    expect(() => snapshotValue({ c: 3, d: 4 }, budget)).toThrow(DocumentRenderError);
+  });
+
+  it('counts the strings together, and names no key when it refuses', () => {
+    const refused = refusalOf(() =>
+      snapshotValue({ a: 'xxxx', b: 'yyyy' }, open({ ...LIMITS, maxStringLength: 7 })),
+    );
+    expect(refused.details.limit).toBe(7);
+    expect(refused.message).not.toContain('xxxx');
+    expect(refused.details.nodeId).toBeUndefined();
+  });
+
+  it('copies the primitives a json document really carries', () => {
+    expect(snapshotValue([1, 'two', true, null, undefined], open())).toStrictEqual([
+      1,
+      'two',
+      true,
+      null,
+      undefined,
+    ]);
+  });
+
+  it('copies an object with a null prototype, which is still plain data', () => {
+    const bare = Object.assign(Object.create(null), { ref: 'A-1' });
+    expect(snapshotValue(bare, open())).toStrictEqual({ ref: 'A-1' });
+  });
+});

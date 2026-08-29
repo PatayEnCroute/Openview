@@ -91,7 +91,15 @@ function fakePuppeteer(
       }
       return String(fn).includes('document.fonts') ? fonts : OBSERVATION;
     },
-    pdf: async () => ONE_PAGE_PDF,
+    /* The printer reads a stream now, so the fake hands one back: a `pdf()` that answered bytes
+       would leave the bounded reader untested on the very path it guards. */
+    createPDFStream: async () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(ONE_PAGE_PDF);
+          controller.close();
+        },
+      }),
     close: async () => {
       closedPage += 1;
     },

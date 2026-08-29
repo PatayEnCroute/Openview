@@ -15,6 +15,7 @@ import type {
 } from '../document/types.js';
 import { buildPagedTree } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../limits/types.js';
 import {
   CANONICAL_NUMBER_ALPHABET,
   CANONICAL_NUMBER_MAX_CHARS,
@@ -31,6 +32,7 @@ import {
   materializedOf,
   multiPageOf,
   NO_FONTS,
+  NO_IMAGES,
   paginateOnGrid,
   refusalOfCut,
   SAMPLE_DATA,
@@ -354,7 +356,10 @@ describe('the page markers', () => {
 
   it('writes the rank of the page that holds them, and the same count everywhere', () => {
     const paginated = paginateOnGrid(document(), {}, constantMarkers(2, 6));
-    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     const shown = printedMarkers(html);
     expect(shown).toHaveLength(paginated.pages.length);
     const count = String(paginated.pages.length);
@@ -396,7 +401,10 @@ describe('the page markers', () => {
       {},
       constantMarkers(1, 6),
     );
-    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     expect(html).not.toContain('pageField');
     for (const id of ['top-t', 'inflow', 'incell']) {
       const at = html.indexOf(`data-openview-node="${id}"`);
@@ -407,7 +415,10 @@ describe('the page markers', () => {
 
   it('reserves the same box whatever digits land in it, so 9 to 10 moves no cut', () => {
     const paginated = paginateOnGrid(document(), {}, constantMarkers(3, 6));
-    const html = serializeHtml(buildPagedTree(paginated, NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated, NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     const widths = [...html.matchAll(/class="ov-marker" style="[^"]*width:([\d.]+)px/g)].map(
       (match) => match[1],
     );

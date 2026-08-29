@@ -1,13 +1,15 @@
 import type { EvaluationLimits, ShapeLimits, Sheet } from '@openview/core';
-import type { DocumentImage } from '../document/images.js';
+import type { DocumentImage, ResolvedDocumentImage } from '../document/images.js';
 import type { PresentationSelection } from '../document/presentation.js';
 import type { DocumentRegion } from '../errors.js';
+import type { RenderSafetyLimitsOverrides } from '../limits/types.js';
 
-/** Payload handed to a PDF print adapter (HTML source, target sheet, image references). */
+/** Payload handed to a PDF print adapter (HTML source, target sheet, resolved images). */
 export interface PdfSourceDocument {
   readonly html: string;
   readonly sheet: Sheet;
-  readonly images: readonly DocumentImage[];
+  /** Only the occurrences this html paints, already resolved by the session. */
+  readonly images: readonly ResolvedDocumentImage[];
 }
 
 /** Pre-render resources required when opening a PDF layout session. */
@@ -81,6 +83,13 @@ export interface PdfLayoutMeasurement {
 
 /** Active browser session handling layout measurements and final PDF printing. */
 export interface PdfRenderSession {
+  /**
+   * Decides what each reached occurrence should really load, before any of it is painted.
+   *
+   * The answer is a closed list keyed by occurrence, never a rewrite of the document: a backend
+   * that has to fetch, check and embed a source does it here, where nothing has been measured yet.
+   */
+  resolveImages(images: readonly DocumentImage[]): Promise<readonly ResolvedDocumentImage[]>;
   measure(document: PdfSourceDocument): Promise<PdfLayoutMeasurement>;
   print(document: PdfSourceDocument): Promise<Uint8Array>;
   close(): Promise<void>;
@@ -96,6 +105,8 @@ export interface PdfRenderStrategy {
 export interface RenderEngineOptions {
   readonly shapeLimits?: Partial<ShapeLimits> | undefined;
   readonly evaluationLimits?: Partial<EvaluationLimits> | undefined;
+  /** Logical ceilings on materialised objects, pages and serialised html. */
+  readonly safetyLimits?: RenderSafetyLimitsOverrides | undefined;
   /** Mapping from template presentation profile names to declared writing keys. */
   readonly presentationSelection?: PresentationSelection | undefined;
 }

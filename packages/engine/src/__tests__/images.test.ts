@@ -125,13 +125,15 @@ describe('the image manifest a strategy is handed', () => {
       },
       {},
     );
-    expect(documentImages(document)).toStrictEqual([
-      {
-        nodeId: 'logo',
-        path: ['root', 'children', 0, 'children', 0],
-        src: TINY_PNG,
-      },
-    ]);
+    const [found] = documentImages(document);
+    expect(found).toStrictEqual({
+      /* The occurrence key, not the declaration id: two occurrences of one declaration are two
+         images to resolve, and only the key tells them apart. */
+      key: expect.stringMatching(/^o\d+$/),
+      nodeId: 'logo',
+      path: ['root', 'children', 0, 'children', 0],
+      src: TINY_PNG,
+    });
   });
 
   it('is empty for a document with no image', () => {

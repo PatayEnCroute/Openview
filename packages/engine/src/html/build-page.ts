@@ -50,11 +50,13 @@ function buildLayer(layer: MaterialPageLayer, context: PaintContext): HtmlElemen
 function buildPage(
   page: MaterialPage,
   markers: MarkerReserve,
+  images: ReadonlyMap<string, string>,
   background: readonly MaterialPageLayer[],
   foreground: readonly MaterialPageLayer[],
 ): HtmlElement {
   const context: PaintContext = {
     markers,
+    images,
     page: { number: page.number, count: page.count, report: page.incomingReport },
     keyed: false,
   };
@@ -76,11 +78,21 @@ function buildPage(
 /**
  * Builds the complete HTML tree for the paginated document.
  */
-export function buildPagedTree(paginated: PaginatedDocument, fonts: string): HtmlTree {
+export function buildPagedTree(
+  paginated: PaginatedDocument,
+  fonts: string,
+  images: ReadonlyMap<string, string>,
+): HtmlTree {
   return {
     css: fonts + documentCss(paginated),
     body: paginated.pages.map((page) =>
-      buildPage(page, paginated.markers, paginated.backgroundLayers, paginated.foregroundLayers),
+      buildPage(
+        page,
+        paginated.markers,
+        images,
+        paginated.backgroundLayers,
+        paginated.foregroundLayers,
+      ),
     ),
   };
 }
@@ -116,8 +128,9 @@ export function buildProbeTree(
   document: MaterialDocument,
   markers: MarkerReserve,
   fonts: string,
+  images: ReadonlyMap<string, string>,
 ): ProbeTree {
-  const context: PaintContext = { markers, page: undefined, keyed: true };
+  const context: PaintContext = { markers, images, page: undefined, keyed: true };
   const tree: HtmlTree = {
     css: fonts + probeCss(document),
     body: [

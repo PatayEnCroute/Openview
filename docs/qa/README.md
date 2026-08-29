@@ -3,8 +3,10 @@
 > **Document QA & Ingénierie logicielle.** Définit la stratégie de test, les axes d'amélioration
 > de la qualité et l'outillage préconisé pour garantir les engagements du projet Openview.
 >
-> Liens associés : [Roadmap globale](../roadmap/README.md) · [Moteur](../roadmap/engine.md) ·
-> [Viewer](../roadmap/viewer.md) · [Designer](../roadmap/designer.md) · [AGENTS.md](../../AGENTS.md).
+> Liens associés : [Roadmap globale](../roadmap/README.md) · [Core](../roadmap/core.md) ·
+> [Moteur](../roadmap/engine.md) · [Viewer](../roadmap/viewer.md) ·
+> [Service de rendu](../roadmap/service-de-rendu.md) · [Designer](../roadmap/designer.md) ·
+> [AGENTS.md](../../AGENTS.md).
 
 ---
 
@@ -12,23 +14,26 @@
 
 Openview est un **moteur d'édition et de rendu de documents embarquable**. Ses engagements
 clés imposent un niveau d'exigence très élevé :
-1. **Déterminisme absolu (Lot E6)** : Aucun accès à l'environnement (horloge, fuseau, locale) ; deux exécutions doivent produire un document strictement identique.
-2. **Parité visuelle garantie (Décision 7 / Jalon J4)** : L'aperçu dans le Viewer React et le document PDF final produit par le moteur doivent être visuellement identiques au pixel près.
-3. **Robustesse face aux entrées hostiles (Lot E8)** : Résistance aux expressions récursives, boucles et gros volumes de données (factures de 60+ pages, 60 000+ lignes).
-4. **Accessibilité & ergonomie pour non-développeurs (Jalon J6 / Décision 14)** : Édition assistée sans risque de générer un modèle invalide.
+1. **Déterminisme absolu (Lot E6 / ADR 0019)** : Aucun accès à l'environnement (horloge, fuseau, locale) ; deux exécutions sous un profil identique produisent un document strictement identique.
+2. **Non-régression structurelle et binaire (Lot E7 / ADR 0020)** : Maintien d'un corpus de référence figé, vérifié par égalité binaire du PDF canonique, extraction par rang et conformité au certificat de pagination E5.
+3. **Parité visuelle garantie (Décision 7 / Jalon J4 / Viewer V3)** : L'aperçu dans le Viewer React (qui consomme l'HTML autonome et le manifeste E5) et le document PDF final produit par le moteur doivent être visuellement identiques au pixel près.
+4. **Robustesse face aux entrées hostiles (Lot E8)** : Résistance aux expressions récursives, boucles, attaques SSRF et gros volumes de données (factures de 60+ pages, 60 000+ lignes).
+5. **Accessibilité & ergonomie pour non-développeurs (Jalon J6 / Décision 14)** : Édition assistée sans risque de générer un modèle invalide.
 
 ---
 
 ## 2. État des Lieux de l'Existant
 
-Le socle initial d'Openview dispose déjà d'une base rigoureuse :
+Le socle d'Openview dispose d'une base rigoureuse outillée et vérifiée en intégration continue :
 
 | Domaine | Outil / Pratique en place | Statut |
 | :--- | :--- | :--- |
 | **Typage strict & architecture** | TypeScript 7 (mode strict, `exactOptionalPropertyTypes`, `NodeNext`, `useUnknownInCatchVariables`) | 🟢 Opérationnel |
-| **Linting & Gardes d'architecture** | Biome 2.5.8 + plugins GritQL (`no-environment-read`, `no-double-cast`, `no-silent-catch`) | 🟢 Opérationnel |
-| **Validation des données** | Zod v4-first (`@openview/core`), AST versionné avec migrations `migrate(from, to)` | 🟢 Opérationnel |
-| **Tests unitaires & Couverture** | Vitest 4.x avec seuil bloquant à **≥ 90 %** (lignes, branches, fonctions, instructions) | 🟡 100 % sur `core`, 0 % sur `designer`/`viewer` |
+| **Linting & Gardes d'architecture** | Biome 2.5.10 + plugins GritQL (`no-environment-read`, `no-double-cast`, `no-silent-catch`) | 🟢 Opérationnel |
+| **Validation des données** | Zod-first (`@openview/core`), AST versionné avec migrations `migrate(from, to)` | 🟢 Opérationnel |
+| **Tests unitaires & Couverture** | Vitest 4.x avec seuil bloquant à **≥ 90 %** (lignes, branches, fonctions, instructions) | 🟢 ≥ 90 % sur `core`, `engine`, `adapter-puppeteer` (bloquant en CI), 0 % sur `designer`/`viewer` (coquilles prêtes pour V1/D1) |
+| **Reproductibilité & Déterminisme** | Double runner Ubuntu 24.04 en CI comparant profil d'hôte (13 champs) et empreintes de 20 rendus ([ADR 0019](../adr/0019-le-meme-document-a-chaque-fois.md)) | 🟢 Opérationnel |
+| **Corpus Golden Master PDF** | Job CI `golden-corpus` évaluant 6 scénarios / 21 pages (égalité binaire + mono-page par rang + certificat de pagination E5 + empreinte HTML) ([ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md)) | 🟡 Harnais et CI opérationnels, en attente d'acceptation du premier corpus Ubuntu |
 | **Sécurité & Supply Chain** | Gitleaks (secrets), CodeQL, `pnpm audit --prod` bloquant en CI | 🟢 Opérationnel |
 | **Analyse continue** | SonarCloud avec Quality Gate bloquante | 🟢 Opérationnel |
 
@@ -41,34 +46,37 @@ mindmap
   root((Plan QA Openview))
     1. Fidélité Visuelle
       Playwright Test
-      Pixelmatch + pdfjs-dist
+      Pixelmatch
     2. Résilience & Fuzzing
       fast-check
       Stryker Mutator
     3. Composants & UI
       Testing Library React
       Storybook / Ladle
-    4. Performance
+    4. Performance & Charge
       Vitest Bench
       github-action-benchmark
     5. Validation E2E
       Playwright E2E Playground
     6. Accessibilité (a11y)
       axe-core / vitest-axe
-    7. Golden Master PDF
-      pdf-parse / pdf-lib
+    7. Non-régression & Déterminisme
+      pdf-lib (égalité binaire & certificats E5)
+      Profil E6 (reproductibilité multi-machines)
 ```
 
 ---
 
 ### Axe 1 : Non-régression visuelle & Parité Pixel-Perfect (Viewer vs PDF)
-* **Besoin produit** : Garantir que l'aperçu affiché dans `@openview/viewer` est strictement conforme au rendu PDF issu de `@openview/engine` (Décision 7, Jalons J3/J4).
+* **Besoin produit** : Garantir que l'aperçu affiché dans `@openview/viewer` est strictement conforme au rendu PDF issu du moteur (Décision 7, Jalons J3/J4).
 * **Risque** : Régression silencieuse lors des sauts de page, décalage des reports comptables ou rendu différent des polices/marges.
 
 | Outil recommandé | Rôle dans Openview | Implémentation |
 | :--- | :--- | :--- |
 | **[Playwright](https://playwright.dev/)** | Capture automatisée de screenshots haute fidélité du DOM du Viewer en environnement headless. | `packages/viewer/__tests__/visual/` |
-| **[Pixelmatch](https://github.com/mapbox/pixelmatch)** + **[pdfjs-dist](https://github.com/mozilla/pdf.js)** | Rasterisation des pages du PDF généré par le moteur et comparaison pixel à pixel avec les captures du Viewer (diff d'images, seuil configurable). | `packages/engine/__tests__/visual-parity/` |
+| **[Pixelmatch](https://github.com/mapbox/pixelmatch)** | Rasterisation des pages du PDF généré par `@openview/adapter-puppeteer` et comparaison pixel à pixel avec les captures du Viewer (diff d'images, seuil configurable). | `tools/visual-parity/` ou `packages/viewer/__tests__/` |
+
+> ℹ️ **Frontière architecturale :** Conformément à AGENTS.md §2, `@openview/engine` n'importe pas Chromium et n'effectue aucun rendu direct. Le Viewer consomme l'HTML autonome et le manifeste de pagination certifié livrés par E5 ([ADR 0018](../adr/0018-le-moteur-sait-dire-ou-il-coupe.md)), sans recalculer de mise en page.
 
 ---
 
@@ -79,18 +87,18 @@ mindmap
 | Outil recommandé | Rôle dans Openview | Implémentation |
 | :--- | :--- | :--- |
 | **[fast-check](https://fast-check.dev/)** | Génération automatique d'arbres AST et d'expressions aléatoires pour vérifier les invariants (idempotence de `migrate()`, bornes de calcul, non-crash). | `packages/core/src/**/__tests__/*.prop.test.ts` |
-| **[Stryker Mutator](https://stryker-mutator.io/)** (`@stryker-mutator/vitest-runner`) | Mutation Testing : injecte des mutations de code pour évaluer la pertinence réelle des tests et traquer les tests tautologiques. | Exécution périodique / CI |
+| **[Stryker Mutator](https://stryker-mutator.io/)** (`@stryker-mutator/vitest-runner`) | Mutation Testing : injecte des mutations de code pour évaluer la pertinence réelle des tests et traquer les tests tautologiques. | Exécution périodique / CI (Jalon J7) |
 
 ---
 
 ### Axe 3 : Tests de composants & Interactions UI (`@openview/designer` & `@openview/viewer`)
-* **Besoin produit** : Couvrir les interactions riches de l'éditeur (grille de placement, barre de formule assistée, historique Command Undo/Redo immuable, gestion des calques).
-* **Risque** : Régressions d'état React 19, rupture du flux d'annulation/rétablissement, bugs clavier/souris.
+* **Besoin produit** : Couvrir les interactions riches de l'éditeur (grille de placement, barre de formule assistée, historique Command Undo/Redo immuable, gestion des calques) et l'encastrement sécurisé du Viewer.
+* **Risque** : Régressions d'état React 19, rupture du flux d'annulation/rétablissement, bugs clavier/souris, injections XSS.
 
 | Outil recommandé | Rôle dans Openview | Implémentation |
 | :--- | :--- | :--- |
-| **[@testing-library/react](https://testing-library.com/docs/react-testing-library/intro/)** + **`@testing-library/user-event`** | Tests d'intégration simulant les interactions utilisateur réelles (sélection, déplacement, écriture de formule) avec `happy-dom`. | `packages/designer/src/**/__tests__/*.test.tsx` |
-| **[Storybook](https://storybook.js.org/)** ou **[Ladle](https://ladle.dev/)** | Catalogue isolé pour la recette visuelle et le test unitaire des blocs de modèles (Text, Container, Loop, Image). | `packages/designer/.storybook/` |
+| **[@testing-library/react](https://testing-library.com/docs/react-testing-library/intro/)** + **`@testing-library/user-event`** | Tests d'intégration simulant les interactions utilisateur réelles (sélection, déplacement, écriture de formule) avec `happy-dom`. | `packages/designer/src/**/__tests__/*.test.tsx` et `packages/viewer/src/**/__tests__/*.test.tsx` |
+| **[Storybook](https://storybook.js.org/)** ou **[Ladle](https://ladle.dev/)** | Catalogue isolé pour la recette visuelle et le test unitaire des blocs de modèles (Text, Container, Loop, Image, Grid). | `packages/designer/.storybook/` |
 
 ---
 
@@ -125,59 +133,57 @@ mindmap
 
 ---
 
-### Axe 7 : Golden Master & Assertions Structurelles PDF
-* **Besoin produit** : Lot E7 (« Lot de documents figés de non-régression ») : maintenir un ensemble de factures de référence (une page, multi-pages avec report, bilingue, calques, témoin historique v1) pour figer les sorties attendues.
-* **Risque** : Altération silencieuse des métadonnées, de la pagination ou de la mise en page d'une facture de référence.
+### Axe 7 : Golden Master, Assertions Structurelles & Reproductibilité
+* **Besoin produit** : Lots E6 ([ADR 0019](../adr/0019-le-meme-document-a-chaque-fois.md)) et E7 ([ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md)) : garantir le déterminisme inter-machines et maintenir un ensemble de factures de référence (une page, multi-pages avec report, bilingue fr/en, calques, témoin historique v1) pour figer les sorties attendues.
+* **Risque** : Altération silencieuse des métadonnées, de la pagination ou de la mise en page d'une facture de référence ; dérive d'encodage selon l'hôte.
 
 | Outil recommandé | Rôle dans Openview | Implémentation |
 | :--- | :--- | :--- |
-| **[pdf-lib](https://pdf-lib.js.org/)** (déjà dépendance de l'adaptateur) | Extraction déterministe d'un PDF mono-page par rang, pour nommer la ou les pages qui ont bougé. La comparaison elle-même est une **égalité binaire** du document canonique, doublée du certificat de pagination E5 et de l'empreinte de l'HTML autonome. | `tools/golden/` et `tests/golden/e7/references/` |
+| **[pdf-lib](https://pdf-lib.js.org/)** + **Harnais E7** | Extraction déterministe d'un PDF mono-page par rang pour localiser la page en échec. Comparaison par **égalité binaire** du document canonique, doublée du certificat de pagination E5 et de l'empreinte de l'HTML autonome. | `tools/golden/` et `tests/golden/e7/references/` |
+| **Profil E6** | Comparateur d'hôte (13 champs de profil) et contrôle de concordance des empreintes de rendu. | `tools/reproducibility/` et `.github/workflows/ci.yml` |
 
-> **Rectifié après exécution (2026-08-29,
-> [ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md)).** Deux points de la
-> recommandation initiale ne survivent pas au lot livré :
->
-> - **`pdf-parse` n'est pas retenu, et aucune dépendance n'a été ajoutée.** Un oracle fondé sur le
->   texte extrait perd les positions, les fontes, les filets et les images — c'est-à-dire presque
->   tout ce qu'une régression de rendu déplace. L'égalité binaire du PDF canonique, qualifiée par le
->   profil de reproductibilité E6, dit strictement plus, et `pdf-lib` suffit à la localiser page par
->   page.
-> - **Le corpus ne vit pas dans `packages/engine/`.** Le rendu réel passe par Puppeteer, qui doit
->   rester hors du paquet moteur (AGENTS.md §2) : l'outillage est dans `tools/golden/`, les
->   références dans `tests/golden/e7/references/`, les tests du harnais dans
->   `packages/adapter-puppeteer/src/__tests__/`. Aucun de ces fichiers n'entre dans un tarball
->   publié.
->
-> La ligne 3 de la feuille de route ci-dessous (Playwright + Pixelmatch, parité aperçu ↔ PDF) est
-> **inchangée** : E7 compare des PDF entre eux et ne prononce rien sur l'aperçu React. C'est le lot
-> V3 du [viewer](../roadmap/viewer.md#v3-la-garantie-est-vérifiée-automatiquement).
+> ℹ️ **Rappel des décisions d'exécution (ADR 0020) :**
+> - **`pdf-parse` a été écarté :** un oracle textuel perd positions, fontes, filets et images. L'égalité binaire du PDF canonique doublée des certificats de découpe E5 dit strictement plus, sans dépendance superflue.
+> - **Localisation hors des paquets publiés :** les outils vivent dans `tools/golden/` et `tools/reproducibility/`, les références dans `tests/golden/e7/references/`, et les tests dans `packages/adapter-puppeteer/src/__tests__/`. Aucun de ces fichiers n'entre dans un tarball publié.
 
 ---
 
 ## 4. Feuille de Route de Déploiement QA (par Jalon)
 
 ```
-Phase 1 : Socle Moteur & Contrats (Jalons J1 - J2)
-  ├── 1. fast-check pour l'AST, les limites d'expressions et les dates civiles
-  └── 2. React Testing Library dans @openview/designer et @openview/viewer
+Étape 1 : Socle, Moteur & Déterminisme (Jalons J1, J2, J3) — Quasi achevé
+  ├── 1. Validation Zod v4, diagnostics et migrations AST versionnées (J1) [🟢 Livré]
+  ├── 2. Pagination et reports comptables testés à ≥ 90% (J2, J3) [🟢 Livré]
+  ├── 3. Déterminisme et reproductibilité inter-machines (E6) [🟢 Livré]
+  ├── 4. Corpus Golden Master PDF 21 pages (E7) [🟡 Harnais livré, amorçage en cours]
+  └── 5. Relecture humaine de la facture comptable par un gestionnaire [⬜ Reste dû pour clore J3]
 
-Phase 2 : Rendu Comptable & Fidélité Visuelle (Jalons J3 - J4)
-  ├── 3. Playwright + Pixelmatch pour la parité pixel-perfect Viewer vs PDF
-  ├── 4. Corpus Golden Master PDF (pdf-lib, égalité binaire) sur les factures de référence
-  └── 5. Vitest Benchmarks pour surveiller les performances d'évaluation et de rendu
+Étape 2 : Aperçu & Parité Visuelle (Jalon J4 - Viewer)
+  ├── 6. Tests de composants Viewer (React Testing Library) sur l'HTML autonome E5 (V1, V2)
+  └── 7. Playwright + Pixelmatch pour la parité pixel-perfect Viewer vs PDF (V3)
 
-Phase 3 : Édition Métier & Livraison Publique (Jalons J5 - J7)
-  ├── 6. Tests E2E Playwright sur apps/playground
-  ├── 7. axe-core (vitest-axe) pour l'accessibilité du Designer
-  └── 8. Stryker Mutator pour valider la robustesse globale avant publication
+Étape 3 : Service & Robustesse aux Entrées Hostiles (Jalon J5 - Service)
+  ├── 8. Tests de charge et résistance aux documents hostiles (boucles, SSRF, DoS, mémoire) (E8)
+  └── 9. Vitest Benchmarks continus pour surveiller les performances d'évaluation et de rendu
+
+Étape 4 : Édition Métier & Livraison Publique (Jalons J6, J7 - Designer & Transverse)
+  ├── 10. Tests de composants Designer (React Testing Library + user-event) pour la grille, la barre de formule et l'historique Undo/Redo
+  ├── 11. Tests d'accessibilité (axe-core / vitest-axe) sur l'interface du Designer (J6 / D3)
+  ├── 12. Tests E2E Playwright sur le playground (J7)
+  └── 13. Stryker Mutator pour éliminer les tests tautologiques avant publication (J7)
 ```
 
 ---
 
-## 5. Indicateurs Qualité (KPIs) Cibles
+## 5. Indicateurs Qualité (KPIs)
 
-- **Couverture de code** : Seuil bloquant maintenu à **≥ 90 %** sur chaque paquet.
-- **Taux de divergence visuelle (Viewer vs PDF)** : **0 %** sur le corpus de factures de référence.
-- **Score d'accessibilité (axe-core)** : **0 violation critique ou majeure**.
-- **Score de mutation (Stryker)** : **≥ 80 %** sur le module d'évaluation et de validation Zod (`@openview/core`).
-- **Budget de performance** : Génération d'une facture de 60 pages / 60 000 lignes en **< 2,0 secondes** sans fuite mémoire.
+| Indicateur | Cible finale | État actuel |
+| :--- | :--- | :--- |
+| **Couverture de code (lignes/branches/fonctions)** | **≥ 90 %** bloquant sur chaque paquet | 🟢 100 % sur `core`, > 95 % sur `engine`, > 90 % sur `adapter-puppeteer` (bloquant en CI) |
+| **Reproductibilité inter-machines** | **100 %** d'identité sous même profil (E6) | 🟢 1 seule empreinte sur 20 rendus (2 runners Ubuntu 24.04 indépendants) |
+| **Non-régression Golden Master** | **0 divergence** sur les 6 scénarios / 21 pages (E7) | 🟡 Harnais et CI opérationnels, en attente d'acceptation du premier corpus Ubuntu |
+| **Taux de divergence visuelle (Viewer vs PDF)** | **0 %** sur le corpus de factures de référence | ⬜ Cible J4 (Lot V3) |
+| **Score d'accessibilité (axe-core)** | **0 violation critique ou majeure** | ⬜ Cible J6 (Designer D3) |
+| **Score de mutation (Stryker)** | **≥ 80 %** sur le module d'évaluation et validation Zod | ⬜ Cible J7 |
+| **Robustesse aux entrées hostiles** | Refus typé, nettoyage attesté et témoin vert après chaque attaque (E8) | 🟡 Bornes, courtier de ressources, worker tuable et pool livrés et testés ; corpus hostile outillé et job CI dédié non livrés (ADR 0021) |
+| **Budget de performance** | Facture 60 pages / 60 000 lignes en **< 2,0 s** | ⬜ **Non mesuré.** Cible J5 (Lot E8) — le protocole de mesure existe dans le plan E8, aucun chiffre n'a encore été relevé sur l'hôte officiel |

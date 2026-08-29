@@ -93,6 +93,14 @@ jobs:
       - name: Run Unit Tests with Coverage
         run: pnpm run test:coverage
 
+      # `files` decides what a registry receives, and no other gate reads it. The tsconfig
+      # `exclude` lists keep `*.test.ts` out of `dist/`, but a helper sitting in a `__tests__/`
+      # directory carries no such suffix: it compiled, and every Node package shipped it. This
+      # asks `npm pack --dry-run` rather than reimplementing its globs, and runs on both Node
+      # majors, so a change in how npm packs surfaces as a failure instead of a leak.
+      - name: Check The Published Surface
+        run: node tools/packaging/surface.mjs
+
   # E6: the same document, on two machines. The matrix above proves the code runs
   # under two Node majors; it deliberately does NOT compare their output, because
   # two Node builds may carry two ICU versions and ADR 0008 forbids comparing
