@@ -400,7 +400,7 @@ journalisé.
 > borné, donc un document au-dessus de 64 Mio est refusé là où il sortait auparavant. Le plafond est
 > configurable et vaut douze fois le plus gros document du corpus.
 
-### E9. La documentation du moteur
+### E9. La documentation du moteur ✅
 
 **Pourquoi.** Publication groupée : chaque brique doit être installable et
 utilisable par un développeur inconnu. Ici : comment obtenir un PDF en dix lignes,
@@ -408,7 +408,23 @@ et ce qui se passe quand ça échoue.
 
 **Prêt quand** quelqu'un d'extérieur produit sa première facture sans nous écrire.
 
-**Poids :** S — **Dépend de :** E7 — **Condition de : J7**
+**Poids :** S annoncé, **M réalisé** — **Dépend de :** E7 — **Condition de : J7**
+
+> ✅ **Livré le 2026-08-29** — [ADR 0022](../adr/0022-la-documentation-du-moteur.md).
+> Seize pages, en anglais et en français : deux README de paquet, un sommaire, un premier PDF,
+> modèles et données, les trente et un refus, les documents qu'on ne contrôle pas, garanties et
+> limites. Tout extrait publié est une **région d'un module compilé et exécuté** — les deux
+> façades rendent un vrai PDF sous Vitest —, et chaque fait volatil est comparé à sa source :
+> codes, phases, issues d'audit, champs de profil, trois tables de défauts lues dans les deux sens.
+> La porte `tools/docs/check.mjs` vit dans la suite de tests, avec huit fautes qu'elle refuse.
+>
+> **La répétition à froid a produit un PDF depuis un dossier vide hors du dépôt** : trois `.tgz`
+> installés, les fichiers recopiés de la page, `tsc` puis `node`, 22 527 octets, une page — sans
+> ouvrir un seul fichier de `packages/`.
+>
+> **Ce qui reste ouvert :** `@openview/core` n'a ni README ni documentation, et aucun lot ne la
+> porte — sa page npm sera vide à J7. La parité de sens entre les deux langues n'est pas outillée,
+> et la répétition à froid a été jouée par l'auteur des pages, faute d'un second lecteur.
 
 ---
 
