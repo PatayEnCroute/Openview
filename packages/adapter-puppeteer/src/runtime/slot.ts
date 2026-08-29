@@ -36,6 +36,9 @@ const NO_SESSION =
 const WORKER_SILENT =
   'A worker of this runtime did not announce itself within the time one is given to start. Read `details.limit` for the deadline in milliseconds; the thread is terminated rather than waited on.';
 
+const WORKER_UNSTOPPABLE =
+  'A worker of this runtime neither announced itself nor could be terminated, so this process cannot say the thread is gone. The failure of the termination travels as `cause` for local debugging.';
+
 const SLOT_CLOSED = 'This runtime is closed, so the slot cannot take another render.';
 
 /** The listeners a slot keeps on its worker; setting them replaces whatever was there. */
@@ -170,8 +173,21 @@ async function startWorker(workers: WorkerFactory, startMs: number): Promise<Wor
       });
     });
   } catch (error) {
-    /* The thread exists whatever the reason it never answered, and nothing else owns it. */
-    await handle.terminate().catch(() => undefined);
+    /* The thread exists whatever the reason it never answered, and nothing else owns it. A
+       termination that fails in its turn is the worse of the two facts, and the one the caller is
+       told about: a slot can be rebuilt, a thread nobody can stop cannot. */
+    const unstoppable = await handle.terminate().then(
+      () => undefined,
+      (failure: unknown) => failure,
+    );
+    if (unstoppable !== undefined) {
+      throw new DocumentRenderError(
+        WORKER_UNSTOPPABLE,
+        'render-worker-failed',
+        { phase: 'admission' },
+        { cause: unstoppable },
+      );
+    }
     throw error;
   } finally {
     if (timer !== undefined) {

@@ -12,6 +12,7 @@ import {
   type PdfRenderResources,
   type PdfRenderSession,
 } from '@openview/engine';
+import { z } from 'zod/v4';
 import { closeBrowser, launchBrowser, type PuppeteerLaunchOptions } from '../browser.js';
 import { normalizeHttpsUrl } from '../resource/address.js';
 import { createImageBroker } from '../resource/broker.js';
@@ -186,12 +187,26 @@ export function admitRequest(
      opened twice would let it carry twice what its ceilings name. */
   const budget = createTransportBudget(transport);
   const copiedTemplate = snapshotValue(template, budget);
-  const copied = snapshotValue(data, budget);
-  if (copied === null || typeof copied !== 'object' || Array.isArray(copied)) {
-    throw new DocumentRenderError(NOT_A_DATA_SET, 'template-refused', { phase: 'transport' });
+  const copied = DataSetSchema.safeParse(snapshotValue(data, budget));
+  if (!copied.success) {
+    throw new DocumentRenderError(
+      NOT_A_DATA_SET,
+      'template-refused',
+      { phase: 'transport' },
+      { cause: copied.error },
+    );
   }
-  return { template: copiedTemplate, data: { ...copied } };
+  return { template: copiedTemplate, data: copied.data };
 }
+
+/**
+ * What a data set has to be for a model to read anything from it.
+ *
+ * A record of names the caller chose, and nothing else about it: no key is reserved, no shape is
+ * expected. An array, a string or a number is not a data set, and replacing one silently by an
+ * empty object would render a document of blanks instead of saying so.
+ */
+const DataSetSchema = z.record(z.string(), z.unknown());
 
 function badResult(): never {
   throw new DocumentRenderError(BAD_RESULT, 'render-worker-failed', { phase: 'export' });

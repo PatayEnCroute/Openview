@@ -59,16 +59,30 @@ export function readAnswer(answer: {
   readonly headers: Readonly<Record<string, string | string[] | undefined>>;
   readonly body: AsyncIterable<Uint8Array>;
 }): RemoteResponse {
-  const length = headerValue(answer.headers['content-length']);
-  const parsed = length === undefined ? Number.NaN : Number.parseInt(length, 10);
   return {
     status: answer.statusCode ?? 0,
     location: headerValue(answer.headers.location),
-    /* A length that is absent, empty, negative or not a number at all is simply no claim: the
-       chunks are counted either way, and a negative one would pass a ceiling by being under it. */
-    contentLength: Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined,
+    contentLength: announcedLength(headerValue(answer.headers['content-length'])),
     body: answer.body,
   };
+}
+
+/** A whole count of bytes, and nothing else. */
+const DIGITS = /^\d+$/;
+
+/**
+ * The length a host announced, when it announced one at all.
+ *
+ * The whole value is read, not its numeric prefix: `Number.parseInt` turns `123x` into `123`, and a
+ * claim this policy cannot fully read is no claim. The chunks are counted either way, so refusing
+ * to believe a header costs nothing and believing a malformed one costs a ceiling.
+ */
+function announcedLength(header: string | undefined): number | undefined {
+  if (header === undefined || !DIGITS.test(header.trim())) {
+    return undefined;
+  }
+  const parsed = Number(header.trim());
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
 /** The https client this backend uses when the caller does not supply its own. */

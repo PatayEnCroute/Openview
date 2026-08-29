@@ -33,7 +33,15 @@ export function resolveBounds<TLimits extends object>(
   const filled: Record<string, unknown> = Object.fromEntries(Object.entries(defaults));
   for (const [key, value] of Object.entries(overrides)) {
     if (value !== undefined) {
-      filled[key] = value;
+      /* Defined rather than assigned: `filled[key] = …` on the key `__proto__` reaches the setter
+         `Object.prototype` carries, so the strict schema below would never see the unknown key it
+         exists to refuse. */
+      Object.defineProperty(filled, key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     }
   }
   const parsed = schema.safeParse(filled);

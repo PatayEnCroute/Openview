@@ -35,6 +35,8 @@ export interface CallChannel {
 
 const ResolvedSchema = z.array(z.strictObject({ key: z.string(), src: z.string() }));
 
+const PrintedSchema = z.instanceof(Uint8Array);
+
 function badReply(phase: DocumentRenderPhase): never {
   throw new DocumentRenderError(BAD_REPLY, 'render-worker-failed', { phase });
 }
@@ -76,11 +78,13 @@ export function createProxyStrategy(channel: CallChannel): PdfRenderStrategy {
           return answered.data;
         },
         async print(document: PdfSourceDocument): Promise<Uint8Array> {
-          const answered = await channel.call({ op: 'print', document: plainDocument(document) });
-          if (!(answered instanceof Uint8Array)) {
+          const answered = PrintedSchema.safeParse(
+            await channel.call({ op: 'print', document: plainDocument(document) }),
+          );
+          if (!answered.success) {
             badReply('export');
           }
-          return answered;
+          return answered.data;
         },
         async close(): Promise<void> {
           await channel.call({ op: 'close' });

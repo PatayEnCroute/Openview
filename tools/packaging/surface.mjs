@@ -110,8 +110,30 @@ function publishablePackages() {
  * package, and narrowing `files` past an entry point `exports` still advertises.
  */
 function entryPointsOf(manifest) {
-  const declared = [manifest.main, manifest.types].filter((entry) => typeof entry === 'string');
+  const declared = [manifest.main, manifest.types, ...exportTargetsOf(manifest.exports)].filter(
+    (entry) => typeof entry === 'string' && entry.startsWith('./'),
+  );
   return [...new Set(declared.map((entry) => entry.replace(/^\.\//, '')))];
+}
+
+/**
+ * Every relative file an `exports` map points at, however deeply its conditions nest.
+ *
+ * `exports` is a tree of conditions -- `import`, `types`, `default`, and whatever a package adds --
+ * so the targets are collected by walking it rather than by reading the two keys that happen to sit
+ * at the top today.
+ */
+function exportTargetsOf(exports) {
+  if (typeof exports === 'string') {
+    return [exports];
+  }
+  if (Array.isArray(exports)) {
+    return exports.flatMap((entry) => exportTargetsOf(entry));
+  }
+  if (typeof exports !== 'object' || exports === null) {
+    return [];
+  }
+  return Object.values(exports).flatMap((entry) => exportTargetsOf(entry));
 }
 
 /** @param {string} directory */

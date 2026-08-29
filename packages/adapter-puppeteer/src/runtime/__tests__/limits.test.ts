@@ -64,3 +64,15 @@ describe('the bounds a hardened runtime lives under', () => {
     expect(DEFAULT_RUNTIME_LIMITS.renderTimeoutMs / 2_000).toBeGreaterThanOrEqual(15);
   });
 });
+
+describe('an override named after a key of `Object.prototype`', () => {
+  it('is refused as the unknown key it is, not written into the prototype', () => {
+    /* `filled[key] = …` on `__proto__` reaches an inherited setter, so the strict schema would
+       never see the key it exists to refuse — and the resolved bounds would look untouched. */
+    const hostile: unknown = JSON.parse('{"__proto__": {"slots": 99}}');
+    const refused = refusalOf(Object(hostile) as Record<string, unknown>);
+    expect(refused).toBeInstanceOf(InvalidProtectedConfigurationError);
+    expect(DEFAULT_RUNTIME_LIMITS.slots).toBe(1);
+    expect(({} as Record<string, unknown>).slots).toBeUndefined();
+  });
+});

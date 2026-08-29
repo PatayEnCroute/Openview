@@ -189,3 +189,30 @@ describe('the lookup hook a pinned request installs', () => {
     expect(answered).toStrictEqual([null, [{ address: '93.184.216.34', family: 4 }]]);
   });
 });
+
+describe('a content-length this policy cannot fully read', () => {
+  const body = (async function* empty(): AsyncGenerator<Uint8Array> {
+    /* Deliberately empty: this reader is about the header, not about the bytes. */
+  })();
+
+  it('is no claim at all, however numeric it starts', () => {
+    /* `Number.parseInt` reads a prefix: `123x` would become a length this policy trusted. */
+    for (const header of ['123x', '1e3', '0x10', '', ' ', '-1', 'plenty', '9'.repeat(30)]) {
+      expect(
+        readAnswer({ statusCode: 200, headers: { 'content-length': header }, body }).contentLength,
+      ).toBeUndefined();
+    }
+  });
+
+  it('is read when the whole of it is a count of bytes', () => {
+    expect(
+      readAnswer({ statusCode: 200, headers: { 'content-length': '4096' }, body }).contentLength,
+    ).toBe(4096);
+    expect(
+      readAnswer({ statusCode: 200, headers: { 'content-length': ' 12 ' }, body }).contentLength,
+    ).toBe(12);
+    expect(
+      readAnswer({ statusCode: 200, headers: { 'content-length': '0' }, body }).contentLength,
+    ).toBe(0);
+  });
+});
