@@ -322,3 +322,29 @@ describe('a host that stops answering mid-body', () => {
     );
   });
 });
+
+describe('a name that never resolves', () => {
+  it('is stopped by the deadline of the resource, not by the render budget', async () => {
+    /* The resolution happens before any socket, so a deadline armed after it would leave the one
+       step that can hang unbounded. */
+    const slowNames = {
+      resolve: async (_hostname: string, signal: AbortSignal): Promise<never[]> =>
+        await new Promise<never[]>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            reject(new Error('the resolution was cancelled'));
+          });
+        }),
+    };
+    const { transport, requested } = fakeTransport(new Map());
+    const refused = await refusalOf(
+      loadRemoteImage(
+        SOURCE,
+        limits({ resourceTimeoutMs: 20 }),
+        { transport, resolver: slowNames, authorises: (url) => url === SOURCE },
+        signal(),
+      ),
+    );
+    expect(refused.code).toBe('resource-policy-refused');
+    expect(requested).toHaveLength(0);
+  });
+});

@@ -244,13 +244,15 @@ export async function loadRemoteImage(
     if (url === undefined) {
       refuse(REFUSED_TARGET);
     }
-    const pinned = await pinnedAddress(url.hostname, ports.resolver, signal);
+    /* Armed before the name is even resolved: a resolver that never answers would otherwise spend
+       the whole render budget outside any deadline of its own. */
     const { controller, release } = attempt(signal, limits.resourceTimeoutMs);
     try {
       if (signal.aborted) {
         refuse(CANCELLED);
       }
       try {
+        const pinned = await pinnedAddress(url.hostname, ports.resolver, controller.signal);
         const response = await ports.transport.request(
           {
             url: url.href,
