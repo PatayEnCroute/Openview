@@ -134,6 +134,16 @@ Le détail — décisions produit, périmètre de chaque brique, hors-périmètr
 risques et ordre de sacrifice en cas de retard — vit dans
 [`docs/roadmap/`](docs/roadmap/README.md), avec une feuille de route par brique.
 
+## 📚 Documentation
+
+Le moteur de rendu a son guide d'usage, écrit pour un développeur qui découvre le
+projet : obtenir un PDF, comprendre chaque refus, et savoir ce qui est garanti —
+en [français](docs/engine/fr/00-contents.md) et en
+[anglais](docs/engine/en/00-contents.md).
+
+Les décisions d'architecture vivent dans [`docs/adr/`](docs/adr/), les plans
+d'implémentation dans [`docs/plans/`](docs/plans/).
+
 ## 🤝 Contribuer
 
 Les contributions sont bienvenues. Le guide [CONTRIBUTING.md](CONTRIBUTING.md)

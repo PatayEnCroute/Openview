@@ -29,8 +29,14 @@ export interface DocumentationInput {
   readonly exports: ReadonlyMap<string, readonly string[]>;
   /** Closed lists, in source order. */
   readonly vocabularies: ReadonlyMap<string, readonly string[]>;
-  /** Default objects, compared key by key in both directions. */
-  readonly defaults: ReadonlyMap<string, Readonly<Record<string, number | string>>>;
+  /**
+   * Default objects, compared key by key in both directions.
+   *
+   * `object` rather than a record type: the sources are interfaces, and an interface without an
+   * index signature is not assignable to `Record<string, …>`. The gate reads them with
+   * `Object.entries`, which needs nothing more.
+   */
+  readonly defaults: ReadonlyMap<string, object>;
   /** Single facts a page may state. */
   readonly values: ReadonlyMap<string, number | string>;
   /** Whether a repository-relative path exists. */
