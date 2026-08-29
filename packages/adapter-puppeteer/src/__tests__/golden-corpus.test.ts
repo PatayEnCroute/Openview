@@ -344,7 +344,11 @@ describe('the E5 certificate of one page', () => {
       'a completed row',
       withPage({ ...page(2), report: { incoming: 20, completedBy: [occurrence('other')] } }),
     ],
-    ['an added placement', withPage({ ...page(2), placements: [] })],
+    ['a removed placement', withPage({ ...page(2), placements: [] })],
+    [
+      'an added placement',
+      withPage({ ...page(2), placements: [PLACEMENT, { ...PLACEMENT, region: 'footer' }] }),
+    ],
   ])('reddens the rank whose %s moved, and only that rank', (_name, moved) => {
     expect(certificateOf(moved, 2)).not.toBe(certificateOf(PAGINATION, 2));
     expect(certificateOf(moved, 1)).toBe(certificateOf(PAGINATION, 1));

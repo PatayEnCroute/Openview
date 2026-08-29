@@ -6,15 +6,17 @@ import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { digestOf, recordOf } from '../../../../tools/golden/canonical-json.mjs';
 import { CORPUS } from '../../../../tools/golden/corpus.mjs';
+import type { GoldenManifest } from '../../../../tools/golden/manifest.d.mts';
 import {
   FORMAT_VERSION,
   GENERATOR_VERSION,
   HOST_FIELDS,
   MANIFEST_FILENAME,
   PAGE_EXTRACTOR_VERSION,
+  parseManifest,
   RENDERER_FIELDS,
 } from '../../../../tools/golden/manifest.mjs';
-import { PROFILE_FIELDS } from '../../../../tools/reproducibility/profile.mjs';
+import { PROFILE_FIELDS, profileOf } from '../../../../tools/reproducibility/profile.mjs';
 import { canonicalizePdf } from '../canonicalize-pdf.js';
 
 const ROOT = join(import.meta.dirname, '..', '..', '..', '..');
@@ -155,6 +157,29 @@ function compare(reference: string, candidate: string): { code: number; output: 
 const reportOf = (candidate: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(candidate, 'report.json'), 'utf8'));
 
+/**
+ * The manifest of a batch, read through the real schema.
+ *
+ * `JSON.parse` answers `any`, and a mutation built on `any` can write a shape the schema would
+ * never accept and then fail for a reason the test was not written to catch. Every mutation below
+ * therefore starts from a VALID manifest and bends one named thing in it.
+ */
+const manifestOf = (directory: string): GoldenManifest =>
+  parseManifest(readFileSync(join(directory, MANIFEST_FILENAME), 'utf8'), directory);
+
+/** Writes a bent manifest back, deliberately without re-validating: bending it is the point. */
+const writeManifest = (directory: string, manifest: unknown): void =>
+  writeFileSync(join(directory, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2), 'utf8');
+
+/** The first document of a manifest, refused loudly rather than reached through an optional. */
+function firstOf(manifest: GoldenManifest) {
+  const [first] = manifest.documents;
+  if (first === undefined) {
+    throw new Error('a batch carries at least one document');
+  }
+  return first;
+}
+
 /** Two batches built the same way, ready for one of them to be moved. */
 async function pair(options: BatchOptions = {}): Promise<{ reference: string; candidate: string }> {
   return {
@@ -274,9 +299,15 @@ describe('a batch whose documents moved', () => {
     const source = await PDFDocument.load(readFileSync(join(candidate, first.filename)));
     const rewritten = await source.save({ useObjectStreams: true, addDefaultPage: false });
     writeFileSync(join(candidate, first.filename), rewritten);
-    const manifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-    manifest.documents[0].pdf = recordOf(rewritten);
-    writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(manifest), 'utf8');
+    const manifest = manifestOf(candidate);
+    const [head, ...rest] = manifest.documents;
+    if (head === undefined) {
+      throw new Error('a batch carries at least one document');
+    }
+    writeManifest(candidate, {
+      ...manifest,
+      documents: [{ ...head, pdf: recordOf(rewritten) }, ...rest],
+    });
 
     const { code, output } = compare(reference, candidate);
     expect(code).toBe(1);
@@ -321,10 +352,15 @@ describe('what no digest of a manifest is allowed to excuse', () => {
     });
     /* The candidate manifest is rewritten to claim the reference's own digest. A comparator that
        read the manifest instead of the file would call these two documents equal. */
-    const referenceManifest = JSON.parse(readFileSync(join(reference, MANIFEST_FILENAME), 'utf8'));
-    const candidateManifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-    candidateManifest.documents[0].pdf = referenceManifest.documents[0].pdf;
-    writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(candidateManifest), 'utf8');
+    const candidateManifest = manifestOf(candidate);
+    const [head, ...rest] = candidateManifest.documents;
+    if (head === undefined) {
+      throw new Error('a batch carries at least one document');
+    }
+    writeManifest(candidate, {
+      ...candidateManifest,
+      documents: [{ ...head, pdf: firstOf(manifestOf(reference)).pdf }, ...rest],
+    });
 
     const { code, output } = compare(reference, candidate);
     expect(code).toBe(1);
@@ -357,10 +393,14 @@ describe('the closure of the batch against its register', () => {
 
   it('refuses a manifest that dropped a scenario the register still carries', async () => {
     const { reference, candidate } = await pair();
-    const manifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-    const dropped = manifest.documents.pop();
+    const manifest = manifestOf(candidate);
+    const kept = manifest.documents.slice(0, -1);
+    const dropped = manifest.documents.at(-1);
+    if (dropped === undefined) {
+      throw new Error('a batch carries at least one document');
+    }
     rmSync(join(candidate, dropped.filename));
-    writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(manifest), 'utf8');
+    writeManifest(candidate, { ...manifest, documents: kept });
     const { code, output } = compare(reference, candidate);
     expect(code).toBe(1);
     expect(output).toContain('the register lists');
@@ -368,9 +408,8 @@ describe('the closure of the batch against its register', () => {
 
   it('refuses a manifest whose scenarios are in another order', async () => {
     const { reference, candidate } = await pair();
-    const manifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-    manifest.documents.reverse();
-    writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(manifest), 'utf8');
+    const manifest = manifestOf(candidate);
+    writeManifest(candidate, { ...manifest, documents: [...manifest.documents].reverse() });
     const { code, output } = compare(reference, candidate);
     expect(code).toBe(1);
     expect(output).toContain('the register lists');
@@ -387,9 +426,10 @@ describe('the closure of the batch against its register', () => {
 
   it('refuses a manifest written by another version of the harness', async () => {
     const { reference, candidate } = await pair();
-    const manifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-    manifest.pageExtractorVersion = PAGE_EXTRACTOR_VERSION + 1;
-    writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(manifest), 'utf8');
+    writeManifest(candidate, {
+      ...manifestOf(candidate),
+      pageExtractorVersion: PAGE_EXTRACTOR_VERSION + 1,
+    });
     const { code, output } = compare(reference, candidate);
     expect(code).toBe(1);
     expect(output).toContain('pageExtractorVersion');
@@ -440,14 +480,29 @@ describe('the profile, compared before a byte is read', () => {
     expect([...HOST_FIELDS, ...RENDERER_FIELDS].sort()).toStrictEqual([...PROFILE_FIELDS].sort());
   });
 
-  it('sorts the launch arguments before comparing them', async () => {
+  it('is written with its launch arguments sorted, whatever order they were given in', async () => {
+    /* The comparator does NOT sort: it compares the field by value, and it is right not to, because
+       `profileOf` has already sorted it. That is the property under test -- asserting it on two
+       hand-written manifests would pass whether or not any sorting existed anywhere. */
+    const browser = { version: () => Promise.resolve('Chrome/152.0.7977.42') };
+    const one = await profileOf(browser, ['--b', '--a']);
+    const other = await profileOf(browser, ['--a', '--b']);
+    expect(one.launchArguments).toStrictEqual(['--a', '--b']);
+    expect(one.launchArguments).toStrictEqual(other.launchArguments);
+  });
+
+  it('refuses two manifests whose launch arguments were not written by that producer', async () => {
+    /* The other half of the same coin: an out-of-order list did not come from `profileOf`, so the
+       comparator has no reason to believe the two runs launched the same browser. */
     const reference = await batch(temporary('golden-reference'), {
       profile: { ...PROFILE, launchArguments: ['--a', '--b'] },
     });
     const candidate = await batch(temporary('golden-candidate'), {
-      profile: { ...PROFILE, launchArguments: ['--a', '--b'] },
+      profile: { ...PROFILE, launchArguments: ['--b', '--a'] },
     });
-    expect(compare(reference, candidate).code).toBe(0);
+    const { code, output } = compare(reference, candidate);
+    expect(code).toBe(1);
+    expect(output).toContain('profile.launchArguments');
   });
 });
 
@@ -521,11 +576,18 @@ describe('the ci job that runs this gate', () => {
     expect(job).toContain('if-no-files-found: warn');
   });
 
-  it('never accepts a batch: no command any job runs is the acceptance', () => {
-    /* The commands, not the comments: the job SAYS it never accepts, and this reads what it does. */
-    const commands = [...workflow().matchAll(/^\s*run: (.+)$/gm)].map((match) => match[1] ?? '');
-    expect(commands.length).toBeGreaterThan(0);
-    expect(commands.filter((command) => command.includes('accept'))).toStrictEqual([]);
+  it('never accepts a batch: the acceptance is named nowhere a job could run it', () => {
+    /* Everything but the comments. Matching only `run: <one line>` would miss the body of a
+       `run: |` block entirely, and this assertion carries the strongest guarantee of the lot:
+       no job promotes a reference. The comments are stripped so the job may keep SAYING, in
+       prose, that it never accepts -- which is exactly what its header does. */
+    const text = workflow();
+    expect(text).toMatch(/^\s*run:/m);
+    const executable = text
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    expect(executable).not.toContain('accept');
   });
 
   it('runs on every pull request and on main, like the gates beside it', () => {

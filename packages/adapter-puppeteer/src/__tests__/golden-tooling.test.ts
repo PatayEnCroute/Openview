@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
@@ -12,6 +12,7 @@ import {
   textRecordOf,
 } from '../../../../tools/golden/canonical-json.mjs';
 import { CORPUS } from '../../../../tools/golden/corpus.mjs';
+import type { GoldenManifest } from '../../../../tools/golden/manifest.d.mts';
 import {
   FORMAT_VERSION,
   GENERATOR_VERSION,
@@ -86,6 +87,19 @@ function refusal(value: unknown): string {
 }
 
 const temporary = (prefix: string) => mkdtempSync(join(tmpdir(), `openview-${prefix}-`));
+
+/**
+ * The manifest of a batch, read through the real schema rather than through `JSON.parse`.
+ *
+ * `JSON.parse` answers `any`, and a mutation built on `any` can write a shape the schema would
+ * never accept and then fail for a reason the test was not written to catch.
+ */
+const manifestOf = (directory: string): GoldenManifest =>
+  parseManifest(readFileSync(join(directory, MANIFEST_FILENAME), 'utf8'), directory);
+
+/** Writes a bent manifest back, deliberately without re-validating: bending it is the point. */
+const writeManifest = (directory: string, manifest: unknown): void =>
+  writeFileSync(join(directory, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2), 'utf8');
 
 /**
  * A pdf holding exactly `pages` pages, with a distinct mark on each so no two are equal.
@@ -413,9 +427,8 @@ describe('what the acceptance refuses', () => {
   it('refuses a candidate missing one of the six documents', async () => {
     const candidate = temporary('accept-short');
     await syntheticBatch(candidate);
-    const manifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-    manifest.documents = manifest.documents.slice(0, 5);
-    writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(manifest), 'utf8');
+    const manifest = manifestOf(candidate);
+    writeManifest(candidate, { ...manifest, documents: manifest.documents.slice(0, 5) });
     expect(() => acceptInto(candidate, temporary('accept-target'))).toThrow(/register lists/);
   });
 
@@ -431,9 +444,11 @@ describe('what the acceptance refuses', () => {
     async (field) => {
       const candidate = temporary('accept-host');
       await syntheticBatch(candidate);
-      const manifest = JSON.parse(readFileSync(join(candidate, MANIFEST_FILENAME), 'utf8'));
-      manifest.profile[field] = field === 'launchArguments' ? [] : 'elsewhere';
-      writeFileSync(join(candidate, MANIFEST_FILENAME), JSON.stringify(manifest), 'utf8');
+      const manifest = manifestOf(candidate);
+      writeManifest(candidate, {
+        ...manifest,
+        profile: { ...manifest.profile, [field]: field === 'launchArguments' ? [] : 'elsewhere' },
+      });
       expect(() => acceptInto(candidate, temporary('accept-target'))).toThrow(
         new RegExp(`profile\\.${field}`),
       );
@@ -466,6 +481,53 @@ describe('what the acceptance does when it accepts', () => {
     /* No shadow of the transaction survives it. */
     expect(readdirSync(target).filter((entry) => entry.includes('.incoming'))).toStrictEqual([]);
     expect(readdirSync(target).filter((entry) => entry.includes('.outgoing'))).toStrictEqual([]);
+  });
+
+  it('leaves an empty target empty when a rename fails part of the way through', async () => {
+    const candidate = temporary('accept-halfway');
+    const target = temporary('accept-halfway-into');
+    await syntheticBatch(candidate);
+    /* The case `stepped` cannot cover: nothing was there to step aside, so a batch abandoned after
+       three renames would sit in the target as a lot nobody chose. */
+    let renames = 0;
+    const failing = (from: string, to: string): void => {
+      renames += 1;
+      if (renames === 3) {
+        throw new Error('the filesystem said no');
+      }
+      renameSync(from, to);
+    };
+    expect(() => acceptInto(candidate, target, failing)).toThrow(/said no/);
+    expect(readdirSync(target)).toStrictEqual([]);
+  });
+
+  it('puts the previous batch back, whole, when a rename fails over an existing one', async () => {
+    const candidate = temporary('accept-rollback');
+    const target = temporary('accept-rollback-into');
+    await syntheticBatch(candidate);
+    const previous = new Map<string, string>();
+    for (const scenario of CORPUS) {
+      const bytes = await pdfOf(1);
+      writeFileSync(join(target, scenario.filename), bytes);
+      previous.set(scenario.filename, digestOf(bytes));
+    }
+    writeFileSync(join(target, MANIFEST_FILENAME), 'the previous manifest', 'utf8');
+    previous.set(MANIFEST_FILENAME, digestOf(Buffer.from('the previous manifest', 'utf8')));
+
+    let renames = 0;
+    const failing = (from: string, to: string): void => {
+      renames += 1;
+      /* Past the seven that step the old batch aside, so the failure lands mid-promotion. */
+      if (renames === 10) {
+        throw new Error('the filesystem said no');
+      }
+      renameSync(from, to);
+    };
+    expect(() => acceptInto(candidate, target, failing)).toThrow(/said no/);
+    expect([...readdirSync(target)].sort()).toStrictEqual([...previous.keys()].sort());
+    for (const [name, expected] of previous) {
+      expect(digestOf(readFileSync(join(target, name))), `${name} was not put back`).toBe(expected);
+    }
   });
 
   it('writes a manifest the reader accepts back', async () => {

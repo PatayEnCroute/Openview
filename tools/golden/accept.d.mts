@@ -15,4 +15,11 @@
 export declare function acceptInto(
   candidateDirectory: string,
   targetDirectory: string,
+  /**
+   * The rename the promotion goes through. Defaults to `renameSync`.
+   *
+   * Injected only so a test can make one rename fail: on a working filesystem the recovery path is
+   * unreachable, and an all-or-nothing guarantee nobody has ever seen hold is a claim.
+   */
+  rename?: (from: string, to: string) => void,
 ): readonly string[];

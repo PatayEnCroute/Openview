@@ -11,7 +11,7 @@
  * the html and the E5 certificates, then the pdf port for the document a client receives. Two
  * sessions per scenario is the honest price of testing two contracts; pooling belongs to E8.
  */
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createPuppeteerPdfStrategy } from '../../packages/adapter-puppeteer/dist/index.js';
 import {
@@ -191,10 +191,27 @@ const manifest = {
   profile,
   documents: rendered.map((one) => one.record),
 };
-for (const one of rendered) {
-  writeFileSync(join(output, one.scenario.filename), one.bytes);
+try {
+  for (const one of rendered) {
+    writeFileSync(join(output, one.scenario.filename), one.bytes);
+  }
+  writeFileSync(join(output, MANIFEST_FILENAME), serializeManifest(manifest), 'utf8');
+} catch (error) {
+  /* A disk that fills on the fourth document would otherwise leave three pdfs and no manifest --
+     a batch that looks like a candidate and attests nothing. It goes, and the report stays. */
+  for (const one of rendered) {
+    rmSync(join(output, one.scenario.filename), { force: true });
+  }
+  rmSync(join(output, MANIFEST_FILENAME), { force: true });
+  writeFileSync(
+    join(output, REPORT_FILENAME),
+    `${JSON.stringify({ status: 'write-failed', scenario: null, code: null, documents: [] }, null, 2)}\n`,
+    'utf8',
+  );
+  console.error('E7: the batch was rendered and could not be written; no candidate was left.');
+  console.error(`candidate report: ${join(output, REPORT_FILENAME)}`);
+  throw error;
 }
-writeFileSync(join(output, MANIFEST_FILENAME), serializeManifest(manifest), 'utf8');
 
 let total = 0;
 for (const one of rendered) {

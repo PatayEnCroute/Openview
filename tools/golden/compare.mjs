@@ -95,6 +95,13 @@ async function comparePage(reference, candidate, number) {
 /** `1..5`, or `1` when there is only one -- the shape the failure message reads best in. */
 const span = (count) => (count === 1 ? '1' : `1..${count}`);
 
+/** How each kind of page difference is said out loud. */
+const SAID = {
+  pdf: 'isolated pdf differs',
+  pagination: 'pagination certificate differs',
+  'page-derivation': 'could not be derived',
+};
+
 /**
  * Compares one scenario, and answers everything that differs about it.
  *
@@ -155,9 +162,22 @@ async function compareDocument(referenceDirectory, candidateDirectory, left, rig
     }
     const moved = [];
     /* Derived here from both stored documents rather than trusted from the manifest: two files with
-       the same declared digest and different bytes must not be able to pass. */
-    if (pdfDiffers && !(await comparePage(reference.bytes, candidate.bytes, rank))) {
-      moved.push('pdf');
+       the same declared digest and different bytes must not be able to pass.
+
+       The rank comes from the manifests, and a file that does not hold the pages its own manifest
+       claims makes the derivation throw. That is a difference to report, not a reason to leave the
+       run without a report: the whole point of the artefact is to say what went wrong. */
+    if (pdfDiffers) {
+      try {
+        if (!(await comparePage(reference.bytes, candidate.bytes, rank))) {
+          moved.push('pdf');
+        }
+      } catch (error) {
+        moved.push('page-derivation');
+        notes.push(
+          `page ${rank}: could not be derived from one of the two documents (${error instanceof Error ? error.message : 'unknown'})`,
+        );
+      }
     }
     if (referencePage.pagination.sha256 !== candidatePage.pagination.sha256) {
       moved.push('pagination');
@@ -310,9 +330,7 @@ for (const document of moved) {
     console.error(`  ${note}`);
   }
   for (const page of document.pages) {
-    const said = page.differences
-      .map((one) => (one === 'pdf' ? 'isolated pdf differs' : 'pagination certificate differs'))
-      .join('; ');
+    const said = page.differences.map((one) => SAID[one] ?? one).join('; ');
     console.error(`  page ${page.number}: ${said}`);
   }
   if (document.addedPages.length > 0) {

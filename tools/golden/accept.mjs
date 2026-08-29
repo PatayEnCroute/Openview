@@ -96,8 +96,12 @@ function objectionsTo(candidateDirectory, manifest) {
  *
  * Every new file lands beside its target first, every old one steps aside second, and the renames
  * happen last. A failure at any point restores the previous batch entire.
+ *
+ * `rename` exists so a test can make one of those renames fail. There is no other way to reach the
+ * recovery path: on a working filesystem the third loop does not fail, and a guarantee of
+ * all-or-nothing that nobody has ever seen fail is a claim, not a guarantee.
  */
-export function acceptInto(candidateDirectory, targetDirectory) {
+export function acceptInto(candidateDirectory, targetDirectory, rename = renameSync) {
   const candidate = resolve(candidateDirectory);
   const target = resolve(targetDirectory);
   if (!existsSync(candidate) || !statSync(candidate).isDirectory()) {
@@ -124,6 +128,10 @@ export function acceptInto(candidateDirectory, targetDirectory) {
 
   const staged = [];
   const stepped = [];
+  /* Tracked separately from `stepped`: promoting into an EMPTY target steps nothing aside, so a
+     rename that fails on the fourth file would otherwise leave the first three behind as a batch
+     nobody chose -- which is the one state this function exists to make impossible. */
+  const promoted = [];
   try {
     for (const file of files) {
       writeFileSync(join(target, `${file.name}${INCOMING}`), file.bytes);
@@ -131,17 +139,22 @@ export function acceptInto(candidateDirectory, targetDirectory) {
     }
     for (const file of files) {
       if (existsSync(join(target, file.name))) {
-        renameSync(join(target, file.name), join(target, `${file.name}${OUTGOING}`));
+        rename(join(target, file.name), join(target, `${file.name}${OUTGOING}`));
         stepped.push(file.name);
       }
     }
     for (const file of files) {
-      renameSync(join(target, `${file.name}${INCOMING}`), join(target, file.name));
+      rename(join(target, `${file.name}${INCOMING}`), join(target, file.name));
+      promoted.push(file.name);
     }
   } catch (error) {
+    /* Undone in the order it was done: what landed goes first, so the restore below always finds
+       the name free. */
+    for (const name of promoted) {
+      rmSync(join(target, name), { force: true });
+    }
     for (const name of stepped) {
       if (existsSync(join(target, `${name}${OUTGOING}`))) {
-        rmSync(join(target, name), { force: true });
         renameSync(join(target, `${name}${OUTGOING}`), join(target, name));
       }
     }
