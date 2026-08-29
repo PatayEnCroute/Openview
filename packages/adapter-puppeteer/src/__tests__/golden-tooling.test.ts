@@ -348,8 +348,11 @@ describe('the closed json serialisation', () => {
   });
 
   it('accepts an object with no prototype, which carries its whole value in its own keys', () => {
-    const bare: Record<string, unknown> = Object.create(null);
-    bare.a = 1;
+    /* `Object.create(null)` is typed `any` by the standard library. Built as a literal and stripped
+       of its prototype afterwards, the same object arrives here fully typed. */
+    const bare: Record<string, unknown> = { a: 1 };
+    Reflect.setPrototypeOf(bare, null);
+    expect(Object.getPrototypeOf(bare)).toBeNull();
     expect(canonicalJson({ bare })).toBe('{"bare":{"a":1}}');
   });
 
