@@ -46,6 +46,7 @@ La colonne de droite dit ce qui vous arrêtera réellement.
 | DOM interdit dans `core`/`engine`, Node interdit dans les paquets navigateur | **tsc** (`lib`/`types` par paquet) |
 | Extensions `.js` sur les imports relatifs de `core`/`engine` | **tsc** (`NodeNext`) |
 | Couverture ≥ 90 %, tests type-checkés | **Vitest** + `tsconfig.typecheck.json` |
+| Aucun fichier de test dans un tarball publiable, et tout point d'entrée déclaré embarqué | **`node tools/packaging/surface.mjs`** — lit `npm pack --dry-run`, en CI sur les deux majeures de Node |
 | Aucune lecture d'environnement dans `core`/`engine` : constructeur `Date` à toute arité, `Date.now`, `Date.parse`, `Math.random`, `process.env`, `performance.*`, `globalThis.*`, `toLocale*`, les neuf getters locaux de `Date`, `Intl.*` sans locale, `Intl.DateTimeFormat` sans `timeZone` | **Biome** (`noJsRestrictedProperties` + plugin `no-environment-read`) — *avec les trois angles morts et les deux faux positifs ci-dessous* |
 | Assertion `<X>v`, promesses non attendues, patrons de conception, Zod-first | **Revue humaine uniquement** |
 
