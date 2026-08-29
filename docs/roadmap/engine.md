@@ -370,7 +370,8 @@ journalisé.
 > `@openview/adapter-puppeteer` borne le reste : **64 Mio de PDF** en entrée et en sortie,
 > **8 Mio et 25 M de pixels par image**, **32 Mio et 100 M de pixels cumulés**, **64 images
 > distinctes**, **1 slot**, **4 requêtes en file**, **5 s d'attente**, **30 s de rendu**,
-> **256 Mio de vieux tas par worker**, **100 rendus avant recyclage**. Un champ absent prend son
+> **256 Mio de vieux tas par worker**, **5 s pour qu'un worker s'annonce**, **100 rendus avant
+> recyclage**. Un champ absent prend son
 > défaut ; un champ présent mais invalide est refusé, et chaque plafond a lui-même un plafond de
 > configuration pour que `1_000_000_000` ne devienne pas une manière documentée de tout désactiver.
 >

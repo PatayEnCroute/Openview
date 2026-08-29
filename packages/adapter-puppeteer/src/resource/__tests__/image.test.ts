@@ -189,7 +189,7 @@ describe('a container that only looks like one', () => {
     expect(sniffMediaType(png)).toBeUndefined();
   });
 
-  it('is refused when its bytes stop inside the riff header itself', () => {
+  it('is recognised as nothing when its bytes stop inside the riff header itself', () => {
     expect(sniffMediaType(new Uint8Array([0x52, 0x49, 0x46, 0x46]))).toBeUndefined();
   });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { InvalidProtectedConfigurationError } from '../resource/errors.js';
+import { boundedBy, resolveBounds } from '../bounds.js';
 import { MIB } from '../resource/types.js';
 
 /** Bounds on isolation, waiting and recycling, beyond the ones a resource or a document has. */
@@ -14,6 +14,8 @@ export interface ProtectedRuntimeLimits {
   readonly renderTimeoutMs: number;
   /** Wall-clock a browser is given to close before it is killed, in milliseconds. */
   readonly shutdownTimeoutMs: number;
+  /** Wall-clock a worker is given to announce itself, in milliseconds. */
+  readonly workerStartTimeoutMs: number;
   /** Old generation of one worker isolate, in mebibytes. */
   readonly workerOldSpaceMb: number;
   /** Stack of one worker isolate, in mebibytes. */
@@ -49,6 +51,7 @@ export const DEFAULT_RUNTIME_LIMITS: ProtectedRuntimeLimits = {
   queueTimeoutMs: 5_000,
   renderTimeoutMs: 30_000,
   shutdownTimeoutMs: 5_000,
+  workerStartTimeoutMs: 5_000,
   workerOldSpaceMb: 256,
   workerStackMb: 4,
   maxRendersPerWorker: 100,
@@ -63,6 +66,7 @@ export const RUNTIME_HARD_CEILINGS: ProtectedRuntimeLimits = {
   queueTimeoutMs: 600_000,
   renderTimeoutMs: 600_000,
   shutdownTimeoutMs: 600_000,
+  workerStartTimeoutMs: 600_000,
   workerOldSpaceMb: 2_560,
   workerStackMb: 40,
   maxRendersPerWorker: 1_000,
@@ -73,26 +77,20 @@ export const RUNTIME_HARD_CEILINGS: ProtectedRuntimeLimits = {
 const INVALID =
   'A runtime limit must be a whole number between 1 and its hard ceiling. Omit a field to take its default; a present but unusable value is refused rather than replaced, because `slots: 0` accepts nothing and `renderTimeoutMs: NaN` never expires.';
 
-const bounded = (ceiling: number): z.ZodType<number> =>
-  z
-    .number()
-    .int('A runtime limit must be a whole number')
-    .min(1, 'A runtime limit may not go below 1')
-    .max(ceiling, `A runtime limit may not exceed ${ceiling}`);
-
 /** Validation of the runtime bounds, refusing unknown keys rather than dropping them. */
 export const ProtectedRuntimeLimitsSchema: z.ZodType<ProtectedRuntimeLimits> = z
   .strictObject({
-    slots: bounded(RUNTIME_HARD_CEILINGS.slots),
-    queueDepth: bounded(RUNTIME_HARD_CEILINGS.queueDepth),
-    queueTimeoutMs: bounded(RUNTIME_HARD_CEILINGS.queueTimeoutMs),
-    renderTimeoutMs: bounded(RUNTIME_HARD_CEILINGS.renderTimeoutMs),
-    shutdownTimeoutMs: bounded(RUNTIME_HARD_CEILINGS.shutdownTimeoutMs),
-    workerOldSpaceMb: bounded(RUNTIME_HARD_CEILINGS.workerOldSpaceMb),
-    workerStackMb: bounded(RUNTIME_HARD_CEILINGS.workerStackMb),
-    maxRendersPerWorker: bounded(RUNTIME_HARD_CEILINGS.maxRendersPerWorker),
-    maxTransportValues: bounded(RUNTIME_HARD_CEILINGS.maxTransportValues),
-    maxTransportStringLength: bounded(RUNTIME_HARD_CEILINGS.maxTransportStringLength),
+    slots: boundedBy(RUNTIME_HARD_CEILINGS.slots),
+    queueDepth: boundedBy(RUNTIME_HARD_CEILINGS.queueDepth),
+    queueTimeoutMs: boundedBy(RUNTIME_HARD_CEILINGS.queueTimeoutMs),
+    renderTimeoutMs: boundedBy(RUNTIME_HARD_CEILINGS.renderTimeoutMs),
+    shutdownTimeoutMs: boundedBy(RUNTIME_HARD_CEILINGS.shutdownTimeoutMs),
+    workerStartTimeoutMs: boundedBy(RUNTIME_HARD_CEILINGS.workerStartTimeoutMs),
+    workerOldSpaceMb: boundedBy(RUNTIME_HARD_CEILINGS.workerOldSpaceMb),
+    workerStackMb: boundedBy(RUNTIME_HARD_CEILINGS.workerStackMb),
+    maxRendersPerWorker: boundedBy(RUNTIME_HARD_CEILINGS.maxRendersPerWorker),
+    maxTransportValues: boundedBy(RUNTIME_HARD_CEILINGS.maxTransportValues),
+    maxTransportStringLength: boundedBy(RUNTIME_HARD_CEILINGS.maxTransportStringLength),
   })
   .readonly();
 
@@ -100,18 +98,5 @@ export const ProtectedRuntimeLimitsSchema: z.ZodType<ProtectedRuntimeLimits> = z
 export function resolveRuntimeLimits(
   overrides?: ProtectedRuntimeLimitsOverrides | undefined,
 ): ProtectedRuntimeLimits {
-  if (overrides === undefined) {
-    return DEFAULT_RUNTIME_LIMITS;
-  }
-  const filled: Record<string, unknown> = { ...DEFAULT_RUNTIME_LIMITS };
-  for (const [key, value] of Object.entries(overrides)) {
-    if (value !== undefined) {
-      filled[key] = value;
-    }
-  }
-  const parsed = ProtectedRuntimeLimitsSchema.safeParse(filled);
-  if (!parsed.success) {
-    throw new InvalidProtectedConfigurationError(INVALID, { cause: parsed.error });
-  }
-  return parsed.data;
+  return resolveBounds(DEFAULT_RUNTIME_LIMITS, ProtectedRuntimeLimitsSchema, overrides, INVALID);
 }

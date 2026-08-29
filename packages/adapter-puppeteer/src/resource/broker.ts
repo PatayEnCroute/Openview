@@ -80,8 +80,11 @@ export function createImageBroker(
    * Held for the whole render, not for one call: the browser side resolves the reached occurrences
    * before it opens a context, and the engine then asks about the same ones again. A map rebuilt
    * per call would download every remote source twice and spend every cumulative ceiling twice.
+   *
+   * The promise is what is remembered, not its result: two resolutions that overlap would otherwise
+   * both start before either finished, and load and charge the same source twice.
    */
-  const bySource = new Map<string, string>();
+  const bySource = new Map<string, Promise<string>>();
   let distinct = 0;
   let totalBytes = 0;
   let totalPixels = 0;
@@ -95,6 +98,37 @@ export function createImageBroker(
     if (totalPixels > limits.maxTotalImagePixels) {
       refuse(TOTAL_PIXELS, { nodeId, limit: limits.maxTotalImagePixels }, remote);
     }
+  };
+
+  /** Everything one source costs, from its authorisation to the inline bytes a page may load. */
+  const load = async (image: DocumentImage): Promise<string> => {
+    distinct += 1;
+    if (distinct > limits.maxDistinctImages) {
+      refuse(TOO_MANY_IMAGES, { nodeId: image.nodeId, limit: limits.maxDistinctImages }, false);
+    }
+    const embedded = readEmbeddedImage(image.src, limits);
+    if (embedded !== undefined) {
+      const inspected = inspectImage(embedded.mediaType, embedded.bytes, limits);
+      account(inspected.bytes.byteLength, inspected.pixels, image.nodeId, false);
+      return image.src;
+    }
+    const asset = authorised.get(image.src);
+    if (asset === undefined) {
+      refuse(NOT_AUTHORISED, { nodeId: image.nodeId }, false);
+    }
+    const bytes = await bytesOf(asset);
+    if (!sameDigest(asset.sha256, bytes)) {
+      throw new DocumentRenderError(INTEGRITY, 'resource-integrity-failed', {
+        phase: 'resource',
+        resourceKind: asset.kind === 'https' ? 'remote-image' : 'embedded-image',
+        nodeId: image.nodeId,
+      });
+    }
+    const inspected = inspectImage(asset.mediaType, bytes, limits);
+    account(inspected.bytes.byteLength, inspected.pixels, image.nodeId, asset.kind === 'https');
+    /* Turned into inline bytes here, before anything is measured: the browser is never given a url,
+       authorised or not, so the network policy is enforced by Node and not by Chromium. */
+    return embeddedSourceOf(inspected.mediaType, inspected.bytes);
   };
 
   const bytesOf = async (asset: ProtectedImageAsset): Promise<Uint8Array> => {
@@ -112,40 +146,14 @@ export function createImageBroker(
       for (const image of images) {
         const known = bySource.get(image.src);
         if (known !== undefined) {
-          resolved.push({ key: image.key, src: known });
+          resolved.push({ key: image.key, src: await known });
           continue;
         }
-        distinct += 1;
-        if (distinct > limits.maxDistinctImages) {
-          refuse(TOO_MANY_IMAGES, { nodeId: image.nodeId, limit: limits.maxDistinctImages }, false);
-        }
-        const embedded = readEmbeddedImage(image.src, limits);
-        if (embedded !== undefined) {
-          const inspected = inspectImage(embedded.mediaType, embedded.bytes, limits);
-          account(inspected.bytes.byteLength, inspected.pixels, image.nodeId, false);
-          bySource.set(image.src, image.src);
-          resolved.push({ key: image.key, src: image.src });
-          continue;
-        }
-        const asset = authorised.get(image.src);
-        if (asset === undefined) {
-          refuse(NOT_AUTHORISED, { nodeId: image.nodeId }, false);
-        }
-        const bytes = await bytesOf(asset);
-        if (!sameDigest(asset.sha256, bytes)) {
-          throw new DocumentRenderError(INTEGRITY, 'resource-integrity-failed', {
-            phase: 'resource',
-            resourceKind: asset.kind === 'https' ? 'remote-image' : 'embedded-image',
-            nodeId: image.nodeId,
-          });
-        }
-        const inspected = inspectImage(asset.mediaType, bytes, limits);
-        account(inspected.bytes.byteLength, inspected.pixels, image.nodeId, asset.kind === 'https');
-        /* Turned into inline bytes here, before anything is measured: the browser is never given a
-           url, authorised or not, so the network policy is enforced by Node and not by Chromium. */
-        const src = embeddedSourceOf(inspected.mediaType, inspected.bytes);
-        bySource.set(image.src, src);
-        resolved.push({ key: image.key, src });
+        /* Recorded before the first `await`, so a second resolution of the same source joins this
+           one instead of starting its own. */
+        const loading = load(image);
+        bySource.set(image.src, loading);
+        resolved.push({ key: image.key, src: await loading });
       }
       return resolved;
     },

@@ -4,6 +4,7 @@ import {
   createPdfRenderPort,
   type DocumentImage,
   DocumentRenderError,
+  type DocumentRenderPhase,
   type PdfLayoutMeasurement,
   type PdfRenderResources,
   type PdfRenderSession,
@@ -34,8 +35,8 @@ export interface CallChannel {
 
 const ResolvedSchema = z.array(z.strictObject({ key: z.string(), src: z.string() }));
 
-function badReply(): never {
-  throw new DocumentRenderError(BAD_REPLY, 'render-worker-failed', { phase: 'measurement' });
+function badReply(phase: DocumentRenderPhase): never {
+  throw new DocumentRenderError(BAD_REPLY, 'render-worker-failed', { phase });
 }
 
 /**
@@ -61,7 +62,7 @@ export function createProxyStrategy(channel: CallChannel): PdfRenderStrategy {
             await channel.call({ op: 'resolve', images: images.map(plainImage) }),
           );
           if (!answered.success) {
-            badReply();
+            badReply('resource');
           }
           return answered.data;
         },
@@ -70,14 +71,14 @@ export function createProxyStrategy(channel: CallChannel): PdfRenderStrategy {
             await channel.call({ op: 'measure', document: plainDocument(document) }),
           );
           if (!answered.success) {
-            badReply();
+            badReply('measurement');
           }
           return answered.data;
         },
         async print(document: PdfSourceDocument): Promise<Uint8Array> {
           const answered = await channel.call({ op: 'print', document: plainDocument(document) });
           if (!(answered instanceof Uint8Array)) {
-            badReply();
+            badReply('export');
           }
           return answered;
         },

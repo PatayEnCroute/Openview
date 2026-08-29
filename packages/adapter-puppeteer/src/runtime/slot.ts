@@ -33,6 +33,9 @@ const PROTOCOL =
 const NO_SESSION =
   'The isolated worker asked for an operation on a session that was never opened, or that this render had already closed.';
 
+const WORKER_SILENT =
+  'A worker of this runtime did not announce itself within the time one is given to start. Read `details.limit` for the deadline in milliseconds; the thread is terminated rather than waited on.';
+
 const SLOT_CLOSED = 'This runtime is closed, so the slot cannot take another render.';
 
 /** The listeners a slot keeps on its worker; setting them replaces whatever was there. */
@@ -71,6 +74,8 @@ export interface BrowserFactory {
 export interface SlotLimits {
   readonly renderTimeoutMs: number;
   readonly maxRendersPerWorker: number;
+  /** Wall-clock a worker is given to announce itself before it is treated as never having. */
+  readonly workerStartTimeoutMs: number;
 }
 
 /** What a slot was asked to do, and the identity it audits under. */
@@ -134,24 +139,45 @@ function sessionOf(session: PdfRenderSession | undefined): PdfRenderSession {
   return session;
 }
 
-/** Starts a worker and waits for its first message, so a slot is never handed out half-built. */
-async function startWorker(workers: WorkerFactory): Promise<WorkerHandle> {
+/**
+ * Starts a worker and waits for its first message, so a slot is never handed out half-built.
+ *
+ * Under a deadline like everything else in this package: a thread that blocks before announcing
+ * itself -- an entry module that loops, an import that never resolves -- would otherwise hang the
+ * creation of the whole runtime with nothing to stop it.
+ */
+async function startWorker(workers: WorkerFactory, startMs: number): Promise<WorkerHandle> {
   const handle = await workers.create();
-  await new Promise<void>((resolve, reject) => {
-    handle.listen({
-      onMessage: (raw) => {
-        if (parseWorkerMessage(raw)?.kind === 'ready') {
-          resolve();
-        }
-      },
-      onError: (error) => {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-      onExit: () => {
-        reject(refusal(WORKER_GONE, 'render-worker-failed', 'admission'));
-      },
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(refusal(WORKER_SILENT, 'render-worker-failed', 'admission', startMs));
+      }, startMs);
+      timer.unref();
+      handle.listen({
+        onMessage: (raw) => {
+          if (parseWorkerMessage(raw)?.kind === 'ready') {
+            resolve();
+          }
+        },
+        onError: (error) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+        onExit: () => {
+          reject(refusal(WORKER_GONE, 'render-worker-failed', 'admission'));
+        },
+      });
     });
-  });
+  } catch (error) {
+    /* The thread exists whatever the reason it never answered, and nothing else owns it. */
+    await handle.terminate().catch(() => undefined);
+    throw error;
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
   return handle;
 }
 
@@ -188,7 +214,7 @@ export async function createRenderSlot(
 ): Promise<RenderSlot> {
   let generation = 0;
   let renders = 0;
-  let worker = await startWorker(workers);
+  let worker = await startWorker(workers, limits.workerStartTimeoutMs);
   let browser = await browsers.create();
   let closed = false;
   /**
@@ -216,7 +242,7 @@ export async function createRenderSlot(
       await browser.close();
       browser = await browsers.create();
     }
-    worker = await startWorker(workers);
+    worker = await startWorker(workers, limits.workerStartTimeoutMs);
   };
 
   /** Releases everything this slot still owns, whatever state its rebuild reached. */

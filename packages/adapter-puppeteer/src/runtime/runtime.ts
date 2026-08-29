@@ -136,10 +136,15 @@ function puppeteerBrowsers(
             controller.abort();
             throw error;
           }
-          const session = await openContextSession(browser, resources, {
-            images: broker,
-            limits,
-          });
+          let session: PdfRenderSession;
+          try {
+            session = await openContextSession(browser, resources, { images: broker, limits });
+          } catch (error) {
+            /* Nothing will call `close()` on a session that was never returned, and a resource
+               still in flight belongs to this render and to nothing else. */
+            controller.abort();
+            throw error;
+          }
           return {
             resolveImages: session.resolveImages.bind(session),
             measure: session.measure.bind(session),
@@ -230,6 +235,7 @@ export async function createPuppeteerRenderRuntime(
     queueTimeoutMs: limits.queueTimeoutMs,
     renderTimeoutMs: limits.renderTimeoutMs,
     maxRendersPerWorker: limits.maxRendersPerWorker,
+    workerStartTimeoutMs: limits.workerStartTimeoutMs,
   });
 
   const transport = {

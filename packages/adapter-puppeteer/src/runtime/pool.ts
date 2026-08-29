@@ -35,6 +35,7 @@ export interface PoolLimits {
   readonly queueTimeoutMs: number;
   readonly renderTimeoutMs: number;
   readonly maxRendersPerWorker: number;
+  readonly workerStartTimeoutMs: number;
 }
 
 /** A task submitted to the pool. */
@@ -116,6 +117,7 @@ export async function createRenderPool(
         await createRenderSlot(workers, browsers, {
           renderTimeoutMs: limits.renderTimeoutMs,
           maxRendersPerWorker: limits.maxRendersPerWorker,
+          workerStartTimeoutMs: limits.workerStartTimeoutMs,
         }),
       );
     }

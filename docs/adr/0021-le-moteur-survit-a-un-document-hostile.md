@@ -91,6 +91,7 @@ pas.
 | attente en file | 5 s | 10 min |
 | rendu actif | 30 s | 10 min |
 | arrêt / remplacement | 5 s | 10 min |
+| démarrage d'un worker | 5 s | 10 min |
 | vieux tas V8 du worker | 256 Mio | 2 560 Mio |
 | pile du worker | 4 Mio | 40 Mio |
 | rendus par worker | 100 | 1 000 |
@@ -254,6 +255,10 @@ concurrent : l'appelant possède déjà `AbortSignal` pour annuler une tâche.
    lancé, et ce découpage est ce qui rend la mesure possible.
 6. **Le port de pagination durci ne prétend pas `RenderPort`.** `ProtectedPaginationPort` étend
    `PaginationPort`, qui n'a pas de champ `format`.
+7. **Le démarrage d'un worker est borné, ce que le plan n'avait pas prévu.** Tous les autres délais
+   du lot bornent un rendu ; un thread qui se bloque *avant* d'annoncer `ready` faisait pendre la
+   création du runtime elle-même, sans limite. `workerStartTimeoutMs` ferme ce dernier chemin non
+   borné, et le thread est terminé plutôt qu'attendu.
 
 ---
 

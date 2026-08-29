@@ -64,9 +64,9 @@ export function readAnswer(answer: {
   return {
     status: answer.statusCode ?? 0,
     location: headerValue(answer.headers.location),
-    /* A length that is absent, empty or not a number is simply no claim at all: the chunks are
-       counted either way. */
-    contentLength: Number.isFinite(parsed) ? parsed : undefined,
+    /* A length that is absent, empty, negative or not a number at all is simply no claim: the
+       chunks are counted either way, and a negative one would pass a ceiling by being under it. */
+    contentLength: Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined,
     body: answer.body,
   };
 }

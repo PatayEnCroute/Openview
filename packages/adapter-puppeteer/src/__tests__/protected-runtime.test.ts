@@ -206,12 +206,13 @@ describe('the hardened runtime against a real browser', () => {
   );
 
   it(
-    'refuses an unparsable template through the hardened admission, and survives it',
+    'refuses a data set that is not json, and survives it',
     async () => {
       const runtime = await hardened();
       try {
-        const broken = parseTemplate({ ...JSON.parse(JSON.stringify(DOCUMENT)), id: 'ok' });
-        await runtime.pdf.render({ template: broken, data: DATA });
+        /* One valid render first, so the refusal that follows is unmistakably the data set's. */
+        const renamed = parseTemplate({ ...JSON.parse(JSON.stringify(DOCUMENT)), id: 'ok' });
+        await runtime.pdf.render({ template: renamed, data: DATA });
         const refused = await refusalOf(
           runtime.pdf.render({
             template: DOCUMENT,

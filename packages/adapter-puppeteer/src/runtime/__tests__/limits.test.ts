@@ -37,12 +37,14 @@ describe('the bounds a hardened runtime lives under', () => {
   });
 
   it('accept each hard ceiling exactly and refuse one past it', () => {
-    expect(resolveRuntimeLimits({ slots: RUNTIME_HARD_CEILINGS.slots }).slots).toBe(
-      RUNTIME_HARD_CEILINGS.slots,
-    );
-    expect(refusalOf({ slots: RUNTIME_HARD_CEILINGS.slots + 1 })).toBeInstanceOf(
-      InvalidProtectedConfigurationError,
-    );
+    /* Every bound, not one of them: a ceiling nobody exercises is a ceiling that can be mistyped
+       in the schema and never noticed. */
+    const ceilings = Object.entries(RUNTIME_HARD_CEILINGS);
+    expect(ceilings.length).toBeGreaterThan(1);
+    for (const [name, ceiling] of ceilings) {
+      expect(resolveRuntimeLimits({ [name]: ceiling })).toHaveProperty(name, ceiling);
+      expect(refusalOf({ [name]: ceiling + 1 })).toBeInstanceOf(InvalidProtectedConfigurationError);
+    }
   });
 
   it('refuse zero slots, a fraction, a NaN and an infinity', () => {

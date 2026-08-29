@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { boundedBy, resolveBounds } from '../bounds.js';
 import { InvalidProtectedConfigurationError } from './errors.js';
 import {
   DEFAULT_RESOURCE_LIMITS,
@@ -15,13 +16,6 @@ const INVALID_LIMITS =
 const INVALID_MANIFEST =
   'The image manifest is not usable. Every entry names one exact source with its media type and its expected sha-256; an origin, a wildcard, a duplicate source or a digest of the wrong shape is refused.';
 
-const bounded = (ceiling: number): z.ZodType<number> =>
-  z
-    .number()
-    .int('A protection limit must be a whole number')
-    .min(1, 'A protection limit may not go below 1')
-    .max(ceiling, `A protection limit may not exceed ${ceiling}`);
-
 const digest = z
   .string()
   .regex(/^[0-9a-f]{64}$/, 'A sha-256 is sixty-four lowercase hexadecimal digits');
@@ -31,16 +25,16 @@ const mediaType = z.enum(PROTECTED_MEDIA_TYPES);
 /** Validation of the resource ceilings, refusing unknown keys rather than dropping them. */
 export const ProtectedResourceLimitsSchema: z.ZodType<ProtectedResourceLimits> = z
   .strictObject({
-    maxDistinctImages: bounded(RESOURCE_HARD_CEILINGS.maxDistinctImages),
-    maxSourceLength: bounded(RESOURCE_HARD_CEILINGS.maxSourceLength),
-    maxImageBytes: bounded(RESOURCE_HARD_CEILINGS.maxImageBytes),
-    maxTotalImageBytes: bounded(RESOURCE_HARD_CEILINGS.maxTotalImageBytes),
-    maxImagePixels: bounded(RESOURCE_HARD_CEILINGS.maxImagePixels),
-    maxTotalImagePixels: bounded(RESOURCE_HARD_CEILINGS.maxTotalImagePixels),
-    resourceTimeoutMs: bounded(RESOURCE_HARD_CEILINGS.resourceTimeoutMs),
-    maxRedirects: bounded(RESOURCE_HARD_CEILINGS.maxRedirects),
-    maxRawPdfBytes: bounded(RESOURCE_HARD_CEILINGS.maxRawPdfBytes),
-    maxCanonicalPdfBytes: bounded(RESOURCE_HARD_CEILINGS.maxCanonicalPdfBytes),
+    maxDistinctImages: boundedBy(RESOURCE_HARD_CEILINGS.maxDistinctImages),
+    maxSourceLength: boundedBy(RESOURCE_HARD_CEILINGS.maxSourceLength),
+    maxImageBytes: boundedBy(RESOURCE_HARD_CEILINGS.maxImageBytes),
+    maxTotalImageBytes: boundedBy(RESOURCE_HARD_CEILINGS.maxTotalImageBytes),
+    maxImagePixels: boundedBy(RESOURCE_HARD_CEILINGS.maxImagePixels),
+    maxTotalImagePixels: boundedBy(RESOURCE_HARD_CEILINGS.maxTotalImagePixels),
+    resourceTimeoutMs: boundedBy(RESOURCE_HARD_CEILINGS.resourceTimeoutMs),
+    maxRedirects: boundedBy(RESOURCE_HARD_CEILINGS.maxRedirects),
+    maxRawPdfBytes: boundedBy(RESOURCE_HARD_CEILINGS.maxRawPdfBytes),
+    maxCanonicalPdfBytes: boundedBy(RESOURCE_HARD_CEILINGS.maxCanonicalPdfBytes),
   })
   .readonly();
 
@@ -79,20 +73,12 @@ export const ProtectedImageManifestSchema: z.ZodType<ProtectedImageManifest> = z
 export function resolveResourceLimits(
   overrides?: ProtectedResourceLimitsOverrides | undefined,
 ): ProtectedResourceLimits {
-  if (overrides === undefined) {
-    return DEFAULT_RESOURCE_LIMITS;
-  }
-  const filled: Record<string, unknown> = { ...DEFAULT_RESOURCE_LIMITS };
-  for (const [key, value] of Object.entries(overrides)) {
-    if (value !== undefined) {
-      filled[key] = value;
-    }
-  }
-  const parsed = ProtectedResourceLimitsSchema.safeParse(filled);
-  if (!parsed.success) {
-    throw new InvalidProtectedConfigurationError(INVALID_LIMITS, { cause: parsed.error });
-  }
-  return parsed.data;
+  return resolveBounds(
+    DEFAULT_RESOURCE_LIMITS,
+    ProtectedResourceLimitsSchema,
+    overrides,
+    INVALID_LIMITS,
+  );
 }
 
 /**

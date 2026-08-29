@@ -8,7 +8,7 @@ import {
   type ResolvedDocumentImage,
 } from '@openview/engine';
 import type { Browser, BrowserContext, Page } from 'puppeteer';
-import { launchBrowser, type PuppeteerLaunchOptions } from './browser.js';
+import { closeBrowser, launchBrowser, type PuppeteerLaunchOptions } from './browser.js';
 import { canonicalizePdf } from './canonicalize-pdf.js';
 import { assertHonouredSheet } from './capability.js';
 import { deriveMeasurement } from './derive.js';
@@ -34,6 +34,15 @@ export const PDF_OPTIONS = {
 
 const FONT_NOT_LOADED =
   'A face the document embeds did not load in the browser, so the layout would have been measured in whatever font the machine offers instead. Read `details.limit` for how many faces the document declared.';
+
+/**
+ * Wall-clock the direct path gives a browser to close before it kills it.
+ *
+ * The hardened runtime lets a host configure this; the direct path has no configuration to hang it
+ * on, and a shutdown that never answers is worse than an arbitrary five seconds: it leaves a
+ * Chromium, its sockets and its profile directory alive for as long as the host runs.
+ */
+const DIRECT_SHUTDOWN_MS = 5_000;
 
 const AFTER_CLOSE =
   'This layout session is closed. A session belongs to one render, and reopening a browser mid-render would measure a document in one environment and print it in another.';
@@ -209,7 +218,7 @@ export async function openPuppeteerSession(
   try {
     session = await openContextSession(browser, resources, { images: embeddedImagePolicy() });
   } catch (error) {
-    await browser.close();
+    await closeBrowser(browser, DIRECT_SHUTDOWN_MS);
     throw error;
   }
   return {
@@ -220,7 +229,7 @@ export async function openPuppeteerSession(
       try {
         await session.close();
       } finally {
-        await browser.close();
+        await closeBrowser(browser, DIRECT_SHUTDOWN_MS);
       }
     },
   };

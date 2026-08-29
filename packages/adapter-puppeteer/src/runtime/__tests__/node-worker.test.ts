@@ -2,6 +2,7 @@ import { parseTemplate, type RenderRequest } from '@openview/core';
 import { DocumentRenderError } from '@openview/engine';
 import { describe, expect, it } from 'vitest';
 import { createNodeWorkerFactory, WORKER_ENTRY } from '../node-worker.js';
+import { WORKER_PROTOCOL_VERSION } from '../protocol.js';
 import { createPuppeteerRenderRuntime, type PuppeteerRenderRuntime } from '../runtime.js';
 import { fakeBrowsers, SMALL_DATA, SMALL_TEMPLATE } from './fixtures.js';
 
@@ -16,6 +17,13 @@ const BUILT_ENTRY = new URL('../../../dist/runtime/worker.js', import.meta.url);
 
 /** A fixture thread that answers once and then never yields to its event loop again. */
 const BLOCKED_ENTRY = new URL('./blocked-worker.mjs', import.meta.url);
+
+/*
+ * The fixture writes its `formatVersion` as a literal, because a `.mjs` outside the build cannot
+ * import the constant. A protocol bump would make the parent ignore its `ready`, and the timeout
+ * test would still pass -- for the wrong reason. This is what fails instead.
+ */
+expect(WORKER_PROTOCOL_VERSION).toBe(1);
 
 const request = (): RenderRequest => ({
   template: parseTemplate(SMALL_TEMPLATE),

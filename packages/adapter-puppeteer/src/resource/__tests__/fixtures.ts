@@ -66,6 +66,8 @@ export function webpLosslessHeader(width: number, height: number): Uint8Array {
   ascii('RIFF', 0);
   ascii('WEBP', 8);
   ascii('VP8L', 12);
+  /* The signature byte a real lossless frame opens on, so this fixture is one. */
+  bytes[20] = 0x2f;
   const packed = (width - 1) | ((height - 1) << 14);
   new DataView(bytes.buffer).setUint32(21, packed >>> 0, true);
   return bytes;

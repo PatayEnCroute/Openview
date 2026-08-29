@@ -6,7 +6,11 @@ import type { SlotLimits, SlotTask, WorkerHandle } from '../slot.js';
 import { createRenderSlot } from '../slot.js';
 import { fakeBrowsers, fakeWorkers, SMALL_DATA, SMALL_TEMPLATE } from './fixtures.js';
 
-const LIMITS: SlotLimits = { renderTimeoutMs: 400, maxRendersPerWorker: 100 };
+const LIMITS: SlotLimits = {
+  renderTimeoutMs: 400,
+  maxRendersPerWorker: 100,
+  workerStartTimeoutMs: 5_000,
+};
 
 const job = (): SlotTask => ({
   renderId: 'r1',
@@ -63,6 +67,7 @@ describe('what a slot recycles, and when', () => {
     const slot = await createRenderSlot(workers.factory, browsers.factory, {
       renderTimeoutMs: 2_000,
       maxRendersPerWorker: 2,
+      workerStartTimeoutMs: 5_000,
     });
     try {
       await slot.run(job());
@@ -144,6 +149,7 @@ describe('an operation on a session that was never opened', () => {
     const slot = await createRenderSlot(rogue, browsers.factory, {
       renderTimeoutMs: 200,
       maxRendersPerWorker: 100,
+      workerStartTimeoutMs: 5_000,
     });
     try {
       await refusalOf(slot.run(job()));
@@ -165,6 +171,7 @@ describe('the resources a session is opened on', () => {
     const slot = await createRenderSlot(workers.factory, browsers.factory, {
       renderTimeoutMs: 2_000,
       maxRendersPerWorker: 100,
+      workerStartTimeoutMs: 5_000,
     });
     try {
       await slot.run(job());
@@ -214,6 +221,7 @@ describe('a deadline that beats the opening of a context', () => {
       /* Short enough that the deadline lands while the context is still being opened. */
       renderTimeoutMs: 1,
       maxRendersPerWorker: 100,
+      workerStartTimeoutMs: 5_000,
     });
     try {
       expect((await refusalOf(slot.run(job()))).code).toBe('render-timeout');
@@ -242,6 +250,7 @@ describe('a slot whose worker cannot be rebuilt', () => {
     const slot = await createRenderSlot(once, browsers.factory, {
       renderTimeoutMs: 40,
       maxRendersPerWorker: 100,
+      workerStartTimeoutMs: 5_000,
     });
     expect((await refusalOf(slot.run(job()))).code).toBe('render-timeout');
     /* A slot that cannot be rebuilt is not capacity: it says so rather than pretending. */
@@ -282,6 +291,7 @@ describe('a worker that calls out after its round has ended', () => {
     const slot = await createRenderSlot(late, browsers.factory, {
       renderTimeoutMs: 20,
       maxRendersPerWorker: 100,
+      workerStartTimeoutMs: 5_000,
     });
     try {
       const refused = await refusalOf(slot.run(job()));
@@ -302,5 +312,37 @@ describe('a worker that calls out after its round has ended', () => {
     } finally {
       await slot.close();
     }
+  });
+});
+
+describe('a worker that never announces itself', () => {
+  it('is terminated at the start deadline rather than waited on for ever', async () => {
+    /* Every other bound of this package is a deadline; a thread that blocks in its entry module
+       would otherwise hang the creation of the whole runtime with nothing to stop it. */
+    const browsers = fakeBrowsers();
+    let terminated = 0;
+    const silent = {
+      create: (): Promise<WorkerHandle> =>
+        Promise.resolve({
+          post: () => undefined,
+          listen: () => undefined,
+          terminate: () => {
+            terminated += 1;
+            return Promise.resolve();
+          },
+        }),
+    };
+    const refused = await createRenderSlot(silent, browsers.factory, {
+      renderTimeoutMs: 5_000,
+      maxRendersPerWorker: 100,
+      workerStartTimeoutMs: 30,
+    }).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(DocumentRenderError);
+    if (refused instanceof DocumentRenderError) {
+      expect(refused.code).toBe('render-worker-failed');
+      expect(refused.details.limit).toBe(30);
+    }
+    /* The thread exists whatever the reason it never answered, and nothing else owns it. */
+    expect(terminated).toBe(1);
   });
 });
