@@ -296,7 +296,7 @@ donne dix fichiers identiques octet pour octet.
 > dix fois les deux apparences ; le comparateur exige treize champs de profil identiques **avant**
 > de lire une empreinte, puis constate **une seule empreinte par document** sur les vingt rendus.
 
-### E7. Le lot de documents figés de non-régression
+### E7. Le lot de documents figés de non-régression ✅
 
 **Pourquoi.** C'est l'outil qui rend la suite tenable en solo à temps partiel : un
 petit ensemble de documents figés auxquels toute évolution est comparée. Le premier
@@ -324,8 +324,7 @@ automatiquement, en désignant la facture et la page concernées.
 > et n'est typée par rien : si la représentation intermédiaire du moteur change, c'est
 > l'adaptateur de test E7 qui évolue, jamais le document stocké.
 
-> 🟡 **Harnais livré le 2026-08-29, corpus en attente d'amorçage** —
-> [ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md).
+> ✅ **Livré le 2026-08-29** — [ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md).
 > Six scénarios fermés et énumérés (`tools/golden/corpus.mjs`), 21 pages, dont le témoin
 > historique v1 que `parseTemplate` migre et que le moteur rend enfin. Quatre oracles : le PDF
 > complet comparé **octet par octet**, un PDF mono-page dérivé par rang, le certificat de
@@ -335,11 +334,11 @@ automatiquement, en désignant la facture et la page concernées.
 > Vérifier et accepter sont deux commandes sans chemin commun, et aucun workflow n'appelle
 > l'acceptation.
 >
-> **Ce qui manque pour dire « livré » :** les six PDF eux-mêmes. Un golden n'est une référence que
-> produit sous le profil officiel `ubuntu-24.04` / Node 24.11.1 ; le job `Frozen Documents (E7)`
-> est donc rouge et publie son candidat pendant sept jours, le temps qu'un humain relise les 21
-> pages et exécute l'acceptation. Le mode d'emploi est dans
-> [`tests/golden/e7/references/README.md`](../../tests/golden/e7/references/README.md).
+> **Le corpus est amorcé.** Les six PDF et leur manifeste, produits sous le profil officiel
+> `ubuntu-24.04` / Node 24.11.1 puis acceptés, sont committés dans
+> [`tests/golden/e7/references/`](../../tests/golden/e7/references/). Le job `Frozen Documents (E7)`
+> les rejoue à chaque run dans un workspace propre : c'est ce run-là, et pas l'acceptation, qui est
+> la preuve.
 >
 > **Deux mutations que le corpus ne tue pas, et c'est écrit** : un `keepTogether` ignoré et un
 > report entrant décalé d'un fragment produisent des documents identiques, parce qu'aucun des six
