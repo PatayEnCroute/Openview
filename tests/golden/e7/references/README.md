@@ -4,17 +4,19 @@ Ce dossier contient le lot de non-régression : `manifest.json` et un PDF canoni
 registre `tools/golden/corpus.mjs`. Ce sont les documents exacts qu'un client recevait, et la
 mémoire à laquelle toute évolution du rendu est comparée.
 
-## Ce dossier est vide tant que le lot n'a pas été produit puis approuvé
+## Un golden ne vient que du profil officiel
 
 Un golden n'est une référence que s'il a été produit **sous le profil officiel** : `ubuntu-24.04`,
 Node `24.11.1`, le Chromium téléchargé par Puppeteer, `--no-sandbox`. Un PDF rendu sur une autre
 machine attesterait un autre ICU et un autre moteur de mise en page ; le comparateur le refuserait,
 et l'accepter transformerait le premier filet de sécurité du projet en générateur de bruit.
 
-Tant que le lot n'est pas là, le job `golden-corpus` de la CI est **rouge** et publie son candidat
-Ubuntu comme artefact pendant sept jours. C'est le chemin d'amorçage prévu, pas une panne.
+Le lot est là depuis le 2026-08-29 : six PDF et leur manifeste, produits par le runner officiel.
+Tant qu'une référence attendue manque, le job E7 de la CI est **rouge** et publie son candidat
+Ubuntu comme artefact pendant sept jours — c'était le chemin d'amorçage, c'est désormais celui de
+toute évolution volontaire du rendu.
 
-## Amorçage et acceptation
+## Accepter une nouvelle version du lot
 
 1. Télécharger l'artefact `golden-candidate` du job E7.
 2. Vérifier son `manifest.json` : profil, versions du harnais, longueurs, empreintes, pages.

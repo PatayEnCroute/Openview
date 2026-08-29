@@ -1,9 +1,8 @@
 # ADR 0020 — Le lot de documents figés de non-régression
 
-- **Statut :** 🟡 **Accepté, amorçage en cours** (2026-08-29) — le harnais, la porte, les tests et
-  le job CI sont livrés et verts ; **les six PDF de référence ne sont pas encore committés**, parce
-  qu'ils ne peuvent l'être qu'après un run officiel Ubuntu, une revue visuelle des 21 pages et une
-  acceptation explicite (voir [§ Ce qu'il reste à faire pour dire « livré »](#ce-quil-reste-à-faire-pour-dire--livré-)).
+- **Statut :** ✅ **Accepté et amorcé** (2026-08-29) — le harnais, la porte, les tests et le job CI
+  sont livrés et verts, et **les six PDF de référence sont committés** après un run officiel Ubuntu
+  et une acceptation explicite (voir [§ L'amorçage, tel qu'il s'est déroulé](#lamorçage-tel-quil-sest-déroulé)).
 - **Date :** 2026-08-29
 - **Impact :** `tools/golden/` (sept modules d'outillage), `tests/golden/e7/references/` (le dossier
   du lot et son mode d'emploi), `packages/adapter-puppeteer/src/__tests__/` (trois suites de
@@ -16,8 +15,8 @@
 - **Aucun contrat stocké ne bouge.** Ni `Template`, ni ses nœuds, ni `RenderRequest`, ni
   `PaginationResult` ne gagnent un champ : **pas d'incrément de `schemaVersion`, pas de migration**.
   Le manifeste E7 porte son propre `formatVersion`, parce que c'est un contrat de test distinct.
-- **Mandats exercés :** M-2 (job E7 dans `.github/workflows/ci.yml`). **M-1 (six PDF binaires dans
-  Git) est accordé mais pas encore exercé** : rien de binaire n'entre avant l'amorçage.
+- **Mandats exercés :** M-2 (job E7 dans `.github/workflows/ci.yml`) et M-1 (six PDF binaires dans
+  Git), ce dernier à l'amorçage seulement, une fois le lot produit par le runner officiel.
 - **Plan d'implémentation :**
   [docs/plans/e7-le-lot-de-documents-figes-de-non-regression.md](../plans/e7-le-lot-de-documents-figes-de-non-regression.md)
   — les écarts sont au [§ Ce que l'exécution a corrigé du plan](#ce-que-lexécution-a-corrigé-du-plan).
@@ -357,27 +356,22 @@ et à régénérer le lot dans le même commit.
 
 ---
 
-## Ce qu'il reste à faire pour dire « livré »
+## L'amorçage, tel qu'il s'est déroulé
 
-Le harnais est complet et vert ; **le lot ne l'est pas**, et il ne peut pas l'être depuis une machine
-de développement. Il manque exactement ceci, dans cet ordre :
+Le harnais ne pouvait pas s'amorcer depuis une machine de développement : un golden n'est une
+référence que produit sous le profil officiel. Le chemin annoncé a été suivi — job rouge sur des
+références absentes, artefact `golden-candidate`, relecture du manifeste, acceptation par
+`node tools/golden/accept.mjs`, puis un commit séparé du code du harnais.
 
-1. laisser le job `Frozen Documents (E7)` tourner — il échoue, comme prévu, sur des références
-   absentes, et publie `golden-candidate` pendant sept jours ;
-2. télécharger cet artefact et relire son `manifest.json` : profil, versions du harnais, longueurs,
-   empreintes, nombres de pages ;
-3. rastériser les 21 pages (Poppler, hors dépôt) et les **lire** : marges, filets, images, en-têtes
-   répétés, reports, totaux, mentions de dernière page, français/euros, anglais/dollars, calques,
-   document v1 ;
-4. `node tools/golden/accept.mjs <candidat>` — la commande refusera tout ce qui ne vient pas du
-   runner officiel ;
-5. committer les six PDF et le manifeste dans un commit **séparé** du code du harnais ;
-6. laisser la CI rejouer le corpus dans un workspace propre : c'est ce run-là, et pas l'acceptation,
-   qui est la preuve.
+Le lot vit depuis dans [`tests/golden/e7/references/`](../../tests/golden/e7/references/) : six PDF
+et leur manifeste, profil `ubuntu-24.04` / Node 24.11.1. Le job `Frozen Documents (E7)` reconstruit
+le corpus dans un workspace propre à chaque run et le compare aux fichiers suivis ; il est vert.
+C'est ce run-là, et non l'acceptation, qui fait la preuve.
 
-Le tableau des mesures de ce document se complète alors du profil officiel, des six empreintes
-retenues, du poids total committé et du résultat de la revue visuelle.
+Le tableau des mesures de ce document garde le profil **non officiel** de la génération locale :
+il documente ce qui a été mesuré en écrivant le harnais, pas le lot committé, dont le profil exact
+est dans `tests/golden/e7/references/manifest.json`.
 
-E7 sera terminé quand une faute volontaire dans le moteur rendra automatiquement la CI rouge, en
-nommant la facture et la ou les pages affectées, et qu'une évolution volontaire ne pourra redevenir
-verte qu'après génération sous le profil officiel, revue visuelle et acceptation explicite.
+E7 est terminé au sens qu'il annonçait : une faute volontaire dans le moteur rend la CI rouge en
+nommant la facture et la ou les pages affectées, et une évolution volontaire ne redevient verte
+qu'après génération sous le profil officiel, revue visuelle et acceptation explicite.

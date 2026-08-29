@@ -1,7 +1,8 @@
 # Plan d'implémentation — `@openview/engine` lot E9 : la documentation du moteur
 
 > **Statut :** plan prêt à exécuter, **sans mandat** — 2026-08-29
-> **Lot :** E9 — poids S annoncé, **S confirmé** si les exclusions du §2.2 restent fermées
+> **Lot :** E9 — poids S annoncé, **M retenu** : seize pages, une porte outillée et une répétition
+> à froid dépassent un lot S, même avec les exclusions du §2.2 fermées
 > **Dépend de :** E7 selon la roadmap ; baseline réelle E1 à E8
 > **Condition de :** J7 (publication groupée)
 > **Décision d'exécution attendue :** ADR 0022
@@ -10,10 +11,11 @@ E9 écrit la documentation d'usage du moteur, **en français et en anglais**, po
 qui ne connaît pas le projet. Elle tient deux promesses et pas une de plus : **obtenir un PDF en
 une dizaine de lignes**, et **comprendre chaque refus** que le moteur peut opposer.
 
-Deux paquets sont documentés ensemble, parce qu'ils ne servent à rien séparément :
-`@openview/engine` décide de la mise en page, `@openview/adapter-puppeteer` imprime. Un lecteur
-qui installe le premier seul n'obtient aucun document, et c'est délibéré
-([AGENTS.md §3.C](../../AGENTS.md)).
+Le chemin de référence documente ensemble `@openview/engine`, qui décide de la mise en page, et
+`@openview/adapter-puppeteer`, qui imprime avec Chromium. Le moteur reste indépendant de cet
+adaptateur : un autre `PdfRenderStrategy` peut le remplacer. Le démarrage installe aussi
+`@openview/core`, parce que son `parseTemplate()` valide le modèle stocké ; documenter tout le
+contrat de modèle reste hors d'E9 ([AGENTS.md §3.C](../../AGENTS.md)).
 
 E9 n'écrit **aucune ligne de production**. Il n'ajoute ni option, ni export, ni message d'erreur :
 si une page ne peut pas être écrite sans changer le code, c'est le code qui a un défaut, et ce
@@ -36,23 +38,27 @@ import { INVOICE_DATA } from './invoice-data.js';
 
 export async function renderFirstInvoice(templatePath: string, outputPath: string): Promise<void> {
   const stored: unknown = JSON.parse(await readFile(templatePath, 'utf8'));
-  const port = createPdfRenderPort(createPuppeteerPdfStrategy(), {
+  const { bytes } = await createPdfRenderPort(createPuppeteerPdfStrategy(), {
     presentationSelection: { amount: 'fr-eur' },
-  });
-  const { bytes } = await port.render({ template: parseTemplate(stored), data: INVOICE_DATA });
+  }).render({ template: parseTemplate(stored), data: INVOICE_DATA });
   await writeFile(outputPath, bytes);
+}
+
+if (process.argv[1] === import.meta.filename) {
+  await renderFirstInvoice('./invoice.template.json', './invoice.pdf');
 }
 ```
 
-Onze lignes, imports compris : « dix lignes » est la formule de la roadmap, le budget exécutoire
-est de **quinze lignes au plus**. Trois détails de cet extrait sont des décisions, pas des
-accidents, et la page les explique en une phrase chacun :
+Quinze lignes non vides, appel compris : « dix lignes » est la formule de la roadmap, et
+**quinze lignes au plus** est le budget exécutoire. Trois détails de cet extrait sont des décisions,
+pas des accidents, et la page les explique en une phrase chacun :
 
 - `stored: unknown` — `JSON.parse` rend `any`, et le renommer `unknown` est la seule façon
   d'atteindre `parseTemplate` sans écrire un cast que ce dépôt interdit
   ([AGENTS.md §1.1](../../AGENTS.md)) ;
 - `presentationSelection` — sans elle, le premier montant formaté rend `presentation-refused`.
-  C'est le refus n° 1 d'un premier essai : il est dans l'extrait, pas dans une note de bas de page ;
+  C'est le refus le plus probable d'un premier essai : il est dans l'extrait, pas dans une note de
+  bas de page ;
 - `data: INVOICE_DATA` — le jeu de données est **typé chez l'appelant** et jamais reparsé par
   Openview : sa forme ne nous appartient pas
   ([ADR 0015](../adr/0015-le-catalogue-de-donnees-de-l-integrateur.md)).
@@ -65,12 +71,14 @@ Ce lot le remplace par une **répétition à froid**, jouable aujourd'hui, décr
 
 ```text
 pnpm pack des trois paquets  →  installation des .tgz dans un dossier vide hors du dépôt  →
-la page 01 suivie à la lettre, sans ouvrir une ligne de source  →  un PDF valide sort
+la page 01 suivie après son unique substitution prépublication  →  un PDF valide sort
 ```
 
-Un participant obligé d'ouvrir un fichier de `packages/` pour avancer fait échouer la répétition.
-C'est le seul critère qui prouve la promesse ; tout le reste empêche la documentation de pourrir,
-sans prouver qu'elle sert.
+L'unique substitution est écrite : la commande publique `npm install @openview/…` est remplacée par
+l'installation des trois `.tgz`, puisque le registre est vide avant J7. Tout le reste est suivi à la
+lettre. Un participant obligé d'ouvrir un fichier de `packages/` pour avancer fait échouer la
+répétition. C'est le seul critère qui prouve la promesse ; tout le reste empêche la documentation de
+pourrir, sans prouver qu'elle sert.
 
 ### 0.3 Ce que cette documentation n'est pas
 
@@ -100,7 +108,9 @@ sans prouver qu'elle sert.
   ce qui est garanti, et surtout ce qui ne l'est pas ;
 - le code publié : [`packages/engine/src/index.ts`](../../packages/engine/src/index.ts),
   [`packages/adapter-puppeteer/src/index.ts`](../../packages/adapter-puppeteer/src/index.ts),
-  [`packages/engine/src/errors.ts`](../../packages/engine/src/errors.ts).
+  [`packages/core/src/index.ts`](../../packages/core/src/index.ts),
+  [`packages/engine/src/errors.ts`](../../packages/engine/src/errors.ts) et
+  [`packages/adapter-puppeteer/src/resource/errors.ts`](../../packages/adapter-puppeteer/src/resource/errors.ts).
 
 ### 1.2 Ce que le dépôt livre déjà
 
@@ -116,8 +126,8 @@ sans prouver qu'elle sert.
 
 ### 1.3 Les sept écarts à combler
 
-1. **Aucun paquet n'a de README.** `engine` et `adapter-puppeteer` n'exposent que `LICENSE` et
-   `NOTICE` : une page npm serait vide.
+1. **Aucun paquet n'a de README.** `engine` n'expose que `LICENSE` et `NOTICE`, l'adaptateur seulement
+   `LICENSE` : leurs pages npm seraient vides.
 2. **Aucune documentation en anglais** n'existe dans le dépôt, alors que la publication est
    open-source et que l'anglais est la langue d'un intégrateur inconnu.
 3. **Aucun exemple installable** : le seul modèle complet vit dans le playground
@@ -145,6 +155,7 @@ sans prouver qu'elle sert.
 | Le chemin direct fuit-il un navigateur ? | non : une session par rendu, fermée par le pipeline | la page 01 n'apprend aucun `close()` inutile |
 | npm publie-t-il un README absent de `files` ? | **oui, et `README.fr.md` aussi** — sonde jetable : `files: ["dist","LICENSE"]`, `npm pack --dry-run` embarque `README.md` **et** `README.fr.md`, mais pas `NOTICE` | **aucun mandat** : les deux langues partent dans le paquet sans qu'un `package.json` soit ouvert |
 | Un module de `src/__tests__/` part-il dans le tarball ? | non : `files` porte `!dist/**/__tests__/**` | le module d'exemple y vit sans être publié |
+| Quelle commande produit les tarballs de la répétition à froid ? | **`pnpm pack`** réécrit les dépendances `workspace:*` vers `0.1.0` ; `npm pack` les conserve telles quelles | `npm pack --dry-run` reste la vérité de la surface publiée, mais seuls les `.tgz` de `pnpm pack` sont installés hors du monorepo |
 
 ---
 
@@ -189,6 +200,8 @@ sans prouver qu'elle sert.
 
 Trois contraintes de forme complètent le budget, toutes vérifiées : **largeur de ligne ≤ 100**
 (celle de Biome, [`biome.jsonc`](../../biome.jsonc)), **profondeur de titre ≤ 3**, **un seul H1**.
+Les plafonds sont des maxima, pas une cible de remplissage ; le volume maximal, les deux langues,
+la porte et la répétition à froid justifient la réestimation M portée en tête du plan.
 
 ### 2.4 Aucun contrat, aucun code de production ne bouge
 
@@ -232,14 +245,16 @@ montée de npm peut changer cette règle en silence.
 ### D1 — Un seul guide pour deux paquets
 
 Le lecteur ne cherche pas « la doc de l'adaptateur » : il cherche un PDF. Le guide est celui du
-moteur ; le README de l'adaptateur dit ce qu'il est, ce qu'il télécharge, et renvoie.
+moteur ; le README de l'adaptateur dit ce qu'il est, ce qu'il télécharge, et renvoie. `core` reste
+un prérequis d'installation pour `parseTemplate()`, pas une troisième référence d'API cachée ici.
 
-### D2 — L'anglais est publié, le français est du dépôt, aucun des deux n'est généré
+### D2 — L'anglais est la page d'entrée, le français est aussi embarqué, rien n'est généré
 
-`README.md` est en anglais parce que c'est ce que voit un inconnu sur npm et sur GitHub.
-`README.fr.md` est son jumeau. Les deux sont **écrits**, jamais traduits automatiquement : une
-traduction générée vieillit sans que personne ne la relise, et ce dépôt n'a pas de relecteur de
-plus. Ce qui est vérifié par une machine, c'est leur **structure**, pas leur sens (§7.2).
+`README.md` est en anglais parce que c'est la page que voit un inconnu sur npm et sur GitHub.
+`README.fr.md` est son jumeau, présent dans le dépôt **et dans le tarball**. Les deux sont **écrits**,
+jamais traduits automatiquement : une traduction générée vieillit sans que personne ne la relise,
+et ce dépôt n'a pas de relecteur de plus. Ce qui est vérifié par une machine, c'est leur
+**structure**, pas leur sens (§7.3).
 
 ### D3 — Mêmes noms de fichiers dans les deux arbres
 
@@ -262,19 +277,22 @@ seul mécanisme de ce plan qui empêche la documentation de vieillir toute seule
 ### D6 — Les actifs d'exemple existent une fois, hors des arbres de langue
 
 `docs/engine/examples/invoice.template.json` est le modèle de démonstration : un document stocké,
-donc du JSON, donc langue-neutre. Le jeu de données, lui, est une **région TypeScript** du module
-d'exemple : il est typé chez l'appelant, et le montrer sous forme de fichier JSON à reparser
-apprendrait exactement le geste que l'ADR 0015 refuse.
+donc du JSON, donc langue-neutre. Le jeu de données vit dans `invoice-data.ts`, à côté du module
+d'exemple : il est typé chez l'appelant, importé et exécuté par P1. Le montrer sous forme de fichier
+JSON à reparser apprendrait exactement le geste que l'ADR 0015 refuse.
 
 ### D7 — La table des refus est fermée dans les deux sens
 
 Elle contient les 31 codes, ni plus ni moins. Un code ajouté plus tard sans sa ligne fait échouer
 la porte ; une ligne inventée aussi. C'est le même principe que le registre fermé d'E7.
 
-### D8 — Aucun chiffre de borne n'est recopié à la main
+### D8 — Aucun fait volatil n'est publié sans contrat de vérification
 
-Les plafonds publiés (250 000 objets, 100 pages, 32 Mio d'HTML, 64 Mio de PDF, 1 slot…) sont
-comparés aux constantes exportées. Le jour où un défaut change, la page qui l'annonce échoue.
+Les valeurs publiées restent écrites pour être lisibles, mais chacune porte une annotation de la
+source qui fait foi. Les tables de défauts sont comparées **dans les deux sens** aux trois objets
+exportés : même ensemble de clés et même valeur pour chaque clé. La version de schéma, les
+vocabulaires fermés, le profil de reproductibilité, les issues d'audit et les comptes du catalogue
+de polices suivent le même principe. Le jour où un contrat change, la page qui l'annonce échoue.
 
 ### D9 — Les réserves des ADR sont recopiées sans être adoucies
 
@@ -323,6 +341,7 @@ docs/engine/fr/…                               les six mêmes noms
 
 docs/engine/examples/invoice.template.json     le modèle de démonstration, langue-neutre
 
+packages/adapter-puppeteer/src/__tests__/documentation/invoice-data.ts   données appelant
 packages/adapter-puppeteer/src/__tests__/documentation/example.ts        régions citées
 packages/adapter-puppeteer/src/__tests__/documentation.test.ts           exécute et vérifie
 
@@ -348,7 +367,8 @@ vingt lignes. Chaque page se termine par un lien « suite ».
 1. une phrase : un moteur de rendu de documents embarquable, qui reçoit un modèle et un jeu de
    données et rend un PDF ;
 2. ce qu'il n'est pas : ni source de données, ni logiciel de gestion, ni moteur fiscal, ni horloge ;
-3. installation, en trois gestionnaires de paquets, avec la mention Node ≥ 24 ;
+3. installation de `core`, `engine` et `adapter-puppeteer`, en trois gestionnaires de paquets, avec
+   la mention Node ≥ 24 ;
 4. l'extrait du §0.1 ;
 5. **« Il vous faut aussi un imprimeur »** : `@openview/adapter-puppeteer`, et pourquoi il est un
    paquet séparé (Chromium, 150–300 Mo) ;
@@ -361,8 +381,8 @@ vingt lignes. Chaque page se termine par un lien « suite ».
 Ce qu'il est (le dos d'impression du port PDF), ce qu'il télécharge, **le piège pnpm 11** —
 l'installation ne joue pas le script de Puppeteer sans une entrée `allowBuilds`, donc pas de
 Chromium et un premier appel qui échoue —, les deux façades en trois lignes (`…PdfStrategy` pour un
-document que vous contrôlez, `…RenderRuntime` pour un document que vous ne contrôlez pas), et un
-renvoi vers le guide.
+modèle **et des données** que vous contrôlez, `…RenderRuntime` dès que l'un des deux ne l'est pas),
+et un renvoi vers le guide.
 
 ### 6.3 `00-contents` — 40 lignes
 
@@ -371,13 +391,25 @@ est un doublon de ce qu'il annonce.
 
 ### 6.4 `01-first-pdf` — 150 lignes
 
-- prérequis : Node ≥ 24, un Chromium téléchargé, ce que coûte le premier `install` ;
-- les trois fichiers à créer, dont le modèle d'exemple à télécharger ;
+- prérequis : Node ≥ 24, `typescript` et `@types/node` comme outils de développement, un Chromium
+  téléchargé, ce que coûte le premier `install` ;
+- initialisation ESM explicite (`npm init -y`, puis `npm pkg set type=module`) et installation des
+  trois paquets ; aucun réglage du monorepo n'est supposé ;
+- les trois fichiers à créer : le modèle à télécharger, `invoice-data.ts` et `example.ts` ;
 - l'extrait du §0.1, cité de `example.ts` ;
+- la commande TypeScript exacte, puis `node example.js` : la répétition à froid ne suppose ni
+  `tsx`, ni configuration cachée du dépôt ;
+
+  ```bash
+  npx tsc example.ts invoice-data.ts --target ES2022 --module NodeNext --moduleResolution NodeNext
+  node example.js
+  ```
+
 - l'exécution, et à quoi ressemble le PDF obtenu (une page, un tableau, un total) ;
-- **« ça n'a pas marché »** : les quatre refus d'un premier essai — `presentation-refused`,
-  `template-refused`, `missing-binding-value`, `unsupported-font-family` — chacun en deux lignes,
-  avec un renvoi vers la page 03 ;
+- **« ça n'a pas marché »** : les quatre premiers diagnostics réellement exposés par ce chemin —
+  navigateur absent sous `pdf-export-failed`, `TemplateShapeError` ou `TemplateMigrationError` au
+  parsing, `presentation-refused`, `missing-binding-value` — chacun en deux lignes, avec un renvoi
+  vers la page 03 ;
 - suite : page 02.
 
 ### 6.5 `02-template-and-data` — 150 lignes
@@ -390,33 +422,41 @@ est un doublon de ce qu'il annonce.
   catalogue ;
 - ce que le modèle lit : `collectDataPaths()` ;
 - **écritures et langues** : le modèle déclare ses écritures, l'appelant choisit un profil à la
-  construction du port. Une ligne changée dans l'extrait (`{ amount: 'en-usd' }`) donne la facture
-  anglais/dollars ; c'est la démonstration d'E4, elle tient en un diff de trois caractères ;
+  construction du port. Remplacer `{ amount: 'fr-eur' }` par `{ amount: 'en-usd' }` change la
+  locale et la devise **des valeurs seulement**. Cela ne traduit ni les libellés du modèle, ni les
+  textes fournis dans les données : leur langue appartient à l'auteur du modèle et à l'hôte ;
 - « aujourd'hui » est une **donnée**, pas une valeur que le moteur fabrique ;
 - suite : page 03.
 
 ### 6.6 `03-when-it-fails` — 220 lignes
 
-- la forme d'un refus : `DocumentRenderError`, son `code`, ses `details` (`nodeId`, `path`,
-  `occurrence`, `phase`, `limit`, `observed`, `pageNumber`, `diagnostics`) ;
+- la forme d'un refus : `DocumentRenderError`, son `code`, et les treize champs possibles de
+  `details` (`nodeId`, `path`, `occurrence`, `actualType`, `formatKind`, `presentationRefusal`,
+  `region`, `limit`, `observed`, `phase`, `resourceKind`, `pageNumber`, `diagnostics`) ;
 - **la règle qui rassure et qui contraint** : un refus ne transporte jamais une valeur de votre jeu
   de données. Vous ne trouverez pas le montant fautif dans le message — vous trouverez son adresse ;
-- les dix phases, dans l'ordre, en une ligne chacune ;
-- **la table des 31 codes**, groupée par phase : *code · quand il tombe · ce que vous faites*.
-  Trois colonnes, une ligne par code, aucune prose ;
-- les trois autres erreurs qu'un appelant peut voir : `TemplateShapeError`,
-  `TemplateMigrationError`, `ExpressionEvaluationError`, plus `diagnosticsOf()` pour un message
-  destiné à l'auteur du modèle ;
+- les dix phases, dans l'ordre, en une ligne chacune ; `details.phase`, lorsqu'il existe, reste la
+  source et aucun code n'est artificiellement affecté à une phase unique ;
+- **la table des 31 codes**, dans l'ordre de `DOCUMENT_RENDER_ERROR_CODES` : *code · quand il tombe
+  · ce que vous faites*. Trois colonnes, une ligne par code, aucune prose ;
+- les erreurs hors rendu qu'un appelant de ce guide peut réellement voir : `TemplateShapeError` et
+  `TemplateMigrationError` autour de `parseTemplate()`, `InvalidRenderSafetyLimitsError` pour les
+  options moteur et `InvalidProtectedConfigurationError` pour le runtime durci ;
+- `diagnosticsOf()` pour construire un message destiné à l'auteur du modèle. Une
+  `ExpressionEvaluationError` interne au rendu devient `expression-refused` et n'est pas présentée
+  comme une cinquième erreur de la façade ;
 - suite : page 04.
 
 ### 6.7 `04-untrusted-documents` — 150 lignes
 
-- la question à se poser : **qui a écrit le modèle ?** Si ce n'est pas vous, la suite est
-  obligatoire ;
+- la question à se poser : **qui contrôle le modèle et le jeu de données ?** Si l'un des deux peut
+  venir d'un tiers, la suite est obligatoire ;
 - l'extrait du runtime durci : `await createPuppeteerRenderRuntime({ … })`, `runtime.pdf.render`,
   `finally { await runtime.close() }`, un `AbortSignal` ;
-- la table des défauts (slots, file, délais, tas du worker, images, PDF, pages, HTML), lue dans le
-  code par la porte ;
+- les huit champs d'erreur qui peuvent franchir l'isolat (`nodeId`, `path`, `region`, `limit`,
+  `observed`, `pageNumber`, `phase`, `resourceKind`) et ceux qui restent derrière ;
+- la table **exhaustive** des défauts de `DEFAULT_RENDER_SAFETY_LIMITS`,
+  `DEFAULT_RUNTIME_LIMITS` et `DEFAULT_RESOURCE_LIMITS`, lue dans les deux sens par la porte ;
 - **les images distantes** : rien n'est chargé qui ne figure au manifeste avec son SHA-256 ;
 - l'audit : `node:diagnostics_channel`, canal `openview.render.audit`, cinq issues
   (`succeeded`, `refused`, `timed-out`, `cancelled`, `failed`), aucune donnée dans l'événement ;
@@ -427,8 +467,8 @@ est un doublon de ce qu'il annonce.
 ### 6.8 `05-guarantees-and-limits` — 120 lignes
 
 - **PDF uniquement** ; ni HTML, ni image en v1 ;
-- **le même document à chaque fois — sous le même profil** : treize champs comparés, et la réserve
-  ICU (`U+202F` contre `U+00A0`) écrite noir sur blanc ;
+- **le même document à chaque fois — sous le même profil** : les champs de `PROFILE_FIELDS`, et la
+  réserve ICU (`U+202F` contre `U+00A0`) écrite noir sur blanc ;
 - **les polices** : trois familles, douze faces, SIL OFL 1.1 ; une famille hors catalogue est
   refusée, jamais remplacée ;
 - **jamais tronqué** : ce qui ne tient pas est refusé ;
@@ -459,13 +499,38 @@ règle. Le test échoue sur la première liste non vide.
 | G1 | même ensemble de fichiers dans chaque arbre de langue | une page ajoutée dans une seule langue |
 | G2 | même nombre, même ordre et mêmes niveaux de titres | une section ajoutée d'un côté seulement |
 | G3 | blocs de code identiques octet pour octet entre langues | un extrait corrigé une seule fois |
-| G4 | chaque bloc `ts` est une région *verbatim* d'un module compilé | un exemple qui ne compile pas, ou qui a vieilli |
+| G4 | chaque bloc `ts` cite une région *verbatim* d'un module compilé | un exemple qui ne compile pas, ou qui a vieilli |
 | G5 | plafonds du §2.3, largeur ≤ 100, profondeur ≤ 3, un seul H1 | la dérive vers un manuel que personne ne lit |
 | G6 | tout lien relatif résout ; toute URL de dépôt désigne un fichier suivi | le lien mort, la page fantôme |
-| G7 | tout symbole cité existe dans la surface publiée ; la table des refus égale les 31 codes | la doc qui nomme un export retiré, ou qui oublie un refus |
-| G8 | tout chiffre de borne publié égale la constante correspondante | un défaut changé sans que la page suive |
+| G7 | chaque manifeste `docs-api` existe dans les barrels publiés ; codes, phases et issues d'audit sont des vocabulaires fermés | la doc qui nomme un export retiré, ou qui oublie un refus |
+| G8 | tables de défauts complètes et faits `docs-value` égaux à leur source | un défaut, une version ou un compte changé sans que la page suive |
 
-### 7.2 Ce que la porte ne peut pas vérifier
+### 7.2 Le protocole des annotations — aucune heuristique
+
+La porte ne devine pas qu'un mot entre accents graves est un export plutôt qu'un champ de données.
+Les pages portent donc des commentaires HTML invisibles, identiques dans les deux langues :
+
+```text
+<!-- docs-region: packages/adapter-puppeteer/src/__tests__/documentation/example.ts#first-pdf -->
+<!-- docs-api: @openview/engine createPdfRenderPort DocumentRenderError -->
+<!-- docs-vocabulary: DOCUMENT_RENDER_ERROR_CODES -->
+<!-- docs-defaults: DEFAULT_RENDER_SAFETY_LIMITS -->
+<!-- docs-value: CURRENT_SCHEMA_VERSION=11 -->
+```
+
+`docs-region` précède immédiatement son bloc `ts`. `docs-api` constitue la liste exhaustive des
+exports publics nommés par la page. `docs-vocabulary` précède une liste ou une table dont la première
+colonne doit égaler le tableau source, **dans le même ordre**. `docs-defaults` précède une table
+`clé · valeur · unité` et exige l'égalité des clés et des valeurs dans les deux sens. `docs-value`
+précède le paragraphe ou la ligne de table où sa valeur littérale apparaît exactement une fois.
+
+Les sources admises sont fermées dans le test : barrels `core`, `engine` et `adapter-puppeteer`,
+trois objets `DEFAULT_*`, `CURRENT_SCHEMA_VERSION`, `DOCUMENT_RENDER_ERROR_CODES`,
+`DOCUMENT_RENDER_PHASES`, `RENDER_OUTCOMES`, `PROFILE_FIELDS`, les métadonnées `engines.node` et le
+catalogue de polices embarquées. Ajouter une source est une modification visible de P6 ou P7, pas
+une convention inventée dans une page.
+
+### 7.3 Ce que la porte ne peut pas vérifier
 
 **Elle ne lit pas le sens.** Deux pages peuvent avoir la même structure, les mêmes extraits, les
 mêmes chiffres, et dire deux choses différentes. Aucune des huit règles ne l'attrape.
@@ -486,12 +551,12 @@ Un seul fichier de test, `documentation.test.ts`, et huit contrats.
 | # | Contrat | Preuve |
 | :--- | :--- | :--- |
 | P1 | l'exemple rend un PDF | `renderFirstInvoice` sur le modèle publié, dans un dossier temporaire : octets non vides, en-tête `%PDF-`, une page |
-| P2 | l'exemple est celui de la page | les blocs `ts` des deux langues égalent les régions de `example.ts`, désindentées |
+| P2 | l'exemple est celui de la page | les blocs `ts` des deux langues égalent les régions de `example.ts` et `invoice-data.ts`, désindentées |
 | P3 | parité de structure | G1, G2, G3 sur les six pages et les deux README |
 | P4 | budget et forme | G5 sur chaque fichier, plus le total par langue |
 | P5 | liens | G6 sur tous les liens relatifs et toutes les URL du dépôt |
-| P6 | surface publique | G7 : chaque symbole cité est exporté ; la table des refus égale `DOCUMENT_RENDER_ERROR_CODES` ; les phases égalent `DOCUMENT_RENDER_PHASES` |
-| P7 | bornes | G8 : chaque chiffre publié égale sa constante |
+| P6 | surface publique | G7 : chaque manifeste `docs-api` résout ; refus, phases et issues d'audit égalent leurs tableaux sources |
+| P7 | faits volatils | G8 : tables `DEFAULT_*` exhaustives ; schéma, profil, Node et polices égaux à leurs sources |
 | P8 | la porte échoue quand elle doit | huit fixtures fautives en mémoire, une par règle, chacune refusée par la règle attendue et par elle seule |
 
 P8 est le test qui compte : sans lui, une porte qui rend toujours « rien à signaler » passerait pour
@@ -503,10 +568,14 @@ verte pendant des mois.
 
 Jouée **une fois**, avant l'ADR, par une personne qui n'a pas écrit les pages. Le protocole :
 
-1. `pnpm run build`, puis `npm pack` dans `core`, `engine` et `adapter-puppeteer` ;
-2. hors du dépôt, un dossier vide, `npm init -y`, installation des trois `.tgz` ;
-3. la page 01 est suivie **à la lettre** : rien d'autre n'est ouvert, ni le source, ni le
-   playground, ni ce plan ;
+1. `pnpm run build`, puis `pnpm pack --pack-destination <dossier temporaire>` dans `core`, `engine`
+   et `adapter-puppeteer` ; les trois tarballs doivent porter des versions installables, jamais
+   `workspace:*` ;
+2. hors du dépôt, un dossier vide, `npm init -y`, `npm pkg set type=module`, installation des trois
+   `.tgz`, puis de `typescript` et `@types/node` en dépendances de développement ;
+3. la commande d'installation publique de la page 01 est remplacée par les `.tgz` de l'étape 2 —
+   unique substitution prépublication —, puis tout le reste est suivi **à la lettre** : rien d'autre
+   n'est ouvert, ni le source, ni le playground, ni ce plan ;
 4. chronomètre déclenché à la première ligne lue, arrêté quand le PDF s'ouvre ;
 5. tout blocage est noté avec la ligne de la page qui a manqué.
 
@@ -520,8 +589,8 @@ entre dans l'ADR 0022. Un blocage se corrige dans la page, jamais dans le compte
 
 | # | Contenu | Fin de l'incrément |
 | :--- | :--- | :--- |
-| **INC-0** | `npm pack --dry-run` rejoué sur les deux paquets ; correction des deux textes en retard (§1.3.7) | le dépôt ne se contredit plus, et la règle d'emballage est vérifiée, pas supposée |
-| **INC-1** | modèle d'exemple, `example.ts`, P1 vert | l'exemple rend un vrai PDF sous Vitest |
+| **INC-0** | `npm pack --dry-run` rejoué sur les deux paquets documentés, puis sonde `pnpm pack` sur les trois dépendances ; correction des deux textes en retard (§1.3.7) | le dépôt ne se contredit plus, les README partent et les tarballs sont installables |
+| **INC-1** | modèle d'exemple, `invoice-data.ts`, `example.ts`, P1 vert | l'exemple rend un vrai PDF sous Vitest |
 | **INC-2** | `tools/docs/check.mjs` et ses types ; P3 à P8 sur un jeu de fixtures | la porte refuse les huit fautes, sur des pages qui n'existent pas encore |
 | **INC-3** | les six pages anglaises, les deux README anglais | porte verte en anglais ; P2 lie les extraits aux régions |
 | **INC-4** | les six pages françaises, les deux README français, liens croisés | porte verte dans les deux langues |
@@ -565,6 +634,7 @@ pnpm run lint && pnpm run build && pnpm run type-check && pnpm run test:coverage
 - le nombre de lignes réel de chaque page, face à son plafond ;
 - la sortie de `npm pack --dry-run` : ce que le paquet publié contient réellement, les deux README
   compris ;
+- les manifestes extraits des trois `.tgz` produits par `pnpm pack`, sans protocole `workspace:` ;
 - le surcoût en secondes de la suite de tests, avec et sans P1 ;
 - la liste des symboles publics cités par la documentation — c'est la surface que le projet
   s'engage à ne pas casser sans le dire.
@@ -579,7 +649,7 @@ livrant un modèle d'exemple, de sorte qu'aucun lecteur n'ait besoin du contrat 
 PDF — mais le deuxième modèle, celui qu'il voudra écrire, n'a aujourd'hui aucune documentation.
 **À remonter au propriétaire produit avec ce plan**, pas à combler ici.
 
-**La parité de sens n'est pas outillée.** Deux textes peuvent diverger en restant verts (§7.2). Le
+**La parité de sens n'est pas outillée.** Deux textes peuvent diverger en restant verts (§7.3). Le
 signal de réouverture : la première question d'un lecteur français à laquelle la page anglaise
 répondait déjà.
 
@@ -606,11 +676,12 @@ retirer la porte.
 1. les huit fichiers anglais et les huit fichiers français existent, sous leurs plafonds ;
 2. `pnpm run test:coverage` joue P1 à P8, tous verts ;
 3. tout extrait publié est une région d'un module compilé et exécuté ;
-4. la table des refus contient les 31 codes, et rien d'autre ;
-5. les chiffres publiés égalent les constantes du code ;
+4. la table des refus contient les 31 codes dans l'ordre source, et rien d'autre ;
+5. les tables de défauts sont exhaustives et chaque fait volatil publié égale sa source ;
 6. la clause de responsabilité figure dans les deux README, liée au README racine ;
 7. la page 04 recopie les réserves de l'ADR 0021 sans les adoucir ;
-8. la répétition à froid a produit un PDF, et son compte rendu est dans l'ADR 0022 ;
+8. la répétition à froid a installé les trois tarballs sans `workspace:*`, produit un PDF, et son
+   compte rendu est dans l'ADR 0022 ;
 9. l'ADR 0020 et la roadmap moteur ne contredisent plus le dépôt ;
 10. la roadmap moteur porte E9 ✅ avec sa date et le lien de l'ADR 0022 ;
 11. les quatre portes sont vertes en local avant la PR.
