@@ -14,6 +14,7 @@ interface Table {
   readonly length: number;
 }
 
+/** The table directory of a face, keyed by the four-character tag each record carries. */
 function directoryOf(bytes: Uint8Array): { view: DataView; tables: ReadonlyMap<string, Table> } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const count = view.getUint16(4);
@@ -80,6 +81,7 @@ function glyphOf(view: DataView, segment: Segment, code: number): number {
   return raw === 0 ? 0 : (raw + segment.delta) & 0xffff;
 }
 
+/** Adds to `into` every code point the segments of a format 4 sub-table map to a real glyph. */
 function readFormat4(view: DataView, at: number, into: Set<number>): void {
   const segments = view.getUint16(at + 6) / 2;
   const endAt = at + 14;
