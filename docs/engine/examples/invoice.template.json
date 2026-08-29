@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 11,
+  "id": "tpl_invoice_demo",
+  "name": "Openview demonstration invoice",
+  "version": "1.0.0",
+  "page": {
+    "sheet": { "width": 210, "height": 297 },
+    "margins": { "top": 18, "right": 18, "bottom": 22, "left": 18 },
+    "header": [],
+    "footer": [
+      {
+        "on": "every",
+        "content": {
+          "type": "container",
+          "id": "foot",
+          "children": [
+            {
+              "type": "text",
+              "id": "foot-page",
+              "align": "end",
+              "typography": { "sizePt": 9, "color": "#666666" },
+              "content": [
+                { "kind": "literal", "text": "Page " },
+                { "kind": "pageField", "field": "number" },
+                { "kind": "literal", "text": " of " },
+                { "kind": "pageField", "field": "count" }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "presentations": {
+    "fr-eur": {
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "minFractionDigits": 2,
+      "maxFractionDigits": 2,
+      "dateStyle": "long"
+    },
+    "en-usd": {
+      "locale": "en-US",
+      "currency": "USD",
+      "minFractionDigits": 2,
+      "maxFractionDigits": 2,
+      "dateStyle": "long"
+    }
+  },
+  "root": {
+    "type": "container",
+    "id": "root",
+    "children": [
+      {
+        "type": "text",
+        "id": "title",
+        "typography": { "sizePt": 20, "bold": true },
+        "content": [
+          { "kind": "literal", "text": "Invoice " },
+          { "kind": "binding", "value": { "kind": "path", "path": "invoice.reference" } }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "billed-to",
+        "typography": { "sizePt": 11 },
+        "content": [
+          { "kind": "literal", "text": "Billed to " },
+          { "kind": "binding", "value": { "kind": "path", "path": "invoice.customer" } }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "due",
+        "typography": { "sizePt": 11 },
+        "content": [
+          { "kind": "literal", "text": "Payment due " },
+          {
+            "kind": "binding",
+            "value": {
+              "kind": "dateAdd",
+              "date": { "kind": "path", "path": "invoice.issuedOn" },
+              "days": { "kind": "path", "path": "invoice.termDays" }
+            },
+            "format": { "kind": "date", "profile": "amount" }
+          }
+        ]
+      },
+      {
+        "type": "table",
+        "id": "lines",
+        "columns": [
+          { "id": "label", "width": 8, "align": "start" },
+          { "id": "units", "width": 2, "align": "end" },
+          { "id": "rate", "width": 3, "align": "end" },
+          { "id": "amount", "width": 3, "align": "end" }
+        ],
+        "header": [
+          {
+            "type": "tableRow",
+            "id": "head",
+            "box": { "border": { "bottom": { "width": 0.4, "color": "#333333" } } },
+            "cells": [
+              {
+                "columnId": "label",
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "h-label",
+                    "typography": { "bold": true },
+                    "content": [{ "kind": "literal", "text": "Description" }]
+                  }
+                ]
+              },
+              {
+                "columnId": "units",
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "h-units",
+                    "typography": { "bold": true },
+                    "content": [{ "kind": "literal", "text": "Units" }]
+                  }
+                ]
+              },
+              {
+                "columnId": "rate",
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "h-rate",
+                    "typography": { "bold": true },
+                    "content": [{ "kind": "literal", "text": "Unit price" }]
+                  }
+                ]
+              },
+              {
+                "columnId": "amount",
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "h-amount",
+                    "typography": { "bold": true },
+                    "content": [{ "kind": "literal", "text": "Amount" }]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "body": [
+          {
+            "type": "tableRowGroup",
+            "id": "group",
+            "each": { "kind": "path", "path": "invoice.lines" },
+            "as": "line",
+            "rows": [
+              {
+                "type": "tableRow",
+                "id": "line",
+                "keepTogether": true,
+                "cells": [
+                  {
+                    "columnId": "label",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "d-label",
+                        "content": [
+                          { "kind": "binding", "value": { "kind": "path", "path": "line.label" } }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "columnId": "units",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "d-units",
+                        "content": [
+                          { "kind": "binding", "value": { "kind": "path", "path": "line.units" } }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "columnId": "rate",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "d-rate",
+                        "content": [
+                          {
+                            "kind": "binding",
+                            "value": { "kind": "path", "path": "line.rate" },
+                            "format": { "kind": "money", "profile": "amount" }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "columnId": "amount",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "d-amount",
+                        "content": [
+                          {
+                            "kind": "binding",
+                            "value": {
+                              "kind": "arithmetic",
+                              "op": "mul",
+                              "left": { "kind": "path", "path": "line.units" },
+                              "right": { "kind": "path", "path": "line.rate" }
+                            },
+                            "format": { "kind": "money", "profile": "amount" }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "footer": [
+          {
+            "type": "tableRow",
+            "id": "total",
+            "box": { "border": { "top": { "width": 0.4, "color": "#333333" } } },
+            "cells": [
+              {
+                "columnId": "label",
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "f-label",
+                    "typography": { "bold": true },
+                    "content": [{ "kind": "literal", "text": "Total" }]
+                  }
+                ]
+              },
+              {
+                "columnId": "amount",
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "f-amount",
+                    "typography": { "bold": true },
+                    "content": [
+                      {
+                        "kind": "binding",
+                        "value": {
+                          "kind": "aggregate",
+                          "op": "sum",
+                          "source": { "kind": "path", "path": "invoice.lines" },
+                          "as": "line",
+                          "value": {
+                            "kind": "arithmetic",
+                            "op": "mul",
+                            "left": { "kind": "path", "path": "line.units" },
+                            "right": { "kind": "path", "path": "line.rate" }
+                          }
+                        },
+                        "format": { "kind": "money", "profile": "amount" }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "notice",
+        "typography": { "sizePt": 9, "color": "#666666" },
+        "content": [{ "kind": "binding", "value": { "kind": "path", "path": "invoice.notice" } }]
+      }
+    ]
+  }
+}
