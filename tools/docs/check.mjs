@@ -90,6 +90,34 @@ export function regionsOf(source) {
   return regions;
 }
 
+/**
+ * The names a barrel exports, whether they carry a value or only a type.
+ *
+ * Read from the source barrel rather than from a built `.d.ts`: both spell the same names, and the
+ * source is what a reviewer edits when the surface changes.
+ */
+export function exportedNamesOf(source) {
+  const names = [];
+  for (const match of source.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
+    for (const entry of match[1].split(',')) {
+      const name = entry
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+/)
+        .at(-1);
+      if (name !== undefined && name !== '') {
+        names.push(name);
+      }
+    }
+  }
+  for (const match of source.matchAll(
+    /export\s+(?:declare\s+)?(?:async\s+)?(?:const|let|function|class|interface|type)\s+([A-Za-z0-9_$]+)/g,
+  )) {
+    names.push(match[1]);
+  }
+  return names;
+}
+
 /** Removes the common leading indentation of a block, ignoring its blank lines. */
 function dedent(lines) {
   const widths = lines

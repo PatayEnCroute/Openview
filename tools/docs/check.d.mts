@@ -52,6 +52,9 @@ export declare const TOTAL_PER_LANGUAGE: number;
 /** The files one language tree must hold, guide pages then readmes. */
 export declare function filesOf(language: string): readonly DocumentationFile[];
 
+/** The names a barrel exports, values and types alike. */
+export declare function exportedNamesOf(source: string): readonly string[];
+
 /** The `// #region name` blocks of a source module, indentation removed. */
 export declare function regionsOf(source: string): ReadonlyMap<string, string>;
 
