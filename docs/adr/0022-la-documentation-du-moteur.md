@@ -80,12 +80,17 @@ qu'un fichier de workflow soit ouvert. Ses règles sont **pures** : rien n'est l
 arrive par l'entrée — c'est ce qui permet de lui soumettre une page fautive et de vérifier qu'elle
 mord.
 
-### 6. Huit fautes, une par règle
+### 6. Neuf fautes, chacune refusée par la règle attendue et par elle seule
 
-Sans elles, une porte qui ne trouve jamais rien passerait pour verte pendant des mois. Huit
+Sans elles, une porte qui ne trouve jamais rien passerait pour verte pendant des mois. Neuf
 fixtures en mémoire — une page manquante, un titre en trop, un bloc modifié d'un seul côté, un
-extrait qui a dérivé de sa région, une ligne trop longue, un lien mort, un export inventé, une
-valeur par défaut fausse — sont chacune refusées par la règle attendue **et par elle seule**.
+extrait qui a dérivé de sa région, une clôture de bloc oubliée, une ligne trop longue, un lien
+mort, un export inventé, une valeur par défaut fausse — sont chacune refusées par la règle
+attendue, et par aucune autre.
+
+La neuvième est venue de la revue : une fence jamais fermée faisait disparaître le bloc du parcours,
+donc de la comparaison, **sans une ligne de sortie**. Une porte qui se tait sur une page cassée est
+exactement ce que cette section existe pour empêcher.
 
 ### 7. Les réserves sont recopiées sans être adoucies
 

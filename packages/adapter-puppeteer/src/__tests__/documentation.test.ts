@@ -94,7 +94,10 @@ async function publishedInput(): Promise<DocumentationInput> {
   const files = new Map<string, string>();
   for (const language of LANGUAGES) {
     for (const file of filesOf(language)) {
-      files.set(file.path, await read(file.path));
+      /* A missing page is a G1 violation, not a crash: the rule has to be able to speak. */
+      if (existsSync(join(REPOSITORY, file.path))) {
+        files.set(file.path, await read(file.path));
+      }
     }
   }
   const regions = new Map<string, string>();
@@ -228,9 +231,14 @@ describe('the documentation gate', () => {
     expect(checkDocumentation(healthyInput())).toStrictEqual([]);
   });
 
-  const faults: readonly { readonly rule: string; readonly of: () => DocumentationInput }[] = [
+  const faults: readonly {
+    readonly rule: string;
+    readonly fault: string;
+    readonly of: () => DocumentationInput;
+  }[] = [
     {
       rule: 'G1',
+      fault: 'a page missing from one tree',
       of: (): DocumentationInput => {
         const input = healthyInput();
         const files = new Map(input.files);
@@ -240,11 +248,13 @@ describe('the documentation gate', () => {
     },
     {
       rule: 'G2',
+      fault: 'a heading added on one side',
       of: (): DocumentationInput =>
         withPage(healthyInput(), FIRST_FR, `${HEALTHY_PAGE}\n## One heading too many\n`),
     },
     {
       rule: 'G3',
+      fault: 'a code block edited in one language',
       of: (): DocumentationInput =>
         withPage(
           healthyInput(),
@@ -254,6 +264,7 @@ describe('the documentation gate', () => {
     },
     {
       rule: 'G4',
+      fault: 'a snippet that drifted from its region',
       of: (): DocumentationInput => {
         const input = healthyInput();
         const drifted = HEALTHY_PAGE.replace(SNIPPET, 'const answer = 2;');
@@ -262,16 +273,19 @@ describe('the documentation gate', () => {
     },
     {
       rule: 'G5',
+      fault: 'a line past the width',
       of: (): DocumentationInput =>
         withPage(healthyInput(), FIRST_EN, `${HEALTHY_PAGE}${'x'.repeat(101)}\n`),
     },
     {
       rule: 'G6',
+      fault: 'a dead link',
       of: (): DocumentationInput =>
         withPage(healthyInput(), FIRST_EN, `${HEALTHY_PAGE}A [dead link](./missing.md).\n`),
     },
     {
       rule: 'G7',
+      fault: 'an export the package does not have',
       of: (): DocumentationInput =>
         withPage(
           healthyInput(),
@@ -281,6 +295,7 @@ describe('the documentation gate', () => {
     },
     {
       rule: 'G8',
+      fault: 'a default published wrong',
       of: (): DocumentationInput =>
         withPage(
           healthyInput(),
@@ -288,9 +303,18 @@ describe('the documentation gate', () => {
           HEALTHY_PAGE.replace('| 100 | pages |', '| 200 | pages |'),
         ),
     },
+    {
+      rule: 'G4',
+      fault: 'a code fence nobody closed',
+      of: (): DocumentationInput => {
+        const input = healthyInput();
+        const open = HEALTHY_PAGE.replace('node example.js\n```', 'node example.js');
+        return withPage(withPage(input, FIRST_EN, open), FIRST_FR, open);
+      },
+    },
   ];
 
-  it.each(faults)('refuses a $rule fault, and blames $rule alone', ({ rule, of }) => {
+  it.each(faults)('refuses $fault, and blames $rule alone', ({ rule, of }) => {
     const violations = checkDocumentation(of());
     expect(violations.length).toBeGreaterThan(0);
     expect([...new Set(violations.map((found) => found.rule))]).toStrictEqual([rule]);

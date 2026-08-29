@@ -132,7 +132,12 @@ function violation(file, line, rule, message) {
   return { file, line, rule, message };
 }
 
-/** The fenced code blocks of a page, with the annotation that immediately precedes each. */
+/**
+ * The fenced code blocks of a page, with the annotation that immediately precedes each.
+ *
+ * A fence left open is reported rather than dropped: a block nobody closed is a block no rule
+ * compares, and a gate that goes quiet on a broken page is worse than no gate.
+ */
 function blocksOf(text) {
   const lines = text.split('\n');
   const blocks = [];
@@ -157,7 +162,7 @@ function blocksOf(text) {
     blocks.push({ ...open, content: open.lines.join('\n') });
     open = undefined;
   });
-  return blocks;
+  return { blocks, unclosed: open?.line };
 }
 
 /** The `docs-*` annotation immediately above a line, blank lines aside. */
@@ -324,8 +329,8 @@ function checkHeadings(input, violations) {
 /** Byte-for-byte identical code blocks across languages (G3). */
 function checkCodeBlocks(input, violations) {
   for (const pair of pairsOf(input)) {
-    const english = blocksOf(input.files.get(pair.en));
-    const french = blocksOf(input.files.get(pair.fr));
+    const english = blocksOf(input.files.get(pair.en)).blocks;
+    const french = blocksOf(input.files.get(pair.fr)).blocks;
     if (english.length !== french.length) {
       violations.push(
         violation(
@@ -355,7 +360,11 @@ function checkCodeBlocks(input, violations) {
 /** Every `ts` block quotes a region of a compiled module, verbatim (G4). */
 function checkRegions(input, violations) {
   for (const [path, text] of input.files) {
-    for (const block of blocksOf(text)) {
+    const { blocks, unclosed } = blocksOf(text);
+    if (unclosed !== undefined) {
+      violations.push(violation(path, unclosed, 'G4', 'a code fence is never closed'));
+    }
+    for (const block of blocks) {
       if (block.language !== 'ts') {
         continue;
       }
