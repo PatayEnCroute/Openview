@@ -126,12 +126,31 @@ mindmap
 ---
 
 ### Axe 7 : Golden Master & Assertions Structurelles PDF
-* **Besoin produit** : Lot E7 (« Lot de documents figés de non-régression ») : maintenir un ensemble de factures de référence (1 page, 3 pages avec report, bilingue) pour figer les sorties attendues.
-* **Risque** : Altération silencieuse des métadonnées, de la pagination ou du texte extrait d'une facture de référence.
+* **Besoin produit** : Lot E7 (« Lot de documents figés de non-régression ») : maintenir un ensemble de factures de référence (une page, multi-pages avec report, bilingue, calques, témoin historique v1) pour figer les sorties attendues.
+* **Risque** : Altération silencieuse des métadonnées, de la pagination ou de la mise en page d'une facture de référence.
 
 | Outil recommandé | Rôle dans Openview | Implémentation |
 | :--- | :--- | :--- |
-| **[pdf-parse](https://www.npmjs.com/package/pdf-parse)** / **[pdf-lib](https://pdf-lib.js.org/)** | Assertions automatisées sur la structure du PDF généré (nombre exact de pages, texte extrait par page, respect des blocs insécables). | `packages/engine/__tests__/golden/` |
+| **[pdf-lib](https://pdf-lib.js.org/)** (déjà dépendance de l'adaptateur) | Extraction déterministe d'un PDF mono-page par rang, pour nommer la ou les pages qui ont bougé. La comparaison elle-même est une **égalité binaire** du document canonique, doublée du certificat de pagination E5 et de l'empreinte de l'HTML autonome. | `tools/golden/` et `tests/golden/e7/references/` |
+
+> **Rectifié après exécution (2026-08-29,
+> [ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md)).** Deux points de la
+> recommandation initiale ne survivent pas au lot livré :
+>
+> - **`pdf-parse` n'est pas retenu, et aucune dépendance n'a été ajoutée.** Un oracle fondé sur le
+>   texte extrait perd les positions, les fontes, les filets et les images — c'est-à-dire presque
+>   tout ce qu'une régression de rendu déplace. L'égalité binaire du PDF canonique, qualifiée par le
+>   profil de reproductibilité E6, dit strictement plus, et `pdf-lib` suffit à la localiser page par
+>   page.
+> - **Le corpus ne vit pas dans `packages/engine/`.** Le rendu réel passe par Puppeteer, qui doit
+>   rester hors du paquet moteur (AGENTS.md §2) : l'outillage est dans `tools/golden/`, les
+>   références dans `tests/golden/e7/references/`, les tests du harnais dans
+>   `packages/adapter-puppeteer/src/__tests__/`. Aucun de ces fichiers n'entre dans un tarball
+>   publié.
+>
+> La ligne 3 de la feuille de route ci-dessous (Playwright + Pixelmatch, parité aperçu ↔ PDF) est
+> **inchangée** : E7 compare des PDF entre eux et ne prononce rien sur l'aperçu React. C'est le lot
+> V3 du [viewer](../roadmap/viewer.md#v3-la-garantie-est-vérifiée-automatiquement).
 
 ---
 
@@ -144,7 +163,7 @@ Phase 1 : Socle Moteur & Contrats (Jalons J1 - J2)
 
 Phase 2 : Rendu Comptable & Fidélité Visuelle (Jalons J3 - J4)
   ├── 3. Playwright + Pixelmatch pour la parité pixel-perfect Viewer vs PDF
-  ├── 4. Corpus Golden Master PDF (pdf-parse / pdf-lib) sur les factures de référence
+  ├── 4. Corpus Golden Master PDF (pdf-lib, égalité binaire) sur les factures de référence
   └── 5. Vitest Benchmarks pour surveiller les performances d'évaluation et de rendu
 
 Phase 3 : Édition Métier & Livraison Publique (Jalons J5 - J7)

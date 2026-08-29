@@ -11,7 +11,23 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/coverage", "!**/.turbo", "!pnpm-lock.yaml"]
+    /* The last entry is the E7 reference batch, and it is excluded for the same
+       reason as the lockfile above it: its BYTES are the contract. The manifest is
+       written by `serializeManifest()`, which must read back byte for byte, and
+       Biome's json formatter collapses a short array onto one line where
+       `JSON.stringify(…, null, 2)` never does. `pnpm run lint:fix` would therefore
+       rewrite the reference, the manifest would stop matching what the generator
+       produces, and the E7 gate would go permanently red for a reason that has
+       nothing to do with a document. This is not loosening a guard that is doing its
+       job (AGENTS.md 7): the formatter would destroy the evidence it is pointed at. */
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.turbo",
+      "!pnpm-lock.yaml",
+      "!tests/golden/e7/references"
+    ]
   },
   "formatter": {
     "enabled": true,

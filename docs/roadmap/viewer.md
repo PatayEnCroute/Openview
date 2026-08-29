@@ -111,6 +111,18 @@ signalée automatiquement, en désignant la page fautive.
 
 **Poids :** M — **Dépend de :** V2, moteur E7 — **Jalon : J4**
 
+> 📥 **Le corpus E7 existe et attend V3 (2026-08-29).** Six documents synthétiques, 21 pages, un
+> registre énumérable et un manifeste versionné vivent dans `tools/golden/` et
+> `tests/golden/e7/references/` ([ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md)).
+> V3 peut appeler le même registre ou lire son manifeste depuis son propre harnais E2E, plutôt que
+> de composer une seconde liste de factures de référence.
+>
+> **Ce que le corpus ne fait pas, et que V3 doit faire :** E7 compare des PDF entre eux. La parité
+> **aperçu ↔ PDF** exige le viewer réel et un rasteriseur commun, et reste entière. Le diagnostic
+> mono-page d'E7 est conservateur — une fonte sous-ensemble partagée peut faire différer plusieurs
+> pages — ce que seul un diff de pixels tranchera. `@openview/viewer` continue de n'importer ni
+> `@openview/engine`, ni l'adaptateur, ni `tools/golden`.
+
 > Ce lot **est** la décision « identique, garanti ». Le retirer, c'est revenir à
 > « fidèle, sans garantie » — ce qui est un choix défendable, mais qui doit alors
 > être annoncé comme tel dans la documentation et le README.
