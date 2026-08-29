@@ -1,6 +1,13 @@
 # Plan d'implémentation — `@openview/engine` lot E7 : le lot de documents figés de non-régression
 
-> **Statut :** plan prêt à exécuter sous les mandats M-1 et M-2 — 2026-08-29  
+> **Statut :** 🟡 **exécuté le 2026-08-29, corpus en attente d'amorçage** — ce plan est conservé
+> pour l'historique ; la décision qui fait foi est
+> [l'ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md), qui consigne les écarts
+> d'exécution (fermeture du nombre de pages, ordre du diagnostic, absence d'horloge dans le harnais)
+> et les deux mutations que le corpus ne tue pas. Le harnais, les trois suites de tests et le job
+> CI sont livrés ; les six PDF de référence attendent un run officiel Ubuntu, une revue visuelle des
+> 21 pages et une acceptation explicite.  
+> **Statut initial :** plan prêt à exécuter sous les mandats M-1 et M-2 — 2026-08-29  
 > **Lot :** E7 — poids M annoncé, **M confirmé** — dépend d'E6 livré  
 > **Conditions de :** viewer V3, service S1 et moteur E9  
 > **Décision d'exécution attendue :** ADR 0020

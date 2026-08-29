@@ -42,6 +42,16 @@ le moteur.
 
 **Poids :** M — **Dépend de :** [moteur](engine.md) E7 — **Jalon : J5**
 
+> 📥 **Le harnais E7 est livré (2026-08-29)** —
+> [ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md). Le moteur a désormais une
+> mémoire de rendu : une régression du PDF est signalée automatiquement, en nommant la facture et
+> la page. S1 pourra démarrer dès que le corpus aura été amorcé sous le profil officiel — le
+> harnais et sa porte CI n'attendent plus que ces six fichiers.
+>
+> **E8 reste obligatoire avant toute exposition hostile.** Le corpus E7 est synthétique : il ne
+> prouve ni sécurité, ni timeout, ni plafond mémoire, ni concurrence. Ouvrir le service sans E8,
+> c'est publier une porte d'entrée.
+
 ### S2. Le service se protège
 
 **Pourquoi.** Un service de rendu ouvert est une cible : documents trop gros,

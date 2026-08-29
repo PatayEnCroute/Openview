@@ -324,6 +324,28 @@ automatiquement, en désignant la facture et la page concernées.
 > et n'est typée par rien : si la représentation intermédiaire du moteur change, c'est
 > l'adaptateur de test E7 qui évolue, jamais le document stocké.
 
+> 🟡 **Harnais livré le 2026-08-29, corpus en attente d'amorçage** —
+> [ADR 0020](../adr/0020-le-lot-de-documents-figes-de-non-regression.md).
+> Six scénarios fermés et énumérés (`tools/golden/corpus.mjs`), 21 pages, dont le témoin
+> historique v1 que `parseTemplate` migre et que le moteur rend enfin. Quatre oracles : le PDF
+> complet comparé **octet par octet**, un PDF mono-page dérivé par rang, le certificat de
+> pagination E5 de cette page, et l'empreinte de l'HTML autonome. Un échec nomme la facture **et
+> la ou les pages**. Le profil E6 accompagne le lot : une différence d'hôte est refusée avant
+> qu'un octet soit lu, une différence de renderer échoue **et** montre les pages touchées.
+> Vérifier et accepter sont deux commandes sans chemin commun, et aucun workflow n'appelle
+> l'acceptation.
+>
+> **Ce qui manque pour dire « livré » :** les six PDF eux-mêmes. Un golden n'est une référence que
+> produit sous le profil officiel `ubuntu-24.04` / Node 24.11.1 ; le job `Frozen Documents (E7)`
+> est donc rouge et publie son candidat pendant sept jours, le temps qu'un humain relise les 21
+> pages et exécute l'acceptation. Le mode d'emploi est dans
+> [`tests/golden/e7/references/README.md`](../../tests/golden/e7/references/README.md).
+>
+> **Deux mutations que le corpus ne tue pas, et c'est écrit** : un `keepTogether` ignoré et un
+> report entrant décalé d'un fragment produisent des documents identiques, parce qu'aucun des six
+> scénarios ne les rend contraignants. Les neuf tests fonctionnels qui les tuent, eux, sont
+> toujours là — E7 fige une combinaison visible, il ne remplace aucun oracle métier.
+
 ### E8. Le moteur survit à un document hostile
 
 **Pourquoi.** Rendre un modèle, c'est exécuter ce que quelqu'un d'autre a écrit. Un
