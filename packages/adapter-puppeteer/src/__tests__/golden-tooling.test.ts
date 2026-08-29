@@ -331,6 +331,28 @@ describe('the closed json serialisation', () => {
     expect(() => canonicalJson({ field: value })).toThrow(/field/);
   });
 
+  it.each([
+    ['a Date', new Date(0), 'Date'],
+    ['a Map', new Map([['a', 1]]), 'Map'],
+    ['a Set', new Set([1]), 'Set'],
+    ['a RegExp', /x/, 'RegExp'],
+  ])('refuses %s, which would otherwise digest as an empty object', (_name, value, named) => {
+    expect(() => canonicalJson({ field: value })).toThrow(new RegExp(`field is a ${named}`));
+  });
+
+  it('would have given two different dates one digest, and now gives them none', () => {
+    /* The regression this guards: `Object.keys(new Date())` is empty, so both would have been
+       written `{}` and a fixture that gained a real date could move without moving its digest. */
+    expect(() => canonicalDigest({ at: new Date(0) })).toThrow(/Date/);
+    expect(() => canonicalDigest({ at: new Date(864_000_000) })).toThrow(/Date/);
+  });
+
+  it('accepts an object with no prototype, which carries its whole value in its own keys', () => {
+    const bare: Record<string, unknown> = Object.create(null);
+    bare.a = 1;
+    expect(canonicalJson({ bare })).toBe('{"bare":{"a":1}}');
+  });
+
   it('refuses a cycle, naming the path that closes it', () => {
     const cyclic: Record<string, unknown> = { name: 'root' };
     cyclic.self = cyclic;

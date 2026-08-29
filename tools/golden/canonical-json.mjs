@@ -49,6 +49,15 @@ function write(value, path, seen) {
     const entries = value.map((entry, index) => write(entry, `${path}[${index}]`, ancestors));
     return `[${entries.join(',')}]`;
   }
+  /* A `Date`, a `Map` and a `Set` all answer `[]` to `Object.keys`, so all three would serialise as
+     `{}` and two different ones would carry the same digest -- the silent loss this module exists
+     to refuse. Only a literal object and a null-prototype one carry their whole value in their own
+     keys, so only those two are accepted. */
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    const named = typeof value.constructor === 'function' ? value.constructor.name : 'object';
+    throw new TypeError(`${path} is a ${named}, which json cannot carry`);
+  }
   const entries = sortedKeys(value).map(
     (key) => `${quote(key)}:${write(value[key], `${path}.${key}`, ancestors)}`,
   );

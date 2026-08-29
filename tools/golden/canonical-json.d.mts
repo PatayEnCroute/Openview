@@ -15,7 +15,9 @@ export interface DigestRecord {
  * The canonical text of a value: object keys sorted by code point, arrays left in order.
  *
  * Throws a `TypeError` naming the path at which json ran out for `undefined`, a function, a symbol,
- * a bigint, a non-finite number and a cycle.
+ * a bigint, a non-finite number, a cycle, and any object that is neither a literal nor
+ * null-prototype -- a `Date`, a `Map` and a `Set` all answer `[]` to `Object.keys`, so all three
+ * would digest as `{}`.
  */
 export declare function canonicalJson(value: unknown): string;
 
