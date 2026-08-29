@@ -46,11 +46,14 @@ export interface DocumentationInput {
 export declare const LANGUAGES: readonly string[];
 export declare const GUIDE_ROOT: string;
 export declare const GUIDE_PAGES: readonly { readonly name: string; readonly maxLines: number }[];
+export declare const PUBLISHED_LANGUAGE: string;
 export declare const READMES: readonly {
-  readonly en: string;
-  readonly fr: string;
+  readonly directory: string;
   readonly maxLines: number;
 }[];
+
+/** Where the landing page of one package, in one language, lives. */
+export declare function readmeOf(directory: string, language: string): string;
 export declare const MAX_WIDTH: number;
 export declare const MAX_HEADING_DEPTH: number;
 export declare const TOTAL_PER_LANGUAGE: number;

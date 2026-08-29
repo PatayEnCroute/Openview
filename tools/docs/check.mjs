@@ -24,15 +24,20 @@ export const GUIDE_PAGES = [
   { name: '05-guarantees-and-limits.md', maxLines: 120 },
 ];
 
-/** The package landing pages, whose english half is what npm shows. */
+/** The language `README.md` itself is written in: every other one carries its tag. */
+export const PUBLISHED_LANGUAGE = 'en';
+
+/** The packages with a landing page, whose english half is what npm shows. */
 export const READMES = [
-  { en: 'packages/engine/README.md', fr: 'packages/engine/README.fr.md', maxLines: 120 },
-  {
-    en: 'packages/adapter-puppeteer/README.md',
-    fr: 'packages/adapter-puppeteer/README.fr.md',
-    maxLines: 80,
-  },
+  { directory: 'packages/engine', maxLines: 120 },
+  { directory: 'packages/adapter-puppeteer', maxLines: 80 },
 ];
+
+/** Where the landing page of one package, in one language, lives. */
+export function readmeOf(directory, language) {
+  const name = language === PUBLISHED_LANGUAGE ? 'README.md' : `README.${language}.md`;
+  return `${directory}/${name}`;
+}
 
 /** Longest line a documentation file may carry, matching the formatter's width. */
 export const MAX_WIDTH = 100;
@@ -50,7 +55,7 @@ export function filesOf(language) {
     maxLines: page.maxLines,
   }));
   const readmes = READMES.map((readme) => ({
-    path: readme[language],
+    path: readmeOf(readme.directory, language),
     maxLines: readme.maxLines,
   }));
   return [...guide, ...readmes];
