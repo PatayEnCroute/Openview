@@ -304,6 +304,17 @@ describe('the documentation gate', () => {
         ),
     },
     {
+      rule: 'G6',
+      fault: 'a root-absolute link',
+      of: (): DocumentationInput =>
+        withPage(
+          healthyInput(),
+          FIRST_EN,
+          `${HEALTHY_PAGE}A [root link](/AGENTS.md).
+`,
+        ),
+    },
+    {
       rule: 'G4',
       fault: 'a code fence nobody closed',
       of: (): DocumentationInput => {

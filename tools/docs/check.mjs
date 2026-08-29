@@ -476,6 +476,20 @@ function checkLinks(input, violations) {
   for (const [path, text] of input.files) {
     const directory = path.split('/').slice(0, -1);
     for (const link of linksOf(text)) {
+      if (link.target.startsWith('/')) {
+        /* Root-absolute is broken for both readers: github reads it as a path of the site, npm as
+           a path of the registry. Refused by name rather than resolved from the repository root,
+           which would let a link nobody can follow pass the gate. */
+        violations.push(
+          violation(
+            path,
+            link.line,
+            'G6',
+            `${link.target} is root-absolute, so no reader resolves it`,
+          ),
+        );
+        continue;
+      }
       const target = resolvedTarget(link.target, directory);
       if (target === undefined || input.exists(target)) {
         continue;
