@@ -147,6 +147,70 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # E7: the same document as last time. The two jobs above prove the engine agrees
+  # with itself TODAY, on two machines of one profile; neither of them has ever
+  # opened a document produced last month. This one rebuilds the six frozen
+  # scenarios and compares them, byte for byte, with the pdfs tracked in the
+  # repository -- then, page by page, with the single-page documents and the E5
+  # certificates derived from both sides. Pinned to the same runner and the same
+  # Node patch as the reproducibility legs, because a golden is only qualified by
+  # the profile that produced it.
+  #
+  # It never accepts anything. `tools/golden/accept.mjs` is deliberately absent
+  # from this file: a gate able to bless its own failure is not a gate.
+  golden-corpus:
+    name: Frozen Documents (E7)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.11.1
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Monorepo
+        run: pnpm run build
+
+      # Writes into an ignored directory, and refuses to write into the tracked
+      # references at all. `--no-sandbox` travels in the profile, exactly as it
+      # does for the two reproducibility legs.
+      - name: Render The Candidate Batch
+        run: node tools/golden/render.mjs test-results/golden/e7 --no-sandbox
+
+      # Read-only. Names the scenario and the page(s) that moved, and leaves a
+      # report.json beside the candidate. Until the first batch is reviewed and
+      # accepted, this step fails because the references are missing -- that is the
+      # bootstrap path described in tests/golden/e7/references/README.md, and the
+      # artefact below is what the maintainer reviews.
+      - name: Compare With The Frozen References
+        run: node tools/golden/compare.mjs tests/golden/e7/references test-results/golden/e7
+
+      # Only on failure, and only for seven days. The candidate holds the six pdfs
+      # and the report; every byte of it is synthetic fixture data already tracked
+      # in this repository. `warn` rather than `error`: the job has already failed
+      # by the time this runs, and a second failure here would only obscure which
+      # step actually refused.
+      - name: Publish The Candidate On Failure
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: golden-candidate
+          path: test-results/golden/e7
+          retention-days: 7
+          if-no-files-found: warn
+
   compare-machines:
     name: Same Bytes On Both Machines
     runs-on: ubuntu-24.04
