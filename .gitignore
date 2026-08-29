@@ -60,6 +60,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+docs/scratch/
 
 # Local tooling state (embedding caches, episodic stores). Binary SQLite files
 # that get rewritten on every run: never useful in history, and on a public
