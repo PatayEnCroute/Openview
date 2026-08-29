@@ -1,4 +1,5 @@
 import type { Sheet } from '@openview/core';
+import type { DocumentImage, ResolvedDocumentImage } from '../document/images.js';
 import type {
   LayoutBoxMeasurement,
   PageMeasurement,
@@ -116,9 +117,29 @@ function pagesOf(
 /** Everything one fake session was asked to do, in order. */
 export interface SessionLog {
   readonly opened: PdfRenderResources[];
+  /** Each batch of occurrences the engine asked this session to resolve, in order. */
+  readonly resolved: DocumentImage[][];
   readonly measured: PdfSourceDocument[];
   readonly printed: PdfSourceDocument[];
   closed: number;
+}
+
+const UNPRINTABLE =
+  'this fake session prints inline data uris and nothing else, which is what a backend capability looks like';
+
+/**
+ * The identity, for embedded sources alone.
+ *
+ * A generic pass-through would give every test a backend that prints http, which is precisely the
+ * capability no backend has: a source that is not self-contained has to be refused here.
+ */
+function resolveEmbedded(images: readonly DocumentImage[]): readonly ResolvedDocumentImage[] {
+  return images.map((image) => {
+    if (!image.src.startsWith('data:')) {
+      throw new Error(UNPRINTABLE);
+    }
+    return { key: image.key, src: image.src };
+  });
 }
 
 const CLOSED = 'this session is closed';
@@ -133,7 +154,7 @@ export function fakeStrategy(
   layout: FakeLayout = {},
   bytes: Uint8Array = FAKE_PDF_BYTES,
 ): { readonly strategy: PdfRenderStrategy; readonly log: SessionLog } {
-  const log: SessionLog = { opened: [], measured: [], printed: [], closed: 0 };
+  const log: SessionLog = { opened: [], resolved: [], measured: [], printed: [], closed: 0 };
   let open = false;
   let overflowed = 0;
   return {
@@ -144,6 +165,12 @@ export function fakeStrategy(
         log.opened.push(resources);
         open = true;
         return Promise.resolve({
+          resolveImages(
+            images: readonly DocumentImage[],
+          ): Promise<readonly ResolvedDocumentImage[]> {
+            log.resolved.push([...images]);
+            return Promise.resolve(resolveEmbedded(images));
+          },
           measure(document: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
             if (!open) {
               return Promise.reject(new Error(CLOSED));
@@ -207,6 +234,7 @@ export function failingMeasureStrategy(error: unknown): {
       async open(resources: PdfRenderResources): Promise<PdfRenderSession> {
         const session = await strategy.open(resources);
         return {
+          resolveImages: session.resolveImages.bind(session),
           print: session.print.bind(session),
           close: session.close.bind(session),
           measure(): Promise<PdfLayoutMeasurement> {
@@ -241,6 +269,7 @@ export function failingPrintStrategy(error: unknown): {
       async open(resources: PdfRenderResources): Promise<PdfRenderSession> {
         const session = await strategy.open(resources);
         return {
+          resolveImages: session.resolveImages.bind(session),
           measure: session.measure.bind(session),
           close: session.close.bind(session),
           print(): Promise<Uint8Array> {

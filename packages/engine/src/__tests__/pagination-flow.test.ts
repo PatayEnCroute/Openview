@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../limits/types.js';
 import { paginate } from '../pagination/paginate.js';
 import { assertAdvanced, digitsOf, progressionBound, sameFlow } from '../pagination/progress.js';
 import { FLOW_START } from '../pagination/types.js';
@@ -393,6 +394,7 @@ describe('a page with no room left for the flow', () => {
       markers: constantMarkers(),
       printableHeight: bound.printable.height * metrics.pxPerMm,
       slack,
+      maxPages: DEFAULT_RENDER_SAFETY_LIMITS.maxPages,
     });
   };
 
@@ -418,6 +420,7 @@ describe('a page with no room left for the flow', () => {
         markers: constantMarkers(),
         printableHeight: bound.printable.height * metrics.pxPerMm,
         slack: new Map(),
+        maxPages: DEFAULT_RENDER_SAFETY_LIMITS.maxPages,
       },
     );
     expect(paginated.pages).toHaveLength(1);

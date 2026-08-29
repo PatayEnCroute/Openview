@@ -41,7 +41,8 @@
     "type-check": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@openview/core": "workspace:*"
+    "@openview/core": "workspace:*",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^26.2.0"

@@ -18,6 +18,7 @@ import { printableText } from '../document/printable.js';
 import type { MaterialBlock, MaterialTable, MaterialText } from '../document/types.js';
 import { DEFAULT_TYPOGRAPHY, resolveRunTypography } from '../document/typography.js';
 import { DocumentRenderError } from '../errors.js';
+import { createMaterializationBudget } from '../limits/materialization.js';
 import { materializedOf, SAMPLE_DATA, TINY_PNG, templateOf } from './fixtures.js';
 
 const flow = (children: readonly Record<string, unknown>[]): Record<string, unknown> => ({
@@ -762,6 +763,7 @@ describe('exhaustive traversal', () => {
   const context = {
     scope: {},
     budget: createBudget(),
+    units: createMaterializationBudget(10_000),
     keys: createKeySource(),
     presentations: createPresentationSession(undefined, undefined),
     region: 'root' as const,

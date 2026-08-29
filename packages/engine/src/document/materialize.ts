@@ -1,5 +1,6 @@
 import {
   type ConditionNode,
+  type ContainerNode,
   childScope,
   createBudget,
   type DocumentNode,
@@ -41,6 +42,11 @@ import {
   refusal,
   refusalOf,
 } from '../errors.js';
+import {
+  createMaterializationBudget,
+  type MaterializationBudget,
+} from '../limits/materialization.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS, type RenderSafetyLimits } from '../limits/types.js';
 import { assertCoveredText } from './fonts/index.js';
 import {
   createPresentationSession,
@@ -109,6 +115,8 @@ export function createKeySource(): KeySource {
 export interface MaterializeContext {
   readonly scope: EvaluationScope;
   readonly budget: EvaluationBudget;
+  /** Persistent document objects this render is still allowed to build. */
+  readonly units: MaterializationBudget;
   readonly keys: KeySource;
   /** Resolved presentation session for this render. */
   readonly presentations: PresentationSession;
@@ -133,6 +141,16 @@ function iterationDetail(context: Context): Pick<DocumentRenderErrorDetails, 'oc
       iterations: context.iterations,
     },
   };
+}
+
+/** Reserves one persistent document object, attributed to the declaration being built. */
+function reserve(nodeId: string, context: Context): void {
+  context.units.reserve(1, {
+    nodeId,
+    path: context.declarationPath,
+    region: context.region,
+    ...iterationDetail(context),
+  });
 }
 
 function addressOf(
@@ -189,6 +207,7 @@ function runOf(
   index: number,
   context: Context,
 ): MaterialRun {
+  reserve(block.id, context);
   const at = [...context.declarationPath, 'content', index];
   const details = {
     nodeId: block.id,
@@ -258,6 +277,7 @@ function runOf(
 }
 
 function materializeText(node: TextNode, context: Context): MaterialText {
+  reserve(node.id, context);
   return {
     kind: 'text',
     key: context.keys.next(),
@@ -270,6 +290,7 @@ function materializeText(node: TextNode, context: Context): MaterialText {
 }
 
 function materializeImage(node: ImageNode, context: Context): MaterialBlock {
+  reserve(node.id, context);
   return {
     kind: 'image',
     key: context.keys.next(),
@@ -285,12 +306,16 @@ function materializeChildren(
   children: readonly DocumentNode[],
   context: Context,
 ): readonly MaterialBlock[] {
-  return children.flatMap((child, index) =>
-    materializeNode(child, {
-      ...context,
-      declarationPath: [...context.declarationPath, 'children', index],
-    }),
-  );
+  const built: MaterialBlock[] = [];
+  for (const [index, child] of children.entries()) {
+    built.push(
+      ...materializeNode(child, {
+        ...context,
+        declarationPath: [...context.declarationPath, 'children', index],
+      }),
+    );
+  }
+  return built;
 }
 
 /** Wraps children into a keep-together container for marked loops and conditions. */
@@ -299,6 +324,7 @@ function transparentGroup(
   children: readonly MaterialBlock[],
   context: Context,
 ): MaterialContainer {
+  reserve(node.id, context);
   return {
     kind: 'container',
     key: context.keys.next(),
@@ -313,15 +339,24 @@ function materializeLoop(node: LoopNode, context: Context): readonly MaterialBlo
   const items = within(node.id, context.declarationPath, context, () =>
     evaluateSequence(node.each, context.scope, { budget: context.budget, caller: 'loop' }),
   );
-  return items.flatMap((item, index) => {
+  /* Appended one round at a time rather than through `flatMap`: a loop over a large sequence
+     spends few evaluation steps and still builds an occurrence per item, and an intermediate array
+     would already be allocated by the time the budget saw it. */
+  const built: MaterialBlock[] = [];
+  for (const [index, item] of items.entries()) {
     const inner: Context = {
       ...context,
       scope: childScope(context.scope, node.as, item),
       iterations: [...context.iterations, { declarationPath: context.declarationPath, index }],
     };
     const children = materializeChildren(node.children, inner);
-    return node.keepTogether === true ? [transparentGroup(node, children, inner)] : children;
-  });
+    if (node.keepTogether === true) {
+      built.push(transparentGroup(node, children, inner));
+    } else {
+      built.push(...children);
+    }
+  }
+  return built;
 }
 
 function materializeCondition(node: ConditionNode, context: Context): readonly MaterialBlock[] {
@@ -336,6 +371,7 @@ function materializeCondition(node: ConditionNode, context: Context): readonly M
 }
 
 function materializeCell(row: TableRowNode, column: TableColumn, context: Context): MaterialCell {
+  reserve(row.id, context);
   const at = row.cells.findIndex((candidate) => candidate.columnId === column.id);
   const declared = row.cells[at];
   return {
@@ -397,6 +433,7 @@ function materializeRow(
   context: Context,
   keptGroup: MaterialRowGroupOccurrence | undefined = undefined,
 ): MaterialRow {
+  reserve(row.id, context);
   const key = context.keys.next();
   return {
     key,
@@ -418,6 +455,7 @@ function groupOccurrenceOf(
   if (group.keepTogether !== true) {
     return undefined;
   }
+  reserve(group.id, context);
   return {
     key: context.keys.next(),
     ...addressOf(group.id, 'tableRowGroup', {
@@ -445,27 +483,31 @@ export function materializeBodyEntry(
           caller: 'tableRowGroup',
         }),
       );
-      return items.flatMap((item, index) => {
+      const built: MaterialRow[] = [];
+      for (const [index, item] of items.entries()) {
         const at = firstRow + index * group.rows.length;
         const occurrence = groupOccurrenceOf(group, index, at, context);
         const iterations = [
           ...context.iterations,
           { declarationPath: context.declarationPath, index },
         ];
-        return group.rows.map((row, rowIndex) =>
-          materializeRow(
-            row,
-            columns,
-            {
-              ...context,
-              scope: childScope(context.scope, group.as, item),
-              declarationPath: [...context.declarationPath, 'rows', rowIndex],
-              iterations,
-            },
-            occurrence,
-          ),
-        );
-      });
+        for (const [rowIndex, row] of group.rows.entries()) {
+          built.push(
+            materializeRow(
+              row,
+              columns,
+              {
+                ...context,
+                scope: childScope(context.scope, group.as, item),
+                declarationPath: [...context.declarationPath, 'rows', rowIndex],
+                iterations,
+              },
+              occurrence,
+            ),
+          );
+        }
+      }
+      return built;
     },
     text: rejectAsRow,
     image: rejectAsRow,
@@ -489,6 +531,7 @@ function bodyRows(
 }
 
 function materializeTable(node: TableNode, context: Context): MaterialBlock {
+  reserve(node.id, context);
   const key = context.keys.next();
   const section = (name: 'header' | 'body' | 'footer', index: number): Context => ({
     ...context,
@@ -513,6 +556,7 @@ function materializeTable(node: TableNode, context: Context): MaterialBlock {
 }
 
 function materializeGrid(node: GridNode, context: Context): MaterialGrid {
+  reserve(node.id, context);
   return {
     kind: 'grid',
     key: context.keys.next(),
@@ -523,6 +567,7 @@ function materializeGrid(node: GridNode, context: Context): MaterialGrid {
     rows: node.rows,
     step: node.step,
     items: node.items.map((item, index) => {
+      reserve(node.id, context);
       const at = [...context.declarationPath, 'items', index, 'content'];
       const [content] = materializeNode(item.content, { ...context, declarationPath: at });
       if (content?.kind !== 'container') {
@@ -548,21 +593,24 @@ function materializeGrid(node: GridNode, context: Context): MaterialGrid {
   };
 }
 
+function materializeContainer(node: ContainerNode, context: Context): MaterialContainer {
+  reserve(node.id, context);
+  return {
+    kind: 'container',
+    key: context.keys.next(),
+    ...addressOf(node.id, 'container', context),
+    box: node.box,
+    keepTogether: node.keepTogether === true,
+    children: materializeChildren(node.children, context),
+  };
+}
+
 /** Materializes an AST document node into one or more material blocks. */
 export function materializeNode(node: DocumentNode, context: Context): readonly MaterialBlock[] {
   return visitNode<readonly MaterialBlock[]>(node, {
     text: (text) => [materializeText(text, context)],
     image: (image) => [materializeImage(image, context)],
-    container: (container) => [
-      {
-        kind: 'container',
-        key: context.keys.next(),
-        ...addressOf(container.id, 'container', context),
-        box: container.box,
-        keepTogether: container.keepTogether === true,
-        children: materializeChildren(container.children, context),
-      },
-    ],
+    container: (container) => [materializeContainer(container, context)],
     loop: (loop) => materializeLoop(loop, context),
     condition: (condition) => materializeCondition(condition, context),
     table: (table) => [materializeTable(table, context)],
@@ -636,6 +684,8 @@ function materializeLayers(
 export interface MaterializedDocument {
   readonly document: MaterialDocument;
   readonly budget: EvaluationBudget;
+  /** Object budget shared with every later pass over the same render. */
+  readonly units: MaterializationBudget;
   readonly keys: KeySource;
   /** Resolved presentations session for this render. */
   readonly presentations: PresentationSession;
@@ -652,13 +702,16 @@ export function materializeDocument(
   reachable: ReadonlySet<PageBandOccurrence>,
   evaluationLimits?: Partial<EvaluationLimits>,
   selection?: PresentationSelection | undefined,
+  safetyLimits: RenderSafetyLimits = DEFAULT_RENDER_SAFETY_LIMITS,
 ): MaterializedDocument {
   const budget = createBudget(evaluationLimits);
+  const units = createMaterializationBudget(safetyLimits.maxMaterializedUnits);
   const keys = createKeySource();
   const presentations = createPresentationSession(template.presentations, selection);
   const shared = {
     scope: data,
     budget,
+    units,
     keys,
     presentations,
     column: undefined,
@@ -688,6 +741,7 @@ export function materializeDocument(
   });
   return {
     budget,
+    units,
     keys,
     presentations,
     bound: new Set(reachable),
@@ -717,6 +771,7 @@ export function extendBands(
   const shared = {
     scope: data,
     budget: previous.budget,
+    units: previous.units,
     keys: previous.keys,
     presentations: previous.presentations,
     column: undefined,
@@ -733,6 +788,7 @@ export function extendBands(
   });
   return {
     budget: previous.budget,
+    units: previous.units,
     keys: previous.keys,
     presentations: previous.presentations,
     bound: new Set([...previous.bound, ...added]),

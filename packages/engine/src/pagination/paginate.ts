@@ -21,6 +21,9 @@ const NO_HEIGHT =
 const NOTHING_FITS =
   'The smallest legal fragment of the flow does not fit on a page of its own, so no cut of this document can be printed. Read `details.pageNumber` for where it stopped.';
 
+const TOO_MANY_PAGES =
+  'This document does not stop within the number of pages one render may cut. Read `details.limit` for the ceiling; the page past it was refused before any of its fragments were composed.';
+
 /** What the paginator needs beyond the document itself. */
 export interface PaginationOptions {
   readonly metrics: Metrics;
@@ -32,6 +35,8 @@ export interface PaginationOptions {
    * found it over its slot. Keyed by page rank, empty on the first attempt.
    */
   readonly slack: ReadonlyMap<number, number>;
+  /** Highest page rank this document may reach. */
+  readonly maxPages: number;
 }
 
 const spent = (cursor: FlowCursor, blocks: number): boolean =>
@@ -56,6 +61,15 @@ export function paginate(
   let cursor = FLOW_START;
   while (!spent(cursor, document.root.length)) {
     const number = roots.length + 1;
+    /* Before `fillFlow`, not after: a ceiling checked on the composed page has already paid for
+       the page it exists to refuse, and a probe counting pages would pay for all of them. */
+    if (number > options.maxPages) {
+      throw refusal(TOO_MANY_PAGES, 'page-limit-exceeded', {
+        phase: 'pagination',
+        limit: options.maxPages,
+        pageNumber: number,
+      });
+    }
     const room = reserves.root - (options.slack.get(number) ?? 0);
     if (room < 0) {
       throw refusal(NO_HEIGHT, 'pagination-impossible', { pageNumber: number });

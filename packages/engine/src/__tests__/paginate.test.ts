@@ -114,6 +114,7 @@ function failingCloseStrategy(error: unknown): PdfRenderStrategy {
     async open(resources: PdfRenderResources): Promise<PdfRenderSession> {
       const session = await strategy.open(resources);
       return {
+        resolveImages: session.resolveImages.bind(session),
         measure: session.measure.bind(session),
         print: session.print.bind(session),
         close: (): Promise<void> => Promise.reject(error),
@@ -135,6 +136,7 @@ function noPrintStrategy(layout: FakeLayout = {}): {
       async open(resources: PdfRenderResources): Promise<PdfRenderSession> {
         const session = await strategy.open(resources);
         return {
+          resolveImages: session.resolveImages.bind(session),
           measure: session.measure.bind(session),
           close: session.close.bind(session),
           print(): Promise<Uint8Array> {
@@ -351,6 +353,9 @@ describe('a session that reports nothing measurable', () => {
       format: 'pdf',
       open(): Promise<PdfRenderSession> {
         return Promise.resolve({
+          resolveImages(): Promise<never[]> {
+            return Promise.resolve([]);
+          },
           measure(): Promise<PdfLayoutMeasurement> {
             return Promise.resolve({
               pages: [],

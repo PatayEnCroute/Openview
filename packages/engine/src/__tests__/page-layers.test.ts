@@ -4,6 +4,7 @@ import { documentImages } from '../document/images.js';
 import { materializeDocument } from '../document/materialize.js';
 import { buildPagedTree, buildProbeTree } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
+import { DEFAULT_RENDER_SAFETY_LIMITS } from '../limits/types.js';
 import { markerSignatures } from '../pagination/markers.js';
 import {
   constantMarkers,
@@ -12,6 +13,7 @@ import {
   literalText,
   materializedOf,
   NO_FONTS,
+  NO_IMAGES,
   paginateOnGrid,
   refusalOfCut,
   SAMPLE_DATA,
@@ -188,7 +190,10 @@ describe('the composition of the pages', () => {
     );
 
   it('paints background layers, then the printable, then foreground layers, on every page', () => {
-    const html = serializeHtml(buildPagedTree(paginated(), NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated(), NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     const pages = html.split('class="ov-page"').slice(1);
     expect(pages.length).toBeGreaterThan(2);
     for (const page of pages) {
@@ -204,14 +209,20 @@ describe('the composition of the pages', () => {
   });
 
   it('writes the whole-layer opacity on the wrapper and nothing on an opaque one', () => {
-    const html = serializeHtml(buildPagedTree(paginated(), NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated(), NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     expect(html).toContain('class="ov-layer" style="opacity:0.12"');
     expect(html).toContain('class="ov-layer" style="opacity:0.85"');
     expect(html).toContain('<div class="ov-layer"><div class="ov-container"');
   });
 
   it('stretches a layer to the whole sheet through the closed stylesheet', () => {
-    const html = serializeHtml(buildPagedTree(paginated(), NO_FONTS));
+    const html = serializeHtml(
+      buildPagedTree(paginated(), NO_FONTS, NO_IMAGES),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
+    );
     expect(html).toContain('.ov-layer{position:absolute;top:0;left:0;width:100%;height:100%}');
     expect(html).toContain('.ov-layer>.ov-container{height:100%}');
   });
@@ -239,7 +250,9 @@ describe('the composition of the pages', () => {
           constantMarkers(1),
         ),
         NO_FONTS,
+        NO_IMAGES,
       ),
+      DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes,
     );
     const folios = [...html.matchAll(/class="ov-marker"[^>]*>(\d+)</g)].map((hit) => hit[1]);
     expect(folios).toStrictEqual(['1', '2', '3']);
@@ -250,9 +263,13 @@ describe('the composition of the pages', () => {
       ...layeredPage([layer({ content: container('paper') })]),
       ...longFlow(),
     });
-    const probe = buildProbeTree(document, constantMarkers(), NO_FONTS);
-    expect(serializeHtml(probe.tree)).not.toContain('data-openview-node="paper"');
-    expect(serializeHtml(probe.tree)).not.toContain('class="ov-layer"');
+    const probe = buildProbeTree(document, constantMarkers(), NO_FONTS, NO_IMAGES);
+    expect(serializeHtml(probe.tree, DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes)).not.toContain(
+      'data-openview-node="paper"',
+    );
+    expect(serializeHtml(probe.tree, DEFAULT_RENDER_SAFETY_LIMITS.maxHtmlBytes)).not.toContain(
+      'class="ov-layer"',
+    );
   });
 });
 

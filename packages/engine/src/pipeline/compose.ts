@@ -1,6 +1,11 @@
 import type { EvaluationScope, PageBandOccurrence, Template } from '@openview/core';
 import { reachableOccurrences } from '../document/bands.js';
-import { documentImages } from '../document/images.js';
+import {
+  type DocumentImage,
+  documentImages,
+  type ResolvedDocumentImage,
+  resolvedImageTable,
+} from '../document/images.js';
 import {
   extendBands,
   type MaterializedDocument,
@@ -15,6 +20,8 @@ import {
   sampleKey,
 } from '../html/build-page.js';
 import { serializeHtml } from '../html/serialize.js';
+import { resolveRenderSafetyLimits } from '../limits/schemas.js';
+import type { RenderSafetyLimits } from '../limits/types.js';
 import {
   type MarkerBounds,
   markerReserve,
@@ -44,6 +51,9 @@ const NOT_SETTLED =
 /** Maximum settle iteration rounds allowed to resolve page breaks without overflow. */
 const MAX_SETTLE_ROUNDS = 8;
 
+const RESOLVE_FAILED =
+  'The print backend could not decide what the images of this document should load. The original error travels as `cause` for local debugging and is deliberately not summarised here.';
+
 /** The band domains a document that turns out to hold one page can ever paint. */
 export const ONE_PAGE_DOMAINS = reachableOccurrences(1);
 
@@ -64,12 +74,62 @@ async function measured<TResult>(run: () => Promise<TResult>): Promise<TResult> 
 }
 
 /**
+ * The occurrences the session has decided, in the order the document paints them.
+ *
+ * Only the keys this html really carries: handing a backend entries for branches it never paints
+ * would ask it to load images the document does not reach.
+ */
+function resolvedFor(
+  images: readonly DocumentImage[],
+  table: ReadonlyMap<string, string>,
+): readonly ResolvedDocumentImage[] {
+  const listed: ResolvedDocumentImage[] = [];
+  for (const image of images) {
+    const src = table.get(image.key);
+    if (src !== undefined) {
+      listed.push({ key: image.key, src });
+    }
+  }
+  return listed;
+}
+
+/** Asks the session to resolve the occurrences it has not seen yet, and folds them into the table. */
+async function resolveInto(
+  session: PdfRenderSession,
+  table: Map<string, string>,
+  images: readonly DocumentImage[],
+): Promise<void> {
+  const pending = images.filter((image) => !table.has(image.key));
+  if (pending.length === 0) {
+    return;
+  }
+  let answered: readonly ResolvedDocumentImage[];
+  try {
+    answered = await session.resolveImages(pending);
+  } catch (error) {
+    if (error instanceof DocumentRenderError) {
+      throw error;
+    }
+    throw new DocumentRenderError(
+      RESOLVE_FAILED,
+      'resource-load-failed',
+      { phase: 'resource' },
+      { cause: error },
+    );
+  }
+  for (const [key, src] of resolvedImageTable(pending, answered)) {
+    table.set(key, src);
+  }
+}
+
+/**
  * Measures each distinct marker shape and reserves the required width.
  */
 async function reserveMarkers(
   session: PdfRenderSession,
   bound: MaterializedDocument,
   fonts: string,
+  limits: RenderSafetyLimits,
 ): Promise<MarkerReserve> {
   const bounds: MarkerBounds = {
     pages: progressionBound(bound.document),
@@ -82,7 +142,7 @@ async function reserveMarkers(
   const probe = buildMarkerProbe(bound.document, signatures, fonts);
   const measurement = await measured(async () =>
     session.measure({
-      html: serializeHtml(probe.tree),
+      html: serializeHtml(probe.tree, limits.maxHtmlBytes),
       sheet: bound.document.sheet,
       images: [],
     }),
@@ -106,13 +166,15 @@ async function measureNaturally(
   bound: MaterializedDocument,
   markers: MarkerReserve,
   fonts: string,
+  limits: RenderSafetyLimits,
+  images: ReadonlyMap<string, string>,
 ): Promise<Metrics> {
-  const probe = buildProbeTree(bound.document, markers, fonts);
+  const probe = buildProbeTree(bound.document, markers, fonts, images);
   const measurement = await measured(async () =>
     session.measure({
-      html: serializeHtml(probe.tree),
+      html: serializeHtml(probe.tree, limits.maxHtmlBytes),
       sheet: bound.document.sheet,
-      images: documentImages(bound.document),
+      images: resolvedFor(documentImages(bound.document), images),
     }),
   );
   return validateMeasurement(measurement, probe.keys, bound.document.sheet);
@@ -141,6 +203,8 @@ async function settle(
   metrics: Metrics,
   printableHeight: number,
   fonts: string,
+  limits: RenderSafetyLimits,
+  images: ReadonlyMap<string, string>,
 ): Promise<Attempt> {
   const slack = new Map<number, number>();
   let last = 0;
@@ -150,13 +214,14 @@ async function settle(
       markers,
       printableHeight,
       slack,
+      maxPages: limits.maxPages,
     });
-    const html = serializeHtml(buildPagedTree(paginated, fonts));
+    const html = serializeHtml(buildPagedTree(paginated, fonts, images), limits.maxHtmlBytes);
     const measurement = await measured(async () =>
       session.measure({
         html,
         sheet: paginated.sheet,
-        images: documentImages(bound.document),
+        images: resolvedFor(documentImages(bound.document), images),
       }),
     );
     const overflow = verifyLayout(paginated, measurement, metrics.pxPerMm);
@@ -175,9 +240,10 @@ function pageCountOf(
   markers: MarkerReserve,
   metrics: Metrics,
   printableHeight: number,
+  maxPages: number,
 ): number {
-  return paginate(bound.document, { metrics, markers, printableHeight, slack: new Map() }).pages
-    .length;
+  return paginate(bound.document, { metrics, markers, printableHeight, slack: new Map(), maxPages })
+    .pages.length;
 }
 
 /**
@@ -188,33 +254,48 @@ export async function composeInSession(
   template: Template,
   data: EvaluationScope,
   first: MaterializedDocument,
+  limits: RenderSafetyLimits,
 ): Promise<ComposedDocument> {
   const pxOf = (of: MaterializedDocument, metrics: { readonly pxPerMm: number }): number =>
     of.document.printable.height * metrics.pxPerMm;
 
   let bound = first;
+  const table = new Map<string, string>();
+  await resolveInto(session, table, documentImages(bound.document));
   /* Recomputed after the bands widen: a band only a second page reaches may paint a family the
      first pass never met, and the probes must carry the faces the printed page will use. */
   let fonts = documentFontCss(bound.document);
-  let markers = await reserveMarkers(session, bound, fonts);
-  let metrics = await measureNaturally(session, bound, markers, fonts);
+  let markers = await reserveMarkers(session, bound, fonts, limits);
+  let metrics = await measureNaturally(session, bound, markers, fonts, limits, table);
 
-  if (pageCountOf(bound, markers, metrics, pxOf(bound, metrics)) > 1) {
+  if (pageCountOf(bound, markers, metrics, pxOf(bound, metrics), limits.maxPages) > 1) {
     const widened: ReadonlySet<PageBandOccurrence> = reachableOccurrences(2);
     bound = extendBands(template, data, bound, widened);
+    /* The widened bands may reach images the first pass never met; only those are resolved, and
+       only once. */
+    await resolveInto(session, table, documentImages(bound.document));
     fonts = documentFontCss(bound.document);
-    markers = await reserveMarkers(session, bound, fonts);
-    metrics = await measureNaturally(session, bound, markers, fonts);
+    markers = await reserveMarkers(session, bound, fonts, limits);
+    metrics = await measureNaturally(session, bound, markers, fonts, limits, table);
   }
 
-  const attempt = await settle(session, bound, markers, metrics, pxOf(bound, metrics), fonts);
+  const attempt = await settle(
+    session,
+    bound,
+    markers,
+    metrics,
+    pxOf(bound, metrics),
+    fonts,
+    limits,
+    table,
+  );
   return {
     bound,
     paginated: attempt.paginated,
     source: {
       html: attempt.html,
       sheet: attempt.paginated.sheet,
-      images: documentImages(bound.document),
+      images: resolvedFor(documentImages(bound.document), table),
     },
   };
 }
@@ -224,16 +305,25 @@ export function prepare(
   template: Template,
   data: EvaluationScope,
   options: RenderEngineOptions | undefined,
-): { readonly template: Template; readonly bound: MaterializedDocument } {
+): {
+  readonly template: Template;
+  readonly bound: MaterializedDocument;
+  readonly limits: RenderSafetyLimits;
+} {
+  /* Resolved first: an unusable ceiling has to stop the port before a template is parsed, not
+     halfway through the document it was meant to bound. */
+  const limits = resolveRenderSafetyLimits(options?.safetyLimits);
   const validated = validateTemplate(template, options?.shapeLimits);
   return {
     template: validated,
+    limits,
     bound: materializeDocument(
       validated,
       data,
       ONE_PAGE_DOMAINS,
       options?.evaluationLimits,
       options?.presentationSelection,
+      limits,
     ),
   };
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { documentImages } from '../document/images.js';
 import { createKeySource, materializeBodyEntry } from '../document/materialize.js';
 import { createPresentationSession } from '../document/presentation.js';
+import { createMaterializationBudget } from '../limits/materialization.js';
 import { markerSignatures } from '../pagination/markers.js';
 import { progressionBound } from '../pagination/progress.js';
 import {
@@ -102,6 +103,7 @@ describe('the materialisation of a grid', () => {
       materializeBodyEntry(GridNodeSchema.parse(gridBlock({ items: [] })), [], {
         scope: {},
         budget: createBudget(),
+        units: createMaterializationBudget(10_000),
         keys: createKeySource(),
         presentations: createPresentationSession(undefined, undefined),
         region: 'root',
