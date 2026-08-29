@@ -160,16 +160,25 @@ async function reserveMarkers(
   return markerReserve(signatures, widest);
 }
 
+/**
+ * What every measuring pass of one composition shares: the session, the document it prints, and
+ * everything that document paints with.
+ *
+ * The bands may widen between two passes, so a pass is rebuilt rather than mutated.
+ */
+interface RenderPass {
+  readonly session: PdfRenderSession;
+  readonly bound: MaterializedDocument;
+  readonly markers: MarkerReserve;
+  readonly fonts: string;
+  readonly limits: RenderSafetyLimits;
+  readonly images: ReadonlyMap<string, string>;
+}
+
 /** Measures natural element dimensions without vertical constraints. */
-async function measureNaturally(
-  session: PdfRenderSession,
-  bound: MaterializedDocument,
-  markers: MarkerReserve,
-  fonts: string,
-  limits: RenderSafetyLimits,
-  images: ReadonlyMap<string, string>,
-): Promise<Metrics> {
-  const probe = buildProbeTree(bound.document, markers, fonts, images);
+async function measureNaturally(pass: RenderPass): Promise<Metrics> {
+  const { session, bound, limits, images } = pass;
+  const probe = buildProbeTree(bound.document, pass.markers, pass.fonts, images);
   const measurement = await measured(async () =>
     session.measure({
       html: serializeHtml(probe.tree, limits.maxHtmlBytes),
@@ -197,26 +206,22 @@ interface Attempt {
  * Iteratively measures and repaginates pages until layout converges without height overflow.
  */
 async function settle(
-  session: PdfRenderSession,
-  bound: MaterializedDocument,
-  markers: MarkerReserve,
+  pass: RenderPass,
   metrics: Metrics,
   printableHeight: number,
-  fonts: string,
-  limits: RenderSafetyLimits,
-  images: ReadonlyMap<string, string>,
 ): Promise<Attempt> {
+  const { session, bound, limits, images } = pass;
   const slack = new Map<number, number>();
   let last = 0;
   for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
     const paginated = paginate(bound.document, {
       metrics,
-      markers,
+      markers: pass.markers,
       printableHeight,
       slack,
       maxPages: limits.maxPages,
     });
-    const html = serializeHtml(buildPagedTree(paginated, fonts, images), limits.maxHtmlBytes);
+    const html = serializeHtml(buildPagedTree(paginated, pass.fonts, images), limits.maxHtmlBytes);
     const measurement = await measured(async () =>
       session.measure({
         html,
@@ -266,7 +271,8 @@ export async function composeInSession(
      first pass never met, and the probes must carry the faces the printed page will use. */
   let fonts = documentFontCss(bound.document);
   let markers = await reserveMarkers(session, bound, fonts, limits);
-  let metrics = await measureNaturally(session, bound, markers, fonts, limits, table);
+  let pass: RenderPass = { session, bound, markers, fonts, limits, images: table };
+  let metrics = await measureNaturally(pass);
 
   if (pageCountOf(bound, markers, metrics, pxOf(bound, metrics), limits.maxPages) > 1) {
     const widened: ReadonlySet<PageBandOccurrence> = reachableOccurrences(2);
@@ -276,19 +282,11 @@ export async function composeInSession(
     await resolveInto(session, table, documentImages(bound.document));
     fonts = documentFontCss(bound.document);
     markers = await reserveMarkers(session, bound, fonts, limits);
-    metrics = await measureNaturally(session, bound, markers, fonts, limits, table);
+    pass = { session, bound, markers, fonts, limits, images: table };
+    metrics = await measureNaturally(pass);
   }
 
-  const attempt = await settle(
-    session,
-    bound,
-    markers,
-    metrics,
-    pxOf(bound, metrics),
-    fonts,
-    limits,
-    table,
-  );
+  const attempt = await settle(pass, metrics, pxOf(bound, metrics));
   return {
     bound,
     paginated: attempt.paginated,

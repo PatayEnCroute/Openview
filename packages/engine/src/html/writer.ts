@@ -27,21 +27,19 @@ export interface HtmlWriter {
 export function utf8Length(text: string): number {
   let bytes = 0;
   for (let at = 0; at < text.length; at += 1) {
-    const code = text.charCodeAt(at);
+    // `at` never leaves the string, so the fallback is unreachable; it stands in for the `undefined`
+    // an out-of-range read would return.
+    const code = text.codePointAt(at) ?? 0;
     if (code < 0x80) {
       bytes += 1;
     } else if (code < 0x800) {
       bytes += 2;
-    } else if (code >= 0xd800 && code <= 0xdbff && at + 1 < text.length) {
-      const low = text.charCodeAt(at + 1);
-      if (low >= 0xdc00 && low <= 0xdfff) {
-        bytes += 4;
-        at += 1;
-      } else {
-        bytes += 3;
-      }
-    } else {
+    } else if (code < 0x10000) {
       bytes += 3;
+    } else {
+      // A surrogate pair read as one code point: skip the unit it consumed.
+      bytes += 4;
+      at += 1;
     }
   }
   return bytes;

@@ -32,7 +32,7 @@ describe('the utf-8 length of a fragment', () => {
   it('counts four bytes for a character built from a surrogate pair', () => {
     /* The reason the counter cannot be `String.length`: this emoji is two utf-16 code units and
        four utf-8 bytes, so a ceiling read from `length` is half of what a browser receives. */
-    expect('🧾'.length).toBe(2);
+    expect('🧾').toHaveLength(2);
     expect(utf8Length('🧾')).toBe(4);
   });
 
