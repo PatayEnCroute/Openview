@@ -200,7 +200,9 @@ describe('the prepared document', () => {
     async () => {
       const { images } = await preparedHtml(FRAMED, THREE_ROWS);
       expect(images).toHaveLength(1);
-      expect(images[0]?.nodeId).toBe('logo');
+      /* The printer is handed the sources the session resolved, keyed by occurrence: the
+         declaration behind one is the session's business, and it never reaches a browser. */
+      expect(images[0]?.key).toMatch(/^o\d+$/);
       expect(images[0]?.src.startsWith('data:image/png;base64,')).toBe(true);
     },
     CHROMIUM_TIMEOUT_MS,
@@ -643,7 +645,15 @@ describe('the C11 recette: a gridded heading and three page layers on the same m
         }
         return found;
       };
-      const session = await hostStrategy().open({ sheet: probe.sheet, images: probe.images });
+      const session = await hostStrategy().open({
+        sheet: probe.sheet,
+        images: probe.images.map((image) => ({
+          key: image.key,
+          nodeId: image.key,
+          path: [],
+          src: image.src,
+        })),
+      });
       try {
         const measurement = await session.measure(probe);
         const widthOf = (nodeId: string): number =>
@@ -718,6 +728,7 @@ describe('the C11 recette: a gridded heading and three page layers on the same m
         async open(resources) {
           const session = await inner.open(resources);
           return {
+            resolveImages: session.resolveImages.bind(session),
             measure: (source: PdfSourceDocument) => session.measure(source),
             print: (source: PdfSourceDocument) => {
               printedAnything = true;
@@ -1097,6 +1108,7 @@ describe('the E4 recette: the same statement in two writings', () => {
           async open(resources) {
             const session = await inner.open(resources);
             return {
+              resolveImages: session.resolveImages.bind(session),
               measure: (source: PdfSourceDocument) => session.measure(source),
               print: (source: PdfSourceDocument) => {
                 printedAnything = true;

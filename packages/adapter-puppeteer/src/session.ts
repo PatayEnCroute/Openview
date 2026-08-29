@@ -1,16 +1,23 @@
 import {
+  type DocumentImage,
   DocumentRenderError,
   type PdfLayoutMeasurement,
   type PdfRenderResources,
   type PdfRenderSession,
   type PdfSourceDocument,
+  type ResolvedDocumentImage,
 } from '@openview/engine';
-import puppeteer, { type Browser, type BrowserContext, type Page } from 'puppeteer';
+import type { Browser, BrowserContext, Page } from 'puppeteer';
+import { launchBrowser, type PuppeteerLaunchOptions } from './browser.js';
 import { canonicalizePdf } from './canonicalize-pdf.js';
 import { assertHonouredSheet } from './capability.js';
 import { deriveMeasurement } from './derive.js';
-import { assertPrintableImages } from './image-source.js';
+import { assertInlineSources, assertPrintableImages } from './image-source.js';
 import { collectInPage } from './measure.js';
+import { assertCanonicalSize, readBoundedPdf } from './pdf-stream.js';
+import { DEFAULT_RESOURCE_LIMITS, type ProtectedResourceLimits } from './resource/types.js';
+
+export type { PuppeteerLaunchOptions } from './browser.js';
 
 /**
  * Explicit Puppeteer PDF generation options ensuring CSS page dimensions and backgrounds are preserved.
@@ -25,18 +32,42 @@ export const PDF_OPTIONS = {
   waitForFonts: true,
 } as const;
 
-export interface PuppeteerLaunchOptions {
-  /** Chromium executable, when the host pins its own build instead of the downloaded one. */
-  readonly executablePath?: string | undefined;
-  /** Extra launch arguments, for a sandbox a container needs configured differently. */
-  readonly args?: readonly string[] | undefined;
-}
-
 const FONT_NOT_LOADED =
   'A face the document embeds did not load in the browser, so the layout would have been measured in whatever font the machine offers instead. Read `details.limit` for how many faces the document declared.';
 
 const AFTER_CLOSE =
   'This layout session is closed. A session belongs to one render, and reopening a browser mid-render would measure a document in one environment and print it in another.';
+
+/**
+ * How a session decides what each image occurrence really loads.
+ *
+ * The direct path answers with the stored source, once it has refused everything it cannot print.
+ * The hardened runtime answers with bytes it fetched, checked and embedded itself.
+ */
+export interface SessionImagePolicy {
+  resolve(images: readonly DocumentImage[]): Promise<readonly ResolvedDocumentImage[]>;
+}
+
+/**
+ * The policy of the direct path: print the inline source the template stored, and nothing else.
+ *
+ * Identical to what this backend has always accepted, which is what keeps a document rendered
+ * through the direct path byte for byte the document the hardened runtime produces.
+ */
+export function embeddedImagePolicy(): SessionImagePolicy {
+  return {
+    resolve(images: readonly DocumentImage[]): Promise<readonly ResolvedDocumentImage[]> {
+      assertPrintableImages(images);
+      return Promise.resolve(images.map((image) => ({ key: image.key, src: image.src })));
+    },
+  };
+}
+
+/** What a context session needs beyond the browser that hosts it. */
+export interface ContextSessionOptions {
+  readonly images: SessionImagePolicy;
+  readonly limits?: ProtectedResourceLimits | undefined;
+}
 
 /**
  * Aborts external network requests while allowing inline data URIs and blank documents.
@@ -61,30 +92,24 @@ async function refuseNetwork(page: Page): Promise<void> {
 }
 
 /**
- * Opens a dedicated browser session for layout measurement and PDF printing during a single render.
+ * Opens one render's context inside a browser the caller owns.
+ *
+ * The context, not the browser, is what a render owns: cookies, cache, storage and service workers
+ * belong to it, so a fresh one per render is what keeps two callers from sharing anything, while
+ * the process itself can be kept and reused.
  */
-export async function openPuppeteerSession(
+export async function openContextSession(
+  browser: Browser,
   resources: PdfRenderResources,
-  options?: PuppeteerLaunchOptions | undefined,
+  options: ContextSessionOptions,
 ): Promise<PdfRenderSession> {
-  /* Both refusals happen before a browser exists, which is what "refused before loading" has to
-     mean for a source this backend cannot print. */
+  /* Before a context exists, which is what "refused before loading" has to mean for a sheet this
+     backend was never measured on. */
   assertHonouredSheet(resources.sheet);
-  assertPrintableImages(resources.images);
+  const limits = options.limits ?? DEFAULT_RESOURCE_LIMITS;
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    ...(options?.executablePath === undefined ? {} : { executablePath: options.executablePath }),
-    ...(options?.args === undefined ? {} : { args: [...options.args] }),
-  });
-  let context: BrowserContext;
+  const context = await browser.createBrowserContext();
   let page: Page;
-  try {
-    context = await browser.createBrowserContext();
-  } catch (error) {
-    await browser.close();
-    throw error;
-  }
   try {
     page = await context.newPage();
     /* Scripting off before anything loads. `page.evaluate` still works -- it is a debugger call, not
@@ -92,7 +117,7 @@ export async function openPuppeteerSession(
     await page.setJavaScriptEnabled(false);
     await refuseNetwork(page);
   } catch (error) {
-    await closeAll(browser, context, undefined);
+    await closeContext(context, undefined);
     throw error;
   }
 
@@ -103,7 +128,10 @@ export async function openPuppeteerSession(
     if (closed) {
       throw new DocumentRenderError(AFTER_CLOSE, 'layout-measurement-failed');
     }
-    assertPrintableImages(source.images);
+    /* The session resolved these, and nothing but an inline bitmap may reach a page: the check
+       is repeated here so that a backend which stopped embedding stops the render rather than
+       relying on the policy header to catch it. */
+    assertInlineSources(source.images);
     if (loaded === source.html) {
       return;
     }
@@ -132,6 +160,11 @@ export async function openPuppeteerSession(
   };
 
   return {
+    async resolveImages(
+      images: readonly DocumentImage[],
+    ): Promise<readonly ResolvedDocumentImage[]> {
+      return await options.images.resolve(images);
+    },
     async measure(source: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
       await load(source);
       return deriveMeasurement(await page.evaluate(collectInPage));
@@ -140,32 +173,65 @@ export async function openPuppeteerSession(
       /* The same html the last measurement ran on stays loaded, so the bytes are the layout that
          was proved rather than a second one that happens to look like it. */
       await load(source);
+      const raw = await readBoundedPdf(
+        await page.createPDFStream(PDF_OPTIONS),
+        limits.maxRawPdfBytes,
+      );
       /* Canonicalised before it leaves: the raw file carries the instant of printing and the
          browser's own name, so two identical renders a second apart would differ. No caller can
          reach the unnormalised bytes through this port. */
-      return await canonicalizePdf(await page.pdf(PDF_OPTIONS));
+      return assertCanonicalSize(await canonicalizePdf(raw), limits.maxCanonicalPdfBytes);
     },
     async close(): Promise<void> {
       closed = true;
-      await closeAll(browser, context, page);
+      await closeContext(context, page);
     },
   };
 }
 
-async function closeAll(
-  browser: Browser,
-  context: BrowserContext,
-  page: Page | undefined,
-): Promise<void> {
+/**
+ * Opens a dedicated browser session for layout measurement and PDF printing during a single render.
+ *
+ * One browser per render, closed with the session: the direct path is for an integrator who
+ * controls its own input, and it keeps the lifetime that has always been proved for it.
+ */
+export async function openPuppeteerSession(
+  resources: PdfRenderResources,
+  options?: PuppeteerLaunchOptions | undefined,
+): Promise<PdfRenderSession> {
+  /* Both refusals happen before a browser exists, which is what "refused before loading" has to
+     mean for a source this backend cannot print. */
+  assertHonouredSheet(resources.sheet);
+  assertPrintableImages(resources.images);
+
+  const browser = await launchBrowser(options);
+  let session: PdfRenderSession;
+  try {
+    session = await openContextSession(browser, resources, { images: embeddedImagePolicy() });
+  } catch (error) {
+    await browser.close();
+    throw error;
+  }
+  return {
+    resolveImages: session.resolveImages.bind(session),
+    measure: session.measure.bind(session),
+    print: session.print.bind(session),
+    async close(): Promise<void> {
+      try {
+        await session.close();
+      } finally {
+        await browser.close();
+      }
+    },
+  };
+}
+
+async function closeContext(context: BrowserContext, page: Page | undefined): Promise<void> {
   try {
     if (page !== undefined) {
       await page.close();
     }
   } finally {
-    try {
-      await context.close();
-    } finally {
-      await browser.close();
-    }
+    await context.close();
   }
 }

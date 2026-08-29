@@ -2,8 +2,10 @@ import { createServer } from 'node:http';
 import { inflateSync } from 'node:zlib';
 import { MAX_SHEET_MM, mmFromPt, type Sheet } from '@openview/core';
 import {
+  type DocumentImage,
   DocumentRenderError,
   type PdfLayoutMeasurement,
+  type PdfRenderResources,
   type PdfRenderSession,
   type PdfSourceDocument,
 } from '@openview/engine';
@@ -86,7 +88,7 @@ function sourceWith(html: string, sheet: Sheet = sheetOf()): PdfSourceDocument {
 
 /** Opens a session, runs one thing through it, and closes it the way the pipeline does. */
 async function inSession<TResult>(
-  resources: { sheet: Sheet; images: PdfSourceDocument['images'] },
+  resources: PdfRenderResources,
   run: (session: PdfRenderSession) => Promise<TResult>,
 ): Promise<TResult> {
   const session = await strategy.open(resources);
@@ -97,14 +99,18 @@ async function inSession<TResult>(
   }
 }
 
+/** The declarations behind a hand-written source, which a session opens on. */
+const declaredIn = (source: PdfSourceDocument): readonly DocumentImage[] =>
+  source.images.map((image) => ({ key: image.key, nodeId: image.key, path: [], src: image.src }));
+
 const measureOnly = async (source: PdfSourceDocument): Promise<PdfLayoutMeasurement> =>
   await inSession(
-    { sheet: source.sheet, images: source.images },
+    { sheet: source.sheet, images: declaredIn(source) },
     async (session) => await session.measure(source),
   );
 
 const printOnly = async (source: PdfSourceDocument): Promise<Uint8Array> =>
-  await inSession({ sheet: source.sheet, images: source.images }, async (session) => {
+  await inSession({ sheet: source.sheet, images: declaredIn(source) }, async (session) => {
     await session.measure(source);
     return await session.print(source);
   });
@@ -554,7 +560,7 @@ describe('capability refusals, raised before a browser exists', () => {
     const refused = await refusalFrom(
       strategy.open({
         sheet: sheetOf(),
-        images: [{ nodeId: 'logo', path: ['root', 'children', 0], src }],
+        images: [{ key: 'o1', nodeId: 'logo', path: ['root', 'children', 0], src }],
       }),
     );
     expect(refused.code).toBe('unsupported-image-source');
@@ -565,7 +571,8 @@ describe('capability refusals, raised before a browser exists', () => {
   it(
     'accepts the three embedded bitmap forms',
     async () => {
-      const accepted = ['png', 'jpeg', 'webp'].map((type) => ({
+      const accepted: readonly DocumentImage[] = ['png', 'jpeg', 'webp'].map((type) => ({
+        key: type,
         nodeId: type,
         path: [],
         src: `data:image/${type};base64,AAAA`,
@@ -575,7 +582,7 @@ describe('capability refusals, raised before a browser exists', () => {
         const measured = await session.measure({
           html: rawPage(''),
           sheet: sheetOf(),
-          images: accepted,
+          images: accepted.map((image) => ({ key: image.key, src: image.src })),
         });
         expect(measured.pages).toHaveLength(1);
       });
@@ -593,7 +600,7 @@ describe('what the page reports about itself', () => {
           `<div data-openview-node="logo"><img class="ov-image" src="${CORRUPT_PNG}" alt="a logo"></div>`,
         ),
         sheet: sheetOf(),
-        images: [{ nodeId: 'logo', path: [], src: CORRUPT_PNG }],
+        images: [{ key: 'logo', src: CORRUPT_PNG }],
       });
       expect(measurement.images).toHaveLength(1);
       expect(measurement.images[0]?.decoded).toBe(false);
@@ -769,7 +776,7 @@ describe('the page is inert and offline', () => {
       const measurement = await measureOnly({
         html: rawPage(`<div data-openview-node="i"><img class="ov-image" src="${TINY_PNG}"></div>`),
         sheet: sheetOf(),
-        images: [{ nodeId: 'i', path: [], src: TINY_PNG }],
+        images: [{ key: 'i', src: TINY_PNG }],
       });
       expect(measurement.images[0]?.decoded).toBe(true);
     },
@@ -786,12 +793,15 @@ describe('the page is inert and offline', () => {
             await session.measure({
               html: rawPage(''),
               sheet: sheetOf(),
-              images: [{ nodeId: 'late', path: [], src: 'http://example.test/late.png' }],
+              images: [{ key: 'late', src: 'http://example.test/late.png' }],
             }),
         ),
       );
-      expect(refused.code).toBe('unsupported-image-source');
-      expect(refused.details.nodeId).toBe('late');
+      /* A source that never went through resolution is refused as a policy failure of this
+         runtime: the declaration behind it is unknown here, which is exactly why the check exists
+         rather than being left to the policy header. */
+      expect(refused.code).toBe('resource-policy-refused');
+      expect(refused.details.resourceKind).toBe('embedded-image');
     },
     CHROMIUM_TIMEOUT_MS,
   );
@@ -871,7 +881,7 @@ describe('resource lifetime', () => {
     await refusalFrom(
       strategy.open({
         sheet: sheetOf(),
-        images: [{ nodeId: 'logo', path: [], src: 'http://example.test/a.png' }],
+        images: [{ key: 'o1', nodeId: 'logo', path: [], src: 'http://example.test/a.png' }],
       }),
     );
     expect(spy).not.toHaveBeenCalled();

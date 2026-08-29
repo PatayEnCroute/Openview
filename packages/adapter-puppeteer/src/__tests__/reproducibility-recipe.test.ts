@@ -199,10 +199,11 @@ describe('the three bitmap formats the adapter accepts', () => {
       const first = await renderCapturing(template);
       const second = await renderCapturing(template);
       expect(sha256(first.bytes)).toBe(sha256(second.bytes));
-      expect(first.printed.images.map((one) => one.nodeId)).toStrictEqual([
-        'as-png',
-        'as-jpeg',
-        'as-webp',
+      /* Three occurrences, in paint order, each printed from the source its session resolved. */
+      expect(first.printed.images.map((one) => one.src)).toStrictEqual([
+        LOGO_PNG,
+        LOGO_JPEG,
+        LOGO_WEBP,
       ]);
     },
     RECIPE_TIMEOUT_MS,

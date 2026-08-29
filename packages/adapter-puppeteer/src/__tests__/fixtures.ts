@@ -107,6 +107,7 @@ export async function renderCapturing(
     async open(resources): Promise<PdfRenderSession> {
       const session = await inner.open(resources);
       return {
+        resolveImages: session.resolveImages.bind(session),
         async measure(source: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
           measured.push(source);
           return await session.measure(source);
@@ -199,6 +200,7 @@ export async function paginateCapturing(
     async open(resources): Promise<PdfRenderSession> {
       const session = await inner.open(resources);
       return {
+        resolveImages: session.resolveImages.bind(session),
         async measure(source: PdfSourceDocument): Promise<PdfLayoutMeasurement> {
           measured.push(source);
           return await session.measure(source);
