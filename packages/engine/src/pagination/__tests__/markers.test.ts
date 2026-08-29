@@ -189,6 +189,15 @@ describe('the strings a written marker can hold', () => {
     expect(samples.some((sample) => sample.startsWith('-'))).toBe(true);
   });
 
+  it('still reserves two integer digits when the whole report stays under one unit', () => {
+    // A magnitude below one has one integer digit to write, not none, and rounding can carry into a
+    // second. An envelope that counted zero digits would reserve a width no figure fits in.
+    const samples = samplesOf(reportRun(EUR), { pages: 4, report: 0.5 });
+
+    expect(samples).toContain(formatMoney(0.5, EUR.presentation));
+    expect(samples).toContain(formatMoney(99.99, EUR.presentation));
+  });
+
   it('reaches one integer digit past the magnitude, because rounding carries', () => {
     // A bound of 999.99 rounded at no decimals writes the four digits of 1000: an envelope stopping
     // at the magnitude's own digit count would reserve one digit too few.

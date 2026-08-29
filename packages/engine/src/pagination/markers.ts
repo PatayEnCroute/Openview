@@ -50,10 +50,12 @@ const MAX_DOUBLE_INTEGER_DIGITS = 309;
 /** Computes the number of digits in the integer component of a number. */
 function integerDigitsOf(magnitude: number): number {
   const absolute = Math.abs(magnitude);
-  if (!(absolute >= 1)) {
-    return 1;
+  /* Asked positively because `NaN` satisfies no comparison: it falls here to `return 1`, where a
+     guard spelt `absolute < 1` would have let it through to `log10`. */
+  if (absolute >= 1) {
+    return Math.min(Math.floor(Math.log10(absolute)) + 1, MAX_DOUBLE_INTEGER_DIGITS);
   }
-  return Math.min(Math.floor(Math.log10(absolute)) + 1, MAX_DOUBLE_INTEGER_DIGITS);
+  return 1;
 }
 
 function repdigit(digit: number, length: number): number {

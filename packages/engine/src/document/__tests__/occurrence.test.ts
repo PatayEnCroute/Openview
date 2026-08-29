@@ -347,7 +347,7 @@ describe('an occurrence address', () => {
     const other: EvaluationScope = {
       sample: { ...(SAMPLE_DATA.sample as Record<string, unknown>), items: [{ sku: 'Z-9' }] },
     };
-    expect(named(materializedOf(twins, other), 'leaf').length).not.toBe(
+    expect(named(materializedOf(twins, other), 'leaf')).not.toHaveLength(
       named(materializedOf(twins), 'leaf').length,
     );
   });

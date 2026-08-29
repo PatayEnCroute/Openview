@@ -61,7 +61,7 @@ describe.each(BUNDLED_FACES.map((face) => [`${face.family} ${face.weight} ${face
     const bytes = bytesOf(face);
 
     it('decode to exactly the length the module declares', () => {
-      expect(bytes.length).toBe(face.byteLength);
+      expect(bytes).toHaveLength(face.byteLength);
     });
 
     it('hash to exactly the digest the module declares', () => {
@@ -129,7 +129,7 @@ describe('a mutation of the embedded bytes', () => {
     const at = Math.floor(mutated.length / 2);
     const before = mutated[at] ?? 0;
     mutated[at] = before ^ 0xff;
-    expect(mutated.length).toBe(face.byteLength);
+    expect(mutated).toHaveLength(face.byteLength);
     expect(sha256Of(mutated)).not.toBe(face.sha256);
   });
 

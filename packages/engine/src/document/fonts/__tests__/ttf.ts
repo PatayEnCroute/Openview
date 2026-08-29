@@ -14,6 +14,7 @@ interface Table {
   readonly length: number;
 }
 
+/** The table directory of a face, keyed by the four-character tag each record carries. */
 function directoryOf(bytes: Uint8Array): { view: DataView; tables: ReadonlyMap<string, Table> } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const count = view.getUint16(4);
@@ -22,7 +23,7 @@ function directoryOf(bytes: Uint8Array): { view: DataView; tables: ReadonlyMap<s
     const at = 12 + index * 16;
     let tag = '';
     for (let byte = 0; byte < 4; byte += 1) {
-      tag += String.fromCharCode(view.getUint8(at + byte));
+      tag += String.fromCodePoint(view.getUint8(at + byte));
     }
     tables.set(tag, { offset: view.getUint32(at + 8), length: view.getUint32(at + 12) });
   }
@@ -62,29 +63,44 @@ function unicodeSubtable(view: DataView, base: number): number {
   return format12 >= 0 ? format12 : format4;
 }
 
+/** One `cmap` format 4 segment, with the address its `idRangeOffset` is counted from. */
+interface Segment {
+  readonly start: number;
+  readonly end: number;
+  readonly delta: number;
+  readonly rangeAt: number;
+  readonly rangeOffset: number;
+}
+
+/** The glyph a segment maps a code point to, `0` when the segment leaves it unmapped. */
+function glyphOf(view: DataView, segment: Segment, code: number): number {
+  if (segment.rangeOffset === 0) {
+    return (code + segment.delta) & 0xffff;
+  }
+  const raw = view.getUint16(segment.rangeAt + segment.rangeOffset + (code - segment.start) * 2);
+  return raw === 0 ? 0 : (raw + segment.delta) & 0xffff;
+}
+
+/** Adds to `into` every code point the segments of a format 4 sub-table map to a real glyph. */
 function readFormat4(view: DataView, at: number, into: Set<number>): void {
   const segments = view.getUint16(at + 6) / 2;
   const endAt = at + 14;
   const startAt = endAt + segments * 2 + 2;
   const deltaAt = startAt + segments * 2;
   const rangeAt = deltaAt + segments * 2;
-  for (let segment = 0; segment < segments; segment += 1) {
-    const end = view.getUint16(endAt + segment * 2);
-    const start = view.getUint16(startAt + segment * 2);
-    if (start > end || start === 0xffff) {
+  for (let index = 0; index < segments; index += 1) {
+    const segment: Segment = {
+      start: view.getUint16(startAt + index * 2),
+      end: view.getUint16(endAt + index * 2),
+      delta: view.getInt16(deltaAt + index * 2),
+      rangeAt: rangeAt + index * 2,
+      rangeOffset: view.getUint16(rangeAt + index * 2),
+    };
+    if (segment.start > segment.end || segment.start === 0xffff) {
       continue;
     }
-    const delta = view.getInt16(deltaAt + segment * 2);
-    const rangeOffset = view.getUint16(rangeAt + segment * 2);
-    for (let code = start; code <= end; code += 1) {
-      let glyph: number;
-      if (rangeOffset === 0) {
-        glyph = (code + delta) & 0xffff;
-      } else {
-        const raw = view.getUint16(rangeAt + segment * 2 + rangeOffset + (code - start) * 2);
-        glyph = raw === 0 ? 0 : (raw + delta) & 0xffff;
-      }
-      if (glyph !== 0) {
+    for (let code = segment.start; code <= segment.end; code += 1) {
+      if (glyphOf(view, segment, code) !== 0) {
         into.add(code);
       }
     }
@@ -150,7 +166,7 @@ export function namesOf(bytes: Uint8Array): ReadonlyMap<number, string> {
     const offset = view.getUint16(record + 10);
     let text = '';
     for (let byte = 0; byte < length; byte += 2) {
-      text += String.fromCharCode(view.getUint16(storage + offset + byte));
+      text += String.fromCodePoint(view.getUint16(storage + offset + byte));
     }
     if (!found.has(nameId)) {
       found.set(nameId, text);
